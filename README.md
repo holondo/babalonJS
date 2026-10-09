@@ -56,6 +56,7 @@ babalon JS is a Progressive Web App. Once hosted over HTTPS (or on `localhost`),
 | --- | --- |
 | W / E / S | Move / Rotate / Scale |
 | F | Focus selection (or frame everything) |
+| O | Orbit around the selected object |
 | M | Measure mode |
 | P | Photo mode |
 | Ctrl+Z / Ctrl+Y | Undo / Redo |
@@ -64,7 +65,7 @@ babalon JS is a Progressive Web App. Once hosted over HTTPS (or on `localhost`),
 | Delete | Delete |
 | Esc | Deselect / exit photo mode |
 
-Camera: drag to orbit, pinch or scroll to zoom, two fingers (or right mouse button) to pan. Double-tap an object to focus on it.
+Camera: drag to orbit, pinch or scroll to zoom, two fingers (or right mouse button) to pan. Double-tap an object to focus on it, or empty floor to orbit around that point. The orbit button in the selection bar makes the selected object the pivot without zooming. A small gold dot shows the pivot while the camera moves.
 
 ## Project structure
 

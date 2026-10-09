@@ -56,6 +56,7 @@ O babalon JS é um Progressive Web App. Publicado em HTTPS (ou em `localhost`), 
 | --- | --- |
 | W / E / S | Mover / Girar / Escala |
 | F | Focar seleção (ou enquadrar tudo) |
+| O | Orbitar em volta do objeto selecionado |
 | M | Modo medir |
 | P | Modo foto |
 | Ctrl+Z / Ctrl+Y | Desfazer / Refazer |
@@ -64,7 +65,7 @@ O babalon JS é um Progressive Web App. Publicado em HTTPS (ou em `localhost`), 
 | Delete | Excluir |
 | Esc | Desmarcar / sair do modo foto |
 
-Na câmera: arraste para orbitar, pinça/roda para zoom, dois dedos (ou botão direito) para mover. Toque duas vezes num objeto para focar nele.
+Na câmera: arraste para orbitar, pinça/roda para zoom, dois dedos (ou botão direito) para mover. Toque duas vezes num objeto para focar nele, ou no chão vazio para orbitar em volta daquele ponto. O botão de órbita na barra de seleção torna o objeto selecionado o centro da órbita, sem mudar o zoom. Um pontinho dourado mostra o centro enquanto a câmera se move.
 
 ## Estrutura
 

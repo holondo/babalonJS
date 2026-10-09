@@ -23,6 +23,7 @@ import {
   MeshBuilder,
   MultiMaterial,
   Observable,
+  Plane,
   PBRMaterial,
   PointLight,
   PointerDragBehavior,
@@ -229,7 +230,10 @@ export class Editor {
   private pending: { entity: Entity; before: TransformSnapshot }[] | null = null;
   private dragStart: { pos: Vector3; point: Vector3 } | null = null;
   private nextId = 1;
-  private cameraTween: { target: Vector3; radius: number } | null = null;
+  /** Camera animation: move the pivot (target) and optionally the distance (radius). */
+  private cameraTween: { target: Vector3; radius?: number } | null = null;
+  private pivotMarker!: Mesh;
+  private lastCameraMove = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true }, false);
@@ -370,13 +374,35 @@ export class Editor {
       } else if (info.type === PointerEventTypes.POINTERDOUBLETAP) {
         const pick = scene.pick(scene.pointerX, scene.pointerY, this.pickable);
         const entity = pick?.pickedMesh ? this.entityOf(pick.pickedMesh) : null;
-        if (entity) this.focus(entity);
+        if (entity) {
+          this.focus(entity);
+        } else {
+          // Double-tap on empty floor: orbit around that point
+          const ray = scene.createPickingRay(scene.pointerX, scene.pointerY, Matrix.Identity(), this.camera);
+          const d = ray.intersectsPlane(new Plane(0, 1, 0, 0));
+          if (d !== null && d > 0 && d < this.camera.radius * 20) this.orbitAround(ray.origin.add(ray.direction.scale(d)));
+        }
       }
     });
 
-    scene.onBeforeRenderObservable.add(() => this.updateCameraTween());
+    scene.onBeforeRenderObservable.add(() => {
+      this.updateCameraTween();
+      this.updatePivotMarker();
+    });
+    camera.onViewMatrixChangedObservable.add(() => (this.lastCameraMove = performance.now()));
 
     this.tools = new Tools(this);
+
+    this.pivotMarker = MeshBuilder.CreateSphere('pivot', { diameter: 1, segments: 12 }, scene);
+    const pivotMat = new StandardMaterial('pivot', scene);
+    pivotMat.disableLighting = true;
+    pivotMat.emissiveColor = ACCENT;
+    pivotMat.alpha = 0.85;
+    this.pivotMarker.material = pivotMat;
+    this.pivotMarker.renderingGroupId = 2;
+    this.pivotMarker.isPickable = false;
+    this.pivotMarker.setEnabled(false);
+    this.overlays.add(this.pivotMarker);
     this.applyEnv();
     this.addDefaultLight();
 
@@ -1148,9 +1174,32 @@ export class Editor {
     if (!tw) return;
     const k = 1 - Math.pow(0.001, this.engine.getDeltaTime() / 1000 / 0.6);
     const target = Vector3.Lerp(this.camera.target, tw.target, k);
+    // setTarget keeps the camera where it is and turns it to look at the new pivot
     this.camera.setTarget(target);
-    this.camera.radius += (tw.radius - this.camera.radius) * k;
-    if (Vector3.Distance(target, tw.target) < 0.001 && Math.abs(this.camera.radius - tw.radius) < 0.001) this.cameraTween = null;
+    if (tw.radius !== undefined) this.camera.radius += (tw.radius - this.camera.radius) * k;
+    const radiusDone = tw.radius === undefined || Math.abs(this.camera.radius - tw.radius) < 0.001;
+    if (Vector3.Distance(target, tw.target) < 0.001 && radiusDone) this.cameraTween = null;
+  }
+
+  /**
+   * Makes a point (or the selected object's center) the camera pivot without zooming:
+   * dragging then orbits around it.
+   */
+  orbitAround(target: Entity | Vector3 | null = this.selected) {
+    if (!target) return;
+    const point = target instanceof Vector3 ? target : target.kind === 'light' ? target.root.position.clone() : this.boundsOf(target).center;
+    this.cameraTween = { target: point };
+  }
+
+  /** Small dot at the pivot, shown while the camera moves so it's clear what it orbits around. */
+  private updatePivotMarker() {
+    const now = performance.now();
+    const show = !this.photoMode && (now - this.lastCameraMove < 450 || !!this.cameraTween);
+    this.pivotMarker.setEnabled(show);
+    if (!show) return;
+    const t = this.camera.target;
+    this.pivotMarker.position.copyFrom(t);
+    this.pivotMarker.scaling.setAll(this.worldPerPixel(t) * 9);
   }
 
   // ---------- Materials ----------

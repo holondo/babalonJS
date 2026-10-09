@@ -15,6 +15,7 @@ import {
   AlignVerticalDistributeCenter,
   Download,
   Group,
+  Orbit,
   MonitorDown,
   MoveHorizontal,
   MoveVertical,
@@ -29,7 +30,7 @@ import {
   Layers,
   Lightbulb,
   Magnet,
-  Maximize,
+  Expand,
   Mountain,
   Move3d,
   Palette,
@@ -40,6 +41,7 @@ import {
   Rotate3d,
   RotateCcw,
   Scale3d,
+  Shrink,
   Scan,
   SlidersHorizontal,
   Sun,
@@ -143,7 +145,7 @@ export class UI {
   constructor(editor: Editor, root: HTMLElement) {
     this.editor = editor;
     this.root = root;
-    root.append(this.menu, this.projectInput);
+    root.append(h('div', { class: 'titlebar-drag' }), this.menu, this.projectInput);
     this.projectInput.addEventListener('change', () => {
       const file = this.projectInput.files?.[0];
       this.projectInput.value = '';
@@ -153,6 +155,7 @@ export class UI {
       if (this.menuOpen && !this.menu.contains(e.target as Node) && !(e.target as Element).closest?.('.project-btn')) this.toggleMenu(false);
     });
     this.setupAutosave();
+    document.addEventListener('fullscreenchange', () => this.renderTopbar());
     root.append(this.labels, this.frame, this.topbar, this.selbar, this.panel, this.dock, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
     this.fileInput.addEventListener('change', () => {
       const files = [...(this.fileInput.files ?? [])];
@@ -294,6 +297,7 @@ export class UI {
       else if (e.key === 'e' || e.key === 'r') ed.setTool('rotate');
       else if (e.key === 's') ed.setTool('scale');
       else if (e.key === 'f') ed.selected ? ed.focus() : ed.frameAll();
+      else if (e.key === 'o') ed.orbitAround();
       else if (e.key === 'p') ed.setPhotoMode(!ed.photoMode);
     });
   }
@@ -335,7 +339,9 @@ export class UI {
         iconButton(Redo2, tr('Redo (Ctrl+Y)'), () => ed.redo(), { disabled: !ed.canRedo }),
         iconButton(Scan, tr('Frame all (F)'), () => ed.frameAll()),
         iconButton(FolderOpen, tr('Project: open, save, export'), () => this.toggleMenu(), { cls: 'project-btn', active: this.menuOpen }),
-        iconButton(Maximize, tr('Fullscreen'), () => toggleFullscreen()),
+        document.fullscreenElement
+          ? iconButton(Shrink, tr('Exit fullscreen'), () => toggleFullscreen())
+          : iconButton(Expand, tr('Fullscreen'), () => toggleFullscreen()),
         iconButton(Camera, tr('Photo mode (P)'), () => ed.setPhotoMode(true), { cls: 'accent' }),
       ),
     );
@@ -526,6 +532,7 @@ export class UI {
         e.kind !== 'light' ? toolBtn('scale', Scale3d, tr('Scale')) : null,
         h('span', { class: 'sep' }),
         iconButton(Magnet, tr('Snap to grid'), () => ed.setSnap(!ed.snap), { active: ed.snap }),
+        iconButton(Orbit, tr('Orbit around this object'), () => ed.orbitAround()),
         iconButton(Focus, tr('Focus camera'), () => ed.focus()),
         iconButton(Copy, tr('Duplicate (Ctrl+D)'), () => ed.duplicate()),
         iconButton(Trash2, tr('Delete (Del)'), () => ed.remove(), { cls: 'danger' }),

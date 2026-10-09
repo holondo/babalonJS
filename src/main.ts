@@ -3,12 +3,14 @@ import { Editor } from './editor';
 import { UI } from './ui';
 import { locale, tr } from './i18n';
 import { registerSW } from 'virtual:pwa-register';
+import { setupSystemBars } from './systemBars';
 
 document.documentElement.lang = locale();
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
 const editor = new Editor(canvas);
 const ui = new UI(editor, document.querySelector<HTMLElement>('#app')!);
+setupSystemBars(editor);
 
 // PWA: offline cache + "new version" notice (the update is applied only when the user accepts)
 const updateSW = registerSW({
