@@ -327,7 +327,7 @@ export class UI {
   private renderTopbar() {
     const ed = this.editor;
     this.topbar.replaceChildren(
-      h('div', { class: 'brand' }, h('img', { src: '/brand/lettering.webp', alt: 'babalon JS', width: 94, height: 32, draggable: false })),
+      h('div', { class: 'brand' }, h('img', { src: `${import.meta.env.BASE_URL}brand/lettering.webp`, alt: 'babalon JS', width: 94, height: 32, draggable: false })),
       h(
         'div',
         { class: 'top-actions' },

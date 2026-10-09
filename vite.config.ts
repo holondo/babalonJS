@@ -1,18 +1,23 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Served from a subfolder on GitHub Pages (https://<user>.github.io/<repo>/): the deploy
+// workflow sets BASE_PATH=/<repo>/. Locally it stays at the root.
+const base = process.env.BASE_PATH || '/';
+
 export default defineConfig({
+  base,
   plugins: [
     VitePWA({
       registerType: 'prompt',
       includeAssets: ['favicon.ico', 'icons/apple-touch-icon.png', 'brand/lettering.webp', 'brand/lettering.png'],
       manifest: {
-        id: '/',
+        id: base,
         name: 'babalon JS',
         short_name: 'babalon',
         description: 'Compose 3D scenes: place models, light them and take photos.',
-        start_url: '/',
-        scope: '/',
+        start_url: base,
+        scope: base,
         display: 'standalone',
         display_override: ['window-controls-overlay', 'standalone'],
         orientation: 'any',
@@ -27,7 +32,7 @@ export default defineConfig({
         // Installed on desktop, the app can be chosen to open these files
         file_handlers: [
           {
-            action: '/',
+            action: base,
             accept: {
               'application/x-babalon': ['.babalon'],
               'model/gltf-binary': ['.glb'],
