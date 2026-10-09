@@ -230,9 +230,14 @@ export class Editor {
   private pending: { entity: Entity; before: TransformSnapshot }[] | null = null;
   private dragStart: { pos: Vector3; point: Vector3 } | null = null;
   private nextId = 1;
-  /** Camera animation: move the pivot (target) and optionally the distance (radius). */
-  private cameraTween: { target: Vector3; radius?: number } | null = null;
-  private pivotMarker!: Mesh;
+  /** Camera animation: move the pivot (target) and optionally the distance (radius), eased over time. */
+  private cameraTween: { from: Vector3; to: Vector3; fromRadius: number; toRadius?: number; start: number; duration: number } | null = null;
+  /** Ring that pulses where a new orbit center is set. */
+  private pivotRing!: Mesh;
+  private pulseStart = -Infinity;
+  /** Current orbit center when it was set on purpose (cleared when the camera pans away). */
+  orbitPoint: Vector3 | null = null;
+  orbitEntity: Entity | null = null;
   private lastCameraMove = 0;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -391,22 +396,31 @@ export class Editor {
     });
     camera.onViewMatrixChangedObservable.add(() => {
       this.lastCameraMove = performance.now();
-      // Keep drawing a little after the camera stops (pivot dot fade, splat sorting, labels)
+      // Keep drawing a little after the camera stops (splat sorting, labels)
       this.invalidate(1000);
+      // Panning moves the center: the object is no longer the orbit center
+      if (this.orbitPoint && !this.cameraTween && Vector3.Distance(this.camera.target, this.orbitPoint) > 1e-3) {
+        this.orbitPoint = null;
+        this.orbitEntity = null;
+        this.emit('tool');
+      }
     });
 
     this.tools = new Tools(this);
 
-    this.pivotMarker = MeshBuilder.CreateSphere('pivot', { diameter: 1, segments: 12 }, scene);
-    const pivotMat = new StandardMaterial('pivot', scene);
-    pivotMat.disableLighting = true;
-    pivotMat.emissiveColor = ACCENT;
-    pivotMat.alpha = 0.85;
-    this.pivotMarker.material = pivotMat;
-    this.pivotMarker.renderingGroupId = 2;
-    this.pivotMarker.isPickable = false;
-    this.pivotMarker.setEnabled(false);
-    this.overlays.add(this.pivotMarker);
+    // A flat ring facing the camera
+    this.pivotRing = MeshBuilder.CreateTorus('pivotRing', { diameter: 1, thickness: 0.06, tessellation: 48 }, scene);
+    this.pivotRing.rotation.x = Math.PI / 2;
+    this.pivotRing.bakeCurrentTransformIntoVertices();
+    this.pivotRing.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    const ringMat = new StandardMaterial('pivotRing', scene);
+    ringMat.disableLighting = true;
+    ringMat.emissiveColor = ACCENT;
+    this.pivotRing.material = ringMat;
+    this.pivotRing.renderingGroupId = 2;
+    this.pivotRing.isPickable = false;
+    this.pivotRing.setEnabled(false);
+    this.overlays.add(this.pivotRing);
     this.applyEnv();
     this.addDefaultLight();
 
@@ -1197,16 +1211,17 @@ export class Editor {
   focus(entity = this.selected) {
     if (!entity) return;
     if (entity.kind === 'light') {
-      this.cameraTween = { target: entity.root.position.clone(), radius: 4 };
+      this.animateCamera(entity.root.position.clone(), 4);
       return;
     }
     const { center, size } = this.boundsOf(entity);
-    this.cameraTween = { target: center, radius: this.fitRadius(size) };
+    this.animateCamera(center, this.fitRadius(size));
   }
 
   frameAll() {
     const b = this.sceneBounds();
-    this.cameraTween = b ? { target: b.center, radius: this.fitRadius(b.size) } : { target: new Vector3(0, 0.8, 0), radius: 6 };
+    if (b) this.animateCamera(b.center, this.fitRadius(b.size));
+    else this.animateCamera(new Vector3(0, 0.8, 0), 6);
   }
 
   private isInView(entity: Entity) {
@@ -1226,13 +1241,16 @@ export class Editor {
   private updateCameraTween() {
     const tw = this.cameraTween;
     if (!tw) return;
-    const k = 1 - Math.pow(0.001, this.engine.getDeltaTime() / 1000 / 0.6);
-    const target = Vector3.Lerp(this.camera.target, tw.target, k);
-    // setTarget keeps the camera where it is and turns it to look at the new pivot
-    this.camera.setTarget(target);
-    if (tw.radius !== undefined) this.camera.radius += (tw.radius - this.camera.radius) * k;
-    const radiusDone = tw.radius === undefined || Math.abs(this.camera.radius - tw.radius) < 0.001;
-    if (Vector3.Distance(target, tw.target) < 0.001 && radiusDone) this.cameraTween = null;
+    const t = Math.min(1, (performance.now() - tw.start) / tw.duration);
+    const k = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; // ease in-out
+    // setTarget keeps the camera where it is and turns it to look at the new center
+    this.camera.setTarget(Vector3.Lerp(tw.from, tw.to, k));
+    if (tw.toRadius !== undefined) this.camera.radius = tw.fromRadius + (tw.toRadius - tw.fromRadius) * k;
+    if (t >= 1) this.cameraTween = null;
+  }
+
+  private animateCamera(to: Vector3, radius?: number, duration = 550) {
+    this.cameraTween = { from: this.camera.target.clone(), to: to.clone(), fromRadius: this.camera.radius, toRadius: radius, start: performance.now(), duration };
   }
 
   /**
@@ -1242,18 +1260,24 @@ export class Editor {
   orbitAround(target: Entity | Vector3 | null = this.selected) {
     if (!target) return;
     const point = target instanceof Vector3 ? target : target.kind === 'light' ? target.root.position.clone() : this.boundsOf(target).center;
-    this.cameraTween = { target: point };
+    this.animateCamera(point);
+    this.orbitPoint = point.clone();
+    this.orbitEntity = target instanceof Vector3 ? null : target;
+    this.pulseStart = performance.now();
+    this.invalidate(1200);
+    this.emit('tool');
   }
 
-  /** Small dot at the pivot, shown while the camera moves so it's clear what it orbits around. */
+  /** The ring expands and fades where the new orbit center was set, then disappears. */
   private updatePivotMarker() {
-    const now = performance.now();
-    const show = !this.photoMode && (now - this.lastCameraMove < 450 || !!this.cameraTween);
-    this.pivotMarker.setEnabled(show);
-    if (!show) return;
-    const t = this.camera.target;
-    this.pivotMarker.position.copyFrom(t);
-    this.pivotMarker.scaling.setAll(this.worldPerPixel(t) * 9);
+    const t = (performance.now() - this.pulseStart) / 750;
+    const on = t >= 0 && t < 1 && !this.photoMode && !!this.orbitPoint;
+    this.pivotRing.setEnabled(on);
+    if (!on) return;
+    const ease = 1 - Math.pow(1 - t, 3);
+    this.pivotRing.position.copyFrom(this.orbitPoint!);
+    this.pivotRing.scaling.setAll(this.worldPerPixel(this.orbitPoint!) * (14 + 46 * ease));
+    (this.pivotRing.material as StandardMaterial).alpha = 1 - t;
   }
 
   // ---------- Materials ----------

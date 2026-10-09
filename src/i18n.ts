@@ -318,6 +318,7 @@ const PT: Record<string, string> = {
   'Drag to move the guide': 'Arraste para mover a guia',
   'Install app': 'Instalar app',
   'Orbit around this object': 'Orbitar em volta deste objeto',
+  'Orbiting around {name}': 'Orbitando em volta de {name}',
   'A new version is available': 'Há uma versão nova disponível',
   Update: 'Atualizar',
   'Ready to work offline': 'Pronto para usar offline',

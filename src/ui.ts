@@ -532,7 +532,10 @@ export class UI {
         e.kind !== 'light' ? toolBtn('scale', Scale3d, tr('Scale')) : null,
         h('span', { class: 'sep' }),
         iconButton(Magnet, tr('Snap to grid'), () => ed.setSnap(!ed.snap), { active: ed.snap }),
-        iconButton(Orbit, tr('Orbit around this object'), () => ed.orbitAround()),
+        iconButton(Orbit, tr('Orbit around this object'), () => {
+          ed.orbitAround();
+          this.toast(tr('Orbiting around {name}', { name: e.name }));
+        }, { active: ed.orbitEntity === e }),
         iconButton(Focus, tr('Focus camera'), () => ed.focus()),
         iconButton(Copy, tr('Duplicate (Ctrl+D)'), () => ed.duplicate()),
         iconButton(Trash2, tr('Delete (Del)'), () => ed.remove(), { cls: 'danger' }),
