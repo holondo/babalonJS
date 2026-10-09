@@ -66,6 +66,43 @@ export class ARMode {
     return this.supported;
   }
 
+  /** Optional, heavier extras (off when AR starts). */
+  shadows = false;
+  roomLight = false;
+
+  /** Shadows of the scene on the real floor. */
+  setShadows(on: boolean) {
+    this.shadows = on;
+    this.editor.setShadowsEnabled(on);
+    this.changed.notifyObservers();
+  }
+
+  /** Real-world lighting estimated by the phone (reflections and light of the room). */
+  setRoomLight(on: boolean) {
+    if (!this.xr) return;
+    const fm = this.xr.baseExperience.featuresManager;
+    try {
+      if (on) fm.attachFeature(WebXRFeatureName.LIGHT_ESTIMATION);
+      else {
+        fm.detachFeature(WebXRFeatureName.LIGHT_ESTIMATION);
+        this.editor.restoreEnvironmentTexture();
+      }
+      this.roomLight = on;
+    } catch (e) {
+      this.reportError(e instanceof Error ? e.message : String(e));
+    }
+    this.changed.notifyObservers();
+  }
+
+  /** Last error seen during the session (shown in the overlay to help diagnose problems). */
+  lastError = '';
+
+  private reportError(text: string) {
+    if (!this.active) return;
+    this.lastError = text;
+    this.changed.notifyObservers();
+  }
+
   /** Starts the AR session. Must be called from a tap (browsers require a user gesture). */
   async enter(overlay: HTMLElement) {
     if (this.active) return;
@@ -83,8 +120,10 @@ export class ARMode {
       // All optional: if the phone lacks one, the others still work
       this.hitTest = fm.enableFeature(WebXRFeatureName.HIT_TEST, 'latest', {}, true, false) as WebXRHitTest;
       fm.enableFeature(WebXRFeatureName.DOM_OVERLAY, 'latest', { element: overlay, supressXRSelectEvents: true }, true, false);
-      fm.enableFeature(WebXRFeatureName.LIGHT_ESTIMATION, 'latest', { setSceneEnvironmentTexture: true, createDirectionalLightSource: false }, true, false);
-      this.cameraAccess = fm.enableFeature(WebXRFeatureName.RAW_CAMERA_ACCESS, 'latest', {}, true, false) as WebXRRawCameraAccess;
+      // Expensive features are requested with the session but stay detached: AR starts as cheap
+      // as possible and the user turns them on (room lighting) or they run only when needed (photo).
+      fm.enableFeature(WebXRFeatureName.LIGHT_ESTIMATION, 'latest', { setSceneEnvironmentTexture: true, createDirectionalLightSource: false }, false, false);
+      this.cameraAccess = fm.enableFeature(WebXRFeatureName.RAW_CAMERA_ACCESS, 'latest', {}, false, false) as WebXRRawCameraAccess;
 
       this.hitTest.onHitTestResultObservable.add((results) => this.onHit(results));
       this.cameraAccess.onTexturesUpdatedObservable.add((t) => {
@@ -94,6 +133,9 @@ export class ARMode {
         }
       });
       this.xr.baseExperience.sessionManager.onXRSessionEnded.add(() => this.cleanup());
+      window.addEventListener('error', (e) => this.reportError(e.message));
+      window.addEventListener('unhandledrejection', (e) => this.reportError(String(e.reason?.message ?? e.reason)));
+      this.editor.engine.onContextLostObservable.add(() => this.reportError('WebGL context lost'));
 
       this.reticle = MeshBuilder.CreateTorus('arReticle', { diameter: 0.3, thickness: 0.012, tessellation: 64 }, scene);
       const mat = new StandardMaterial('arReticle', scene);
@@ -111,6 +153,10 @@ export class ARMode {
     this.scale = 1;
     this.lastHit = null;
     this.cameraImage = false;
+    this.lastError = '';
+    this.shadows = false;
+    this.roomLight = false;
+    this.editor.setShadowsEnabled(false);
     this.active = true;
     this.changed.notifyObservers();
     try {
@@ -241,7 +287,15 @@ export class ARMode {
    */
   async capture(): Promise<Blob | null> {
     if (!this.xr || !this.cameraAccess) return null;
+    // Camera image access only runs for the photo (it costs a texture copy every frame)
+    const fm = this.xr.baseExperience.featuresManager;
+    try {
+      fm.attachFeature(WebXRFeatureName.RAW_CAMERA_ACCESS);
+    } catch {
+      return null;
+    }
     const camera = await this.cameraFrame();
+    fm.detachFeature(WebXRFeatureName.RAW_CAMERA_ACCESS);
     if (!camera) return null;
     const engine = this.editor.engine;
     const xrCamera = this.xr.baseExperience.camera;

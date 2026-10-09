@@ -1479,6 +1479,16 @@ export class Editor {
     this.applyTool();
   }
 
+  /** Turns the shadows of every light on/off (AR starts without them to stay light). */
+  setShadowsEnabled(on: boolean) {
+    for (const e of this.entities) if (e.light && e.shadowGen) e.light.shadowEnabled = on;
+  }
+
+  /** Puts the editor's HDR environment back (AR light estimation replaces it). */
+  restoreEnvironmentTexture() {
+    if (this.envTexture) this.scene.environmentTexture = this.envTexture;
+  }
+
   /** Prepares the scene for AR (and restores it afterwards). */
   setARMode(on: boolean) {
     if (on === this.arMode) return;
@@ -1492,7 +1502,8 @@ export class Editor {
     } else {
       this.arMode = false;
       // Light estimation replaced the environment lighting during the session
-      if (this.envTexture) this.scene.environmentTexture = this.envTexture;
+      this.restoreEnvironmentTexture();
+      this.setShadowsEnabled(true);
       if (this.arSaved) this.applyEnv(this.arSaved);
       this.arSaved = null;
     }

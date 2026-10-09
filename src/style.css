@@ -1304,3 +1304,64 @@ button:disabled svg.lucide {
   align-items: center;
   gap: 28px;
 }
+.ar-settings {
+  position: absolute;
+  top: calc(14px + var(--safe-t));
+  right: 14px;
+}
+.ar-btn.active {
+  background: var(--accent);
+}
+.ar-btn.active svg.lucide {
+  stroke: var(--accent-ink);
+}
+.ar-options {
+  position: absolute;
+  top: calc(76px + var(--safe-t));
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 24px;
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--line);
+}
+.ar-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 44px;
+  padding: 0 10px 0 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text);
+}
+.ar-option i {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.16);
+  flex: none;
+}
+.ar-option i::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+.ar-option.on i {
+  background: var(--accent);
+}
+.ar-option.on i::after {
+  transform: translateX(18px);
+  background: var(--purple);
+}

@@ -1,4 +1,4 @@
-import { Move, Ruler, X } from 'lucide';
+import { Move, Ruler, SlidersHorizontal, X } from 'lucide';
 import type { ARMode } from './ar';
 import { h, icon } from './dom';
 import { tr } from './i18n';
@@ -10,6 +10,7 @@ import { tr } from './i18n';
 export class ARHud {
   readonly el = h('div', { class: 'ar-hud' });
   private message = '';
+  private settingsOpen = false;
   private messageTimer = 0;
   private readonly ar: ARMode;
 
@@ -36,6 +37,7 @@ export class ARHud {
     this.el.classList.toggle('show', ar.active);
     if (!ar.active) return this.el.replaceChildren();
     const hint =
+      (ar.lastError && `⚠ ${ar.lastError}`) ||
       this.message ||
       (ar.status === 'searching'
         ? tr('Move the phone slowly to find the floor')
@@ -49,6 +51,21 @@ export class ARHud {
     this.el.replaceChildren(
       h('button', { class: 'ar-btn ar-exit', 'aria-label': tr('Exit AR'), onClick: stop(() => ar.exit()) }, icon(X)),
       h('div', { class: 'ar-hint' }, hint),
+      h(
+        'button',
+        { class: `ar-btn ar-settings ${this.settingsOpen ? 'active' : ''}`, 'aria-label': tr('AR options'), onClick: stop(() => ((this.settingsOpen = !this.settingsOpen), this.render())) },
+        icon(SlidersHorizontal),
+      ),
+      ...(this.settingsOpen
+        ? [
+            h(
+              'div',
+              { class: 'ar-options' },
+              this.option(tr('Shadows on the floor'), ar.shadows, (v) => ar.setShadows(v)),
+              this.option(tr('Room lighting (heavier)'), ar.roomLight, (v) => ar.setRoomLight(v)),
+            ),
+          ]
+        : []),
       ...(ar.status === 'placed'
         ? [h(
             'div',
@@ -62,6 +79,21 @@ export class ARHud {
             ),
           )]
         : []),
+    );
+  }
+
+  private option(label: string, value: boolean, onChange: (v: boolean) => void) {
+    return h(
+      'button',
+      {
+        class: `ar-option ${value ? 'on' : ''}`,
+        onClick: (ev: Event) => {
+          ev.stopPropagation();
+          onChange(!value);
+        },
+      },
+      h('span', {}, label),
+      h('i', {}),
     );
   }
 
