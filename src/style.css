@@ -153,20 +153,19 @@ button:disabled {
   pointer-events: auto;
 }
 .brand {
-  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
   border-radius: var(--radius);
   background: var(--glass);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
-  letter-spacing: 0.02em;
-  font-size: 15px;
 }
-.brand b {
-  color: var(--accent);
-  margin-right: 4px;
-}
-.brand span {
-  color: var(--muted);
+.brand img {
+  display: block;
+  height: 32px;
+  width: auto;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
 }
 .top-actions {
   display: flex;
@@ -838,6 +837,12 @@ body.photo .panel {
     left: calc((100% - 360px) / 2);
   }
 }
+@media (min-width: 761px) and (max-width: 1240px) {
+  body.panel-open .selbar .ibtn.tool span,
+  body.panel-open .selbar .sel-name {
+    display: none;
+  }
+}
 
 /* ---------- Phone ---------- */
 
@@ -893,8 +898,18 @@ body.photo .panel {
     display: none;
   }
   .sel-tools .ibtn {
-    min-width: 40px;
-    padding: 0 8px;
+    min-width: 38px;
+    padding: 0 6px;
+  }
+  .selbar {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .selbar::-webkit-scrollbar {
+    display: none;
+  }
+  .sel-name.measure {
+    display: flex;
   }
   .toasts {
     bottom: calc(var(--dock-h) + 24px + var(--safe-b));
@@ -974,4 +989,190 @@ button:disabled svg.lucide {
   margin: 6px 0 18px;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* ---------- Tools: measurement labels, sizes, guides, align ---------- */
+
+.mlabels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
+}
+.mlabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(20, 14, 6, 0.72);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid rgba(255, 197, 61, 0.55);
+  color: #ffd77a;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.mlabel.active {
+  padding-right: 4px;
+  border-color: #ffc53d;
+}
+.mlabel .ibtn.mini {
+  min-width: 28px;
+  height: 28px;
+}
+.ibtn.mini.active {
+  background: rgba(255, 255, 255, 0.16);
+  color: inherit;
+}
+
+.sel-name.measure,
+.sel-name.measure span {
+  color: #ffd77a;
+}
+
+.dims {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.num {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+}
+.num-field {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
+}
+.num-field input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: none;
+  border: 0;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-appearance: textfield;
+}
+.num-field input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+.num-field em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.guide {
+  padding: 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(47, 214, 255, 0.3);
+  background: rgba(47, 214, 255, 0.05);
+}
+.guide > * + * {
+  margin-top: 8px;
+}
+.guide-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.guide-head .num {
+  flex: 1;
+}
+
+.align-grid {
+  display: grid;
+  grid-template-columns: auto repeat(3, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+.align-grid > span {
+  font-size: 12px;
+  color: var(--muted);
+  padding-right: 6px;
+}
+.ibtn.boxed {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
+}
+.sec h4 {
+  margin: 14px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.sel-name.wide {
+  max-width: 280px;
+}
+.glabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(6, 26, 32, 0.72);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid rgba(47, 214, 255, 0.6);
+  color: #9beeff;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.glabel svg.lucide {
+  stroke: #9beeff;
+}
+.glabel.dragging {
+  cursor: grabbing;
+  background: rgba(47, 214, 255, 0.25);
+  border-color: #2fd6ff;
+}
+.glabel.active {
+  padding-right: 4px;
+  border-color: #2fd6ff;
+}
+.glabel .ibtn.mini {
+  min-width: 28px;
+  height: 28px;
+}
+
+.toast.with-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 6px;
+  pointer-events: auto;
 }

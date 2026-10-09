@@ -121,3 +121,13 @@ export function select(label: string, options: { value: string; label: string }[
 export function hint(text: string) {
   return h('p', { class: 'hint' }, text);
 }
+
+/** Number field that commits on Enter/blur. */
+export function numberInput(label: string, value: number, opts: { step?: number; suffix?: string }, onCommit: (v: number) => void) {
+  const input = h('input', { type: 'number', value: String(+value.toFixed(4)), step: opts.step ? String(opts.step) : 'any', inputmode: 'decimal' });
+  input.addEventListener('change', () => {
+    const v = parseFloat(input.value.replace(',', '.'));
+    if (Number.isFinite(v)) onCommit(v);
+  });
+  return h('label', { class: 'num' }, h('span', {}, label), h('div', { class: 'num-field' }, input, opts.suffix ? h('em', {}, opts.suffix) : null));
+}

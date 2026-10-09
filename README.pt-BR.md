@@ -16,13 +16,28 @@ npm run dev
 
 Para testar no celular na mesma rede Wi-Fi: `npm run dev -- --host` e abra o endereço "Network" que aparece no terminal.
 
-`npm run build` gera a versão final em `dist/`, que pode ser publicada em qualquer hospedagem estática.
+`npm run build` gera a versão final em `dist/`, que pode ser publicada em qualquer hospedagem estática. `npm run preview` serve essa versão localmente (use para testar o PWA: o service worker só funciona na versão final).
+
+### Instalar como app (PWA)
+
+O babalon JS é um Progressive Web App. Publicado em HTTPS (ou em `localhost`), o navegador oferece a instalação: ícone de instalar na barra de endereço do Chrome/Edge, item **Instalar app** no menu de projeto, ou *Adicionar à tela inicial* no Android/iOS. Instalado, ele:
+
+- funciona offline (o app inteiro fica em cache; ambientes HDR e modelos de exemplo entram no cache na primeira vez que são usados);
+- no computador, aparece em "Abrir com" para arquivos `.babalon`, `.glb`, `.gltf`, `.obj`, `.stl`, `.fbx`, `.ply`, `.splat` e `.spz`;
+- mostra um botão **Atualizar** quando sai uma versão nova, em vez de recarregar sozinho.
 
 ## O que dá para fazer
 
 - **Adicionar**: GLB, glTF, OBJ, STL, FBX, PLY/SPLAT/SPZ (gaussian splats), USDZ e .babylon, por botão ou arrastando os arquivos para a janela. Também há modelos de exemplo, formas básicas e luzes.
 - **Posicionar**: toque para selecionar. Com *Mover*, arraste o objeto sobre o chão com o dedo/mouse, ou use os gizmos. *Girar* e *Escala* usam gizmos. O ímã liga o encaixe na grade.
 - **Cena**: lista de objetos, ocultar/mostrar, sliders de posição/rotação/escala, girar 90° (útil para modelos "deitados"), pôr no chão, duplicar, excluir, animações do modelo.
+- **Ferramentas**:
+  - *Medir*: toque em dois pontos para medir. Os pontos grudam na superfície do modelo (e acompanham quando ele se move) ou caem no chão. A medida pode seguir a superfície do modelo em vez de ser uma reta. Encaixe em vértices, unidades m/cm/mm/in/ft, arraste os pontos para ajustar.
+  - *Guias*: planos horizontais (altura) e verticais (X/Z) para alinhar coisas, posicionados por valor ou na base/centro/topo da seleção.
+  - *Guias inteligentes*: ao mover, o objeto encaixa nas bordas e centros dos outros objetos, nas guias e no chão, no estilo do Figma.
+  - *Alinhar e igualar* (2+ objetos, o primeiro selecionado é a referência): alinhar bordas/centros em cada eixo, igualar altura/largura/profundidade/escala, empilhar em cima, distribuir, pôr no chão.
+  - *Tamanho*: campos de largura/altura/profundidade no painel Cena deixam o objeto com um tamanho exato.
+- **Seleção múltipla**: Shift/Ctrl+clique, ou o botão de seleção múltipla em telas de toque. Mover, excluir e duplicar valem para todos os selecionados.
 - **Material** (estilo Sketchfab): cor/tom, mostrar ou ocultar textura, metálico, rugosidade, verniz, emissão, opacidade, dupla face, sem iluminação e wireframe.
 - **Luzes**: luzes prontas (Estúdio, Dia, Pôr do sol, Neon, Dramático), luz pontual, holofote e sol, com cor, intensidade, abertura, alcance, sombras e "mirar em".
 - **Ambiente**: iluminação HDR com intensidade e rotação, fundo desfocado ou cor sólida, chão só de sombra ou sólido, grade.
@@ -37,6 +52,7 @@ Para testar no celular na mesma rede Wi-Fi: `npm run dev -- --host` e abra o end
 | --- | --- |
 | W / E / S | Mover / Girar / Escala |
 | F | Focar seleção (ou enquadrar tudo) |
+| M | Modo medir |
 | P | Modo foto |
 | Ctrl+Z / Ctrl+Y | Desfazer / Refazer |
 | Ctrl+D | Duplicar |
@@ -49,11 +65,14 @@ Na câmera: arraste para orbitar, pinça/roda para zoom, dois dedos (ou botão d
 ## Estrutura
 
 - `src/editor.ts`: núcleo, sem interface. Cena, câmera, carregamento, seleção, gizmos, luzes, sombras, ambiente, pós-processamento, captura, exportação e histórico.
+- `src/tools.ts`: medições (inclusive o caminho pela superfície), guias, guias inteligentes e alinhamento.
 - `src/project.ts`: salvar/abrir projeto (.babalon) e salvamento automático.
 - `src/ui.ts`: painéis e barras, em DOM puro.
 - `src/dom.ts`: helpers de interface (slider, toggle, cor, chips…).
 - `src/i18n.ts`: traduções. As chaves são o texto em inglês; para outro idioma, basta adicionar um dicionário.
 - `src/style.css`: tema escuro de vidro, com layout de celular abaixo de 760px.
+- `vite.config.ts`: manifesto do PWA, cache offline e associação de arquivos.
+- `public/icons`, `public/brand`: ícones e lettering do app, gerados a partir das artes em tamanho original em `design/`.
 
 O objeto `editor` fica disponível no console do navegador para depuração.
 

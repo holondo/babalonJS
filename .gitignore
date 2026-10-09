@@ -33,3 +33,6 @@ coverage
 
 # Local Claude Code config (app preview)
 .claude/
+
+# vite-plugin-pwa dev output
+dev-dist

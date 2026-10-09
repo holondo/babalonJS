@@ -1,13 +1,35 @@
 import './style.css';
 import { Editor } from './editor';
 import { UI } from './ui';
-import { locale } from './i18n';
+import { locale, tr } from './i18n';
+import { registerSW } from 'virtual:pwa-register';
 
 document.documentElement.lang = locale();
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
 const editor = new Editor(canvas);
-new UI(editor, document.querySelector<HTMLElement>('#app')!);
+const ui = new UI(editor, document.querySelector<HTMLElement>('#app')!);
+
+// PWA: offline cache + "new version" notice (the update is applied only when the user accepts)
+const updateSW = registerSW({
+  onNeedRefresh: () => ui.toast(tr('A new version is available'), 'info', { label: tr('Update'), run: () => updateSW(true) }),
+  onOfflineReady: () => ui.toast(tr('Ready to work offline')),
+});
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  ui.setInstallPrompt(e as unknown as { prompt: () => Promise<unknown> });
+});
+window.addEventListener('appinstalled', () => ui.setInstallPrompt(null));
+
+// Installed app opened with a file ("Open with babalon JS")
+interface LaunchParams {
+  files: { getFile(): Promise<File> }[];
+}
+const launchQueue = (window as unknown as { launchQueue?: { setConsumer(fn: (p: LaunchParams) => void): void } }).launchQueue;
+launchQueue?.setConsumer(async (params) => {
+  ui.openFiles(await Promise.all(params.files.map((h) => h.getFile())));
+});
 
 // Exposed for debugging from the browser console
 Object.assign(window, { editor });

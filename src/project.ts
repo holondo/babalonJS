@@ -3,6 +3,7 @@ import type { Zippable } from 'fflate';
 import { Color3, PBRMaterial, StandardMaterial, Vector3 } from '@babylonjs/core';
 import type { AssetContainer, Material, PointLight, SpotLight } from '@babylonjs/core';
 import { tr } from './i18n';
+import type { ToolsJSON } from './tools';
 import type { AssetRef, Editor, Entity, EnvSettings, LightType, ModelSource, PhotoSettings, PrimitiveType } from './editor';
 
 /** Project file: a .zip with project.json + the original model files in assets/. */
@@ -66,6 +67,8 @@ export interface ProjectJSON {
   photo: PhotoSettings;
   assets: AssetJSON[];
   entities: EntityJSON[];
+  /** Measurements, guides and units (optional: older projects don't have it). */
+  tools?: ToolsJSON;
 }
 
 export interface ProjectSnapshot {
@@ -107,6 +110,7 @@ export function snapshot(editor: Editor, name: string): ProjectSnapshot {
       photo: { ...editor.photo },
       assets: [...assets.values()],
       entities: editor.entities.map((e) => entityToJSON(editor, e)),
+      tools: editor.tools.toJSON(editor.entities),
     },
   };
 }
@@ -225,9 +229,11 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
   const loaded = new Map<number, { container: AssetContainer; source: ModelSource | null } | null>();
   const missing = new Set<string>();
   const quiet = { record: false, select: false };
+  const byIndex: (Entity | null)[] = [];
 
   for (const ej of json.entities) {
     let entity: Entity | null = null;
+    byIndex.push(null);
     if (ej.kind === 'model') {
       const asset = assets.get(ej.asset!);
       if (!loaded.has(ej.asset!)) {
@@ -253,6 +259,7 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
       if (l.range !== undefined) (entity.light as PointLight).range = l.range;
     }
     if (!entity) continue;
+    byIndex[byIndex.length - 1] = entity;
 
     entity.name = entity.root.name = ej.name;
     entity.root.position.fromArray(ej.t.p);
@@ -271,6 +278,8 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
     editor.setCastShadows(entity, ej.castShadows);
     if (!ej.visible) editor.setVisible(entity, false);
   }
+
+  editor.tools.load(json.tools, byIndex);
 
   const c = json.camera;
   editor.camera.setTarget(Vector3.FromArray(c.target));

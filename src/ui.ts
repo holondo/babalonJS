@@ -5,7 +5,21 @@ import {
   Camera,
   Copy,
   Crosshair,
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignHorizontalDistributeCenter,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  AlignVerticalDistributeCenter,
   Download,
+  Group,
+  MonitorDown,
+  MoveHorizontal,
+  MoveVertical,
+  Ruler,
+  Spline,
   FilePlus,
   FolderOpen,
   Save,
@@ -50,13 +64,16 @@ import { PROJECT_EXT, fromZip, loadAutosave, restore, saveAutosave, snapshot, to
 import type { ProjectSnapshot } from './project';
 import { LANGS, getLang, locale, setLang, tr } from './i18n';
 import type { Lang } from './i18n';
-import { button, chips, colorInput, h, hint, icon, iconButton, row, section, select, slider, toggle } from './dom';
+import { button, chips, colorInput, h, hint, icon, iconButton, numberInput, row, section, select, slider, toggle } from './dom';
+import { UNITS } from './tools';
+import type { Axis, Edge, Guide, Measurement, Unit } from './tools';
 
-type Tab = 'add' | 'scene' | 'material' | 'lights' | 'env' | 'photo';
+type Tab = 'add' | 'scene' | 'tools' | 'material' | 'lights' | 'env' | 'photo';
 
 const TABS: { id: Tab; label: string; icon: IconNode }[] = [
   { id: 'add', label: 'Add', icon: Plus },
   { id: 'scene', label: 'Scene', icon: Layers },
+  { id: 'tools', label: 'Tools', icon: Ruler },
   { id: 'material', label: 'Material', icon: Palette },
   { id: 'lights', label: 'Lights', icon: Lightbulb },
   { id: 'env', label: 'Environment', icon: Mountain },
@@ -108,6 +125,10 @@ export class UI {
   private readonly empty = h('div', { class: 'empty' });
   private readonly loader = h('div', { class: 'loader' });
   private readonly toasts = h('div', { class: 'toasts' });
+  private readonly labels = h('div', { class: 'mlabels' });
+  private labelEls = new Map<Measurement, HTMLElement>();
+  private guideEls = new Map<Guide, HTMLElement>();
+  private draggingGuide: Guide | null = null;
   private readonly dropzone = h('div', { class: 'dropzone' }, icon(Upload, 40), h('p', {}, tr('Drop your 3D files here')));
   private readonly fileInput = h('input', {
     type: 'file',
@@ -132,7 +153,7 @@ export class UI {
       if (this.menuOpen && !this.menu.contains(e.target as Node) && !(e.target as Element).closest?.('.project-btn')) this.toggleMenu(false);
     });
     this.setupAutosave();
-    root.append(this.frame, this.topbar, this.selbar, this.panel, this.dock, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
+    root.append(this.labels, this.frame, this.topbar, this.selbar, this.panel, this.dock, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
     this.fileInput.addEventListener('change', () => {
       const files = [...(this.fileInput.files ?? [])];
       this.fileInput.value = '';
@@ -143,7 +164,10 @@ export class UI {
 
     editor.changed.add((kind) => {
       if (kind === 'history') return this.renderTopbar();
-      if (kind === 'photo') return this.renderAll();
+      if (kind === 'photo') {
+        this.buildLabels();
+        return this.renderAll();
+      }
       if (kind === 'tool') return this.renderSelbar();
       if (kind === 'env' && editor.photoMode) {
         this.renderPhotoHud();
@@ -151,8 +175,16 @@ export class UI {
       }
       if (this.busy) return;
       if (kind === 'env' && this.tab !== 'env' && this.tab !== 'photo' && this.tab !== 'lights') return;
+      if (kind === 'entities') this.buildLabels();
       this.renderAll();
     });
+    editor.tools.changed.add(() => {
+      this.buildLabels();
+      this.renderSelbar();
+      this.scheduleAutosave();
+      if (!this.busy && (this.tab === 'tools' || this.tab === 'scene')) this.renderPanel();
+    });
+    editor.scene.onAfterRenderObservable.add(() => this.updateLabels());
     editor.loading.add((l) => {
       this.loader.classList.toggle('show', !!l);
       if (l) this.loader.replaceChildren(h('div', { class: 'spinner' }), h('span', {}, tr('Loading {name}… {pct}%', { name: l.name, pct: Math.round(l.progress * 100) })));
@@ -171,11 +203,31 @@ export class UI {
     }
   }
 
-  toast(text: string, kind: 'info' | 'error' = 'info') {
-    const t = h('div', { class: `toast ${kind}` }, text);
+  toast(text: string, kind: 'info' | 'error' = 'info', action?: { label: string; run: () => void }) {
+    const t = h(
+      'div',
+      { class: `toast ${kind} ${action ? 'with-action' : ''}` },
+      h('span', {}, text),
+      action ? h('button', { class: 'chip active', onClick: () => (t.remove(), action.run()) }, action.label) : null,
+    );
     this.toasts.append(t);
+    // Toasts with an action stay until used (e.g. "update available")
+    if (action) return;
     setTimeout(() => t.classList.add('out'), 3200);
     setTimeout(() => t.remove(), 3700);
+  }
+
+  /** Files opened from outside: the OS ("Open with" on an installed PWA) or drag and drop. */
+  openFiles(files: File[]) {
+    if (files.length) this.loadFiles(files);
+  }
+
+  /** Install prompt saved from `beforeinstallprompt` (Chrome/Edge/Android). */
+  private installPrompt: { prompt: () => Promise<unknown> } | null = null;
+
+  setInstallPrompt(prompt: { prompt: () => Promise<unknown> } | null) {
+    this.installPrompt = prompt;
+    if (this.menuOpen) this.toggleMenu(true);
   }
 
   private async loadFiles(files: File[]) {
@@ -233,7 +285,11 @@ export class UI {
         ed.remove();
       } else if (e.key === 'Escape') {
         if (ed.photoMode) ed.setPhotoMode(false);
+        else if (ed.tools.pending) ed.tools.cancelPending();
+        else if (ed.tools.measureMode) ed.tools.setMeasureMode(false);
         else ed.select(null);
+      } else if (e.key === 'm') {
+        ed.tools.setMeasureMode(!ed.tools.measureMode);
       } else if (e.key === 'w' || e.key === 'g') ed.setTool('move');
       else if (e.key === 'e' || e.key === 'r') ed.setTool('rotate');
       else if (e.key === 's') ed.setTool('scale');
@@ -271,7 +327,7 @@ export class UI {
   private renderTopbar() {
     const ed = this.editor;
     this.topbar.replaceChildren(
-      h('div', { class: 'brand' }, h('b', {}, 'babalon'), h('span', {}, 'JS')),
+      h('div', { class: 'brand' }, h('img', { src: '/brand/lettering.webp', alt: 'babalon JS', width: 94, height: 32, draggable: false })),
       h(
         'div',
         { class: 'top-actions' },
@@ -307,6 +363,14 @@ export class UI {
       item(FolderOpen, tr('Open project…'), 'Ctrl+O', () => this.projectInput.click()),
       item(Save, tr('Save project'), 'Ctrl+S', () => this.saveProject()),
       item(Download, tr('Export scene .glb'), '', () => this.exportGLB()),
+      ...(this.installPrompt
+        ? [
+            item(MonitorDown, tr('Install app'), '', () => {
+              this.installPrompt?.prompt();
+              this.installPrompt = null;
+            }),
+          ]
+        : []),
       h('p', { class: 'hint' }, tr('The project ({ext}) stores models, materials, lights, environment, effects and camera. The scene is also saved automatically in this browser.', { ext: PROJECT_EXT })),
     );
   }
@@ -419,6 +483,7 @@ export class UI {
     this.tab = this.tab === tab ? null : tab;
     this.renderDock();
     this.renderPanel();
+    this.buildLabels();
   }
 
   private renderDock() {
@@ -437,15 +502,25 @@ export class UI {
   private renderSelbar() {
     const ed = this.editor;
     const e = ed.selected;
-    this.selbar.classList.toggle('show', !!e && !ed.photoMode);
-    if (!e) return this.selbar.replaceChildren();
+    if (ed.tools.measureMode && !ed.photoMode) {
+      this.selbar.classList.add('show');
+      return this.selbar.replaceChildren(
+        h('div', { class: 'sel-name measure' }, icon(Ruler, 16), h('span', {}, ed.tools.pending ? tr('Tap the second point') : tr('Tap the first point'))),
+        h('div', { class: 'sel-tools' }, button(tr('Done'), () => ed.tools.setMeasureMode(false), { cls: 'small primary' })),
+      );
+    }
+    const multi = iconButton(Group, tr('Multi-select (or Shift+click)'), () => ed.setMultiSelect(!ed.multiSelect), { active: ed.multiSelect });
+    this.selbar.classList.toggle('show', (!!e || ed.multiSelect) && !ed.photoMode);
+    if (!e) return this.selbar.replaceChildren(h('div', { class: 'sel-name wide' }, h('span', {}, tr('Tap objects to select'))), h('div', { class: 'sel-tools' }, multi));
     const toolBtn = (t: Tool, node: IconNode, label: string) =>
       iconButton(node, label, () => ed.setTool(t), { active: ed.tool === t, label, cls: 'tool' });
+    const count = ed.selection.length;
     this.selbar.replaceChildren(
-      h('div', { class: 'sel-name' }, icon(KIND_ICON[e.kind], 16), h('span', {}, e.name)),
+      h('div', { class: 'sel-name' }, icon(KIND_ICON[e.kind], 16), h('span', {}, count > 1 ? tr('{n} selected', { n: count }) : e.name)),
       h(
         'div',
         { class: 'sel-tools' },
+        multi,
         toolBtn('move', Move3d, tr('Move')),
         toolBtn('rotate', Rotate3d, tr('Rotate')),
         e.kind !== 'light' ? toolBtn('scale', Scale3d, tr('Scale')) : null,
@@ -494,6 +569,8 @@ export class UI {
         return this.envPanel();
       case 'photo':
         return this.photoPanelContent();
+      case 'tools':
+        return this.toolsPanel();
     }
   }
 
@@ -631,7 +708,258 @@ export class UI {
         e.kind !== 'light' ? button(tr('Drop to floor'), () => ed.dropToGround(), { icon: ArrowDownToLine, cls: 'small' }) : null,
         button(tr('Reset'), () => ed.resetTransform(), { icon: RotateCcw, cls: 'small' }),
       ),
+      e.kind !== 'light' ? this.sizeFields(e) : null,
     );
+  }
+
+  /** Width/height/depth in the chosen unit; editing one scales the object uniformly. */
+  private sizeFields(e: Entity) {
+    const ed = this.editor;
+    const tools = ed.tools;
+    const size = ed.boundsOf(e).size;
+    const field = (axis: Axis, label: string) =>
+      numberInput(label, tools.toUnit(size[axis]), { suffix: tools.unit }, (v) => ed.setDimension(e, axis, tools.fromUnit(v)));
+    return h('div', { class: 'dims' }, field('x', tr('Width')), field('y', tr('Height')), field('z', tr('Depth')));
+  }
+
+  // ---------- Tools: measure, guides, align ----------
+
+  private toolsPanel() {
+    const ed = this.editor;
+    const tools = ed.tools;
+    const q = (fn: () => void) => this.quiet(fn);
+    const units = (Object.keys(UNITS) as Unit[]).map((u) => ({ value: u, label: u }));
+    const out: (Node | null)[] = [
+      section(
+        tr('Measure'),
+        button(tools.measureMode ? tr('Stop measuring') : tr('Measure distance'), () => tools.setMeasureMode(!tools.measureMode), {
+          icon: Ruler,
+          cls: `wide ${tools.measureMode ? 'primary' : ''}`,
+        }),
+        hint(tr('Tap two points: on a model they stick to its surface, elsewhere they land on the floor. Drag the points to adjust.')),
+        toggle(tr('Follow the surface'), tools.surfaceDefault, (v) => (tools.surfaceDefault = v)),
+        toggle(tr('Snap to vertices'), tools.snapVertices, (v) => (tools.snapVertices = v)),
+        chips(units, tools.unit, (v) => tools.setUnit(v)),
+        tools.measurements.length
+          ? h('ul', { class: 'outliner' }, ...tools.measurements.map((m, i) => this.measurementRow(m, i)))
+          : null,
+        tools.measurements.length ? row(button(tr('Clear measurements'), () => tools.clearMeasurements(), { icon: Trash2, cls: 'small ghost' })) : null,
+      ),
+      section(
+        tr('Guides'),
+        toggle(tr('Smart guides (snap while moving)'), tools.smartGuides, (v) => q(() => tools.setSmartGuides(v))),
+        row(
+          button(tr('Height'), () => tools.addGuide('y'), { icon: AlignVerticalDistributeCenter, cls: 'small' }),
+          button('X', () => tools.addGuide('x'), { icon: AlignHorizontalDistributeCenter, cls: 'small' }),
+          button('Z', () => tools.addGuide('z'), { icon: AlignHorizontalDistributeCenter, cls: 'small' }),
+        ),
+        tools.guides.length ? null : hint(tr('Guides are planes you can align objects to. With an object selected, a new guide starts at its top (height) or center (X/Z).')),
+        ...tools.guides.map((g) => this.guideRow(g)),
+      ),
+      this.alignSection(),
+    ];
+    return out;
+  }
+
+  private measurementRow(m: Measurement, i: number) {
+    const tools = this.editor.tools;
+    const row = h(
+      'li',
+      { class: m === tools.active ? 'active' : '', onClick: () => tools.setActive(m) },
+      icon(m.path ? Spline : Ruler, 16),
+      h('span', {}, `${i + 1}. ${tools.format(m.length)}${m.surfaceFailed ? ' · ' + tr('straight') : ''}`),
+      iconButton(Spline, tr('Follow the surface'), () => tools.setSurface(m, !m.surface), { cls: 'mini', active: m.surface }),
+      iconButton(Trash2, tr('Delete'), () => tools.removeMeasurement(m), { cls: 'mini' }),
+    );
+    row.querySelectorAll('.mini').forEach((b) => b.addEventListener('click', (ev) => ev.stopPropagation()));
+    return row;
+  }
+
+  private guideRow(g: Guide) {
+    const ed = this.editor;
+    const tools = ed.tools;
+    const name = g.axis === 'y' ? tr('Height') : g.axis.toUpperCase();
+    const sel = ed.selected && ed.selected.kind !== 'light';
+    const edge = (label: string, e: Edge) => button(label, () => tools.guideToSelection(g, e), { cls: 'small' });
+    return h(
+      'div',
+      { class: 'guide' },
+      h(
+        'div',
+        { class: 'guide-head' },
+        numberInput(tr('Guide {name}', { name }), tools.toUnit(g.value), { suffix: tools.unit }, (v) => {
+          tools.setGuideValue(g, tools.fromUnit(v));
+          tools.changed.notifyObservers();
+        }),
+        iconButton(Trash2, tr('Delete'), () => tools.removeGuide(g), { cls: 'mini' }),
+      ),
+      sel
+        ? row(
+            edge(g.axis === 'y' ? tr('Bottom') : tr('Min'), 'min'),
+            edge(tr('Center'), 'center'),
+            edge(g.axis === 'y' ? tr('Top') : tr('Max'), 'max'),
+          )
+        : null,
+    );
+  }
+
+  private alignSection() {
+    const ed = this.editor;
+    const tools = ed.tools;
+    const items = ed.selection.filter((e) => e.kind !== 'light');
+    if (items.length < 2) {
+      return section(
+        tr('Align & match'),
+        hint(tr('Select 2 or more objects (multi-select button or Shift+click). The first one selected is the reference.')),
+        row(button(tr('Multi-select'), () => ed.setMultiSelect(!ed.multiSelect), { icon: Group, cls: `small ${ed.multiSelect ? 'primary' : ''}` })),
+      );
+    }
+    const a = (node: IconNode, label: string, axis: Axis, edge: Edge) => iconButton(node, label, () => tools.align(axis, edge), { cls: 'boxed' });
+    return section(
+      tr('Align & match'),
+      h('p', { class: 'stats' }, tr('Reference: {name}', { name: items[0].name })),
+      h('div', { class: 'align-grid' },
+        h('span', {}, 'X'),
+        a(AlignStartVertical, tr('Align left'), 'x', 'min'),
+        a(AlignCenterVertical, tr('Align centers'), 'x', 'center'),
+        a(AlignEndVertical, tr('Align right'), 'x', 'max'),
+        h('span', {}, tr('Height')),
+        a(AlignEndHorizontal, tr('Align bottoms'), 'y', 'min'),
+        a(AlignCenterHorizontal, tr('Align middles'), 'y', 'center'),
+        a(AlignStartHorizontal, tr('Align tops'), 'y', 'max'),
+        h('span', {}, 'Z'),
+        a(AlignStartVertical, tr('Align backs'), 'z', 'min'),
+        a(AlignCenterVertical, tr('Align centers'), 'z', 'center'),
+        a(AlignEndVertical, tr('Align fronts'), 'z', 'max'),
+      ),
+      h('h4', {}, tr('Match the reference')),
+      row(
+        button(tr('Height'), () => tools.matchSize('y'), { cls: 'small' }),
+        button(tr('Width'), () => tools.matchSize('x'), { cls: 'small' }),
+        button(tr('Depth'), () => tools.matchSize('z'), { cls: 'small' }),
+        button(tr('Scale'), () => tools.matchScale(), { cls: 'small' }),
+      ),
+      row(
+        button(tr('Stack on top'), () => tools.stackOnTop(), { icon: AlignEndHorizontal, cls: 'small' }),
+        button(tr('Drop to floor'), () => tools.dropToFloor(), { icon: ArrowDownToLine, cls: 'small' }),
+      ),
+      items.length >= 3
+        ? row(
+            button(tr('Distribute X'), () => tools.distribute('x'), { icon: AlignHorizontalDistributeCenter, cls: 'small' }),
+            button(tr('Distribute Z'), () => tools.distribute('z'), { icon: AlignHorizontalDistributeCenter, cls: 'small' }),
+          )
+        : null,
+    );
+  }
+
+  // ---------- Measurement labels ----------
+
+  /** Recreates the floating labels (one per measurement); positions are updated every frame. */
+  private buildLabels() {
+    const tools = this.editor.tools;
+    // Don't rebuild under the finger while a guide is being dragged
+    if (this.draggingGuide) return;
+    this.labels.replaceChildren();
+    this.labelEls.clear();
+    this.guideEls.clear();
+    if (this.editor.photoMode) return;
+    // Guide handles only matter while editing guides: show them with the Tools tab open
+    const guides = this.tab === 'tools' ? tools.guides : [];
+    for (const g of guides) {
+      const active = g === tools.activeGuide;
+      const el = h(
+        'div',
+        { class: `glabel ${active ? 'active' : ''}`, title: tr('Drag to move the guide') },
+        icon(g.axis === 'y' ? MoveVertical : MoveHorizontal, 14),
+        h('span', { class: 'gtext' }),
+        active ? iconButton(X, tr('Delete'), () => tools.removeGuide(g), { cls: 'mini' }) : null,
+      );
+      el.querySelectorAll('.mini').forEach((b) => b.addEventListener('pointerdown', (ev) => ev.stopPropagation()));
+      this.makeGuideDraggable(g, el);
+      this.labels.append(el);
+      this.guideEls.set(g, el);
+    }
+    for (const m of tools.measurements) {
+      const active = m === tools.active;
+      const el = h(
+        'div',
+        { class: `mlabel ${active ? 'active' : ''}`, onClick: () => tools.setActive(active ? null : m) },
+        h('span', { class: 'mtext' }),
+        active ? iconButton(Spline, tr('Follow the surface'), () => tools.setSurface(m, !m.surface), { cls: 'mini', active: m.surface }) : null,
+        active ? iconButton(X, tr('Delete'), () => tools.removeMeasurement(m), { cls: 'mini' }) : null,
+      );
+      el.querySelectorAll('.mini').forEach((b) => b.addEventListener('click', (ev) => ev.stopPropagation()));
+      this.labels.append(el);
+      this.labelEls.set(m, el);
+    }
+  }
+
+  /** Dragging the chip moves the guide along its axis (works with mouse and touch). */
+  private makeGuideDraggable(g: Guide, el: HTMLElement) {
+    const tools = this.editor.tools;
+    let offset = { x: 0, y: 0 };
+    let start = { x: 0, y: 0 };
+    let moved = false;
+    el.addEventListener('pointerdown', (ev) => {
+      start = { x: ev.clientX, y: ev.clientY };
+      moved = false;
+      ev.preventDefault();
+      ev.stopPropagation();
+      el.setPointerCapture(ev.pointerId);
+      const rect = this.editor.engine.getRenderingCanvas()!.getBoundingClientRect();
+      const handle = this.editor.toScreen(tools.guideHandle(g));
+      offset = { x: ev.clientX - rect.left - handle.x, y: ev.clientY - rect.top - handle.y };
+      this.draggingGuide = g;
+      el.classList.add('dragging');
+    });
+    el.addEventListener('pointermove', (ev) => {
+      if (this.draggingGuide !== g) return;
+      if (!moved && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 4) return;
+      moved = true;
+      const rect = this.editor.engine.getRenderingCanvas()!.getBoundingClientRect();
+      tools.dragGuide(g, ev.clientX - rect.left - offset.x, ev.clientY - rect.top - offset.y);
+    });
+    const end = () => {
+      if (this.draggingGuide !== g) return;
+      this.draggingGuide = null;
+      el.classList.remove('dragging');
+      // A tap (no drag) expands/collapses the chip
+      if (!moved) tools.setActiveGuide(tools.activeGuide === g ? null : g);
+      else tools.changed.notifyObservers();
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  }
+
+  private updateLabels() {
+    const ed = this.editor;
+    const tools = ed.tools;
+    // Keep guide chips inside the free area of the screen (not under bars or the panel)
+    const canvas = ed.engine.getRenderingCanvas()!;
+    const panelOpen = this.panel.classList.contains('show') && canvas.clientWidth > 760;
+    const minX = 80;
+    const maxX = canvas.clientWidth - (panelOpen ? 360 + 80 : 80);
+    const minY = 130;
+    const maxY = canvas.clientHeight - (canvas.clientWidth > 760 ? 110 : this.panel.classList.contains('show') ? canvas.clientHeight * 0.55 : 110);
+    for (const [g, el] of this.guideEls) {
+      const s = ed.toScreen(tools.guideHandle(g));
+      const x = Math.min(Math.max(s.x, minX), Math.max(minX, maxX));
+      const y = Math.min(Math.max(s.y, minY), Math.max(minY, maxY));
+      el.style.display = s.visible || this.draggingGuide === g ? '' : 'none';
+      el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+      const text = `${g.axis === 'y' ? tr('Height') : g.axis.toUpperCase()} ${tools.format(g.value)}`;
+      const span = el.querySelector('.gtext') as HTMLElement;
+      if (span.textContent !== text) span.textContent = text;
+    }
+    for (const [m, el] of this.labelEls) {
+      const alive = (!m.a.entity || ed.entities.includes(m.a.entity)) && (!m.b.entity || ed.entities.includes(m.b.entity));
+      const s = ed.toScreen(tools.labelPoint(m));
+      el.style.display = alive && s.visible ? '' : 'none';
+      el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -150%)`;
+      const text = tools.format(m.length) + (m.surfaceFailed ? ` · ${tr('straight')}` : m.path ? ` · ${tr('surface')}` : '');
+      const span = el.firstElementChild as HTMLElement;
+      if (span.textContent !== text) span.textContent = text;
+    }
   }
 
   private objectSection(e: Entity) {

@@ -18,6 +18,7 @@ import {
   ImageProcessingConfiguration,
   LoadAssetContainerAsync,
   Material,
+  Matrix,
   Mesh,
   MeshBuilder,
   MultiMaterial,
@@ -35,6 +36,7 @@ import {
   StandardMaterial,
   TransformNode,
   Vector3,
+  Viewport,
 } from '@babylonjs/core';
 import type { BaseTexture, Node } from '@babylonjs/core';
 import { registerBuiltInLoaders } from '@babylonjs/loaders/dynamic.js';
@@ -42,6 +44,8 @@ import { GridMaterial } from '@babylonjs/materials/grid/gridMaterial.js';
 import { ShadowOnlyMaterial } from '@babylonjs/materials/shadowOnly/shadowOnlyMaterial.js';
 import { GLTF2Export } from '@babylonjs/serializers/glTF/2.0/glTFSerializer.js';
 import { tr } from './i18n';
+import { Tools } from './tools';
+import type { Axis } from './tools';
 
 registerBuiltInLoaders();
 
@@ -211,9 +215,18 @@ export class Editor {
   private envTexture: BaseTexture | null = null;
   private skybox: Mesh | null = null;
   private readonly helpers = new Set<AbstractMesh>();
+  /** Measurement/guide visuals: never selected, exported or shown in photos. */
+  readonly overlays = new Set<AbstractMesh>();
+  readonly tools: Tools;
+  /** Other selected objects besides `selected` (which is the reference for alignment). */
+  extra: Entity[] = [];
+  /** Touch: taps add to / remove from the selection instead of replacing it. */
+  multiSelect = false;
+  private followStart: { entity: Entity; pos: Vector3 }[] = [];
+  private primaryStart: Vector3 | null = null;
   private undoStack: Command[] = [];
   private redoStack: Command[] = [];
-  private pending: { entity: Entity; before: TransformSnapshot } | null = null;
+  private pending: { entity: Entity; before: TransformSnapshot }[] | null = null;
   private dragStart: { pos: Vector3; point: Vector3 } | null = null;
   private nextId = 1;
   private cameraTween: { target: Vector3; radius: number } | null = null;
@@ -283,7 +296,33 @@ export class Editor {
     g.positionGizmo!.planarGizmoEnabled = true;
     for (const gz of [g.positionGizmo!, g.rotationGizmo!, g.scaleGizmo!]) {
       gz.onDragStartObservable.add(() => this.beginTransform());
-      gz.onDragEndObservable.add(() => this.endTransform());
+      gz.onDragEndObservable.add(() => {
+        this.tools.clearSmartLines();
+        this.endTransform();
+      });
+    }
+    // Position gizmo: track the raw position ourselves so grid snapping and smart guides don't get "sticky"
+    const pg = g.positionGizmo!;
+    let raw: Vector3 | null = null;
+    pg.onDragStartObservable.add(() => {
+      raw = this.selected?.root.position.clone() ?? null;
+      this.startFollow();
+    });
+    const axisGizmos: [{ dragBehavior: PointerDragBehavior }, Record<Axis, boolean>][] = [
+      [pg.xGizmo, { x: true, y: false, z: false }],
+      [pg.yGizmo, { x: false, y: true, z: false }],
+      [pg.zGizmo, { x: false, y: false, z: true }],
+      [pg.xPlaneGizmo, { x: false, y: true, z: true }],
+      [pg.yPlaneGizmo, { x: true, y: false, z: true }],
+      [pg.zPlaneGizmo, { x: true, y: true, z: false }],
+    ];
+    for (const [gizmo, axes] of axisGizmos) {
+      gizmo.dragBehavior.onDragObservable.add((ev) => {
+        const e = this.selected;
+        if (!e || !raw) return;
+        raw.addInPlace(ev.delta);
+        this.moveTo(e, raw.clone(), axes);
+      });
     }
     this.gizmos.positionGizmoEnabled = false;
     this.gizmos.rotationGizmoEnabled = false;
@@ -296,20 +335,18 @@ export class Editor {
     this.drag.onDragStartObservable.add((e) => {
       if (!this.selected) return;
       this.beginTransform();
+      this.startFollow();
       this.dragStart = { pos: this.selected.root.position.clone(), point: e.dragPlanePoint.clone() };
     });
     this.drag.onDragObservable.add((e) => {
       if (!this.selected || !this.dragStart) return;
       const p = this.dragStart.pos.add(e.dragPlanePoint.subtract(this.dragStart.point));
-      if (this.snap) {
-        p.x = Math.round(p.x / 0.25) * 0.25;
-        p.z = Math.round(p.z / 0.25) * 0.25;
-      }
-      this.selected.root.position.x = p.x;
-      this.selected.root.position.z = p.z;
+      p.y = this.selected.root.position.y;
+      this.moveTo(this.selected, p, { x: true, y: false, z: true });
     });
     this.drag.onDragEndObservable.add(() => {
       this.dragStart = null;
+      this.tools.clearSmartLines();
       this.endTransform();
     });
 
@@ -318,14 +355,20 @@ export class Editor {
         if (info.type === PointerEventTypes.POINTERTAP && this.photo.dof) this.focusAt(scene.pointerX, scene.pointerY);
         return;
       }
+      if (this.tools.handlePointer(info)) return;
       if (info.type === PointerEventTypes.POINTERTAP) {
+        if (this.tools.measureMode) return;
         if (this.gizmos.isHovered) return;
         const util = this.gizmos.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY);
         if (util?.hit) return;
-        const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.isPickable && m.isEnabled() && m.isVisible);
-        this.select(pick?.pickedMesh ? this.entityOf(pick.pickedMesh) : null);
+        const pick = scene.pick(scene.pointerX, scene.pointerY, this.pickable);
+        const ev = info.event as PointerEvent;
+        const additive = this.multiSelect || ev.shiftKey || ev.ctrlKey || ev.metaKey;
+        const entity = pick?.pickedMesh ? this.entityOf(pick.pickedMesh) : null;
+        if (additive && !entity) return;
+        this.select(entity, additive);
       } else if (info.type === PointerEventTypes.POINTERDOUBLETAP) {
-        const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.isPickable && m.isEnabled() && m.isVisible);
+        const pick = scene.pick(scene.pointerX, scene.pointerY, this.pickable);
         const entity = pick?.pickedMesh ? this.entityOf(pick.pickedMesh) : null;
         if (entity) this.focus(entity);
       }
@@ -333,6 +376,7 @@ export class Editor {
 
     scene.onBeforeRenderObservable.add(() => this.updateCameraTween());
 
+    this.tools = new Tools(this);
     this.applyEnv();
     this.addDefaultLight();
 
@@ -411,20 +455,52 @@ export class Editor {
     e.root.scaling.copyFrom(t.s);
   }
 
-  /** Starts a transform change (for undo). Repeated calls are ignored. */
-  beginTransform() {
-    if (this.pending || !this.selected) return;
-    this.pending = { entity: this.selected, before: this.snapshot(this.selected) };
+  /** Starts a transform change of the whole selection (for undo). Repeated calls are ignored. */
+  beginTransform(entities = this.selection) {
+    if (this.pending || !entities.length) return;
+    this.pending = entities.map((entity) => ({ entity, before: this.snapshot(entity) }));
   }
 
   endTransform() {
     if (!this.pending) return;
-    const { entity, before } = this.pending;
+    const changes = this.pending
+      .map(({ entity, before }) => ({ entity, before, after: this.snapshot(entity) }))
+      .filter(({ before, after }) => !(before.p.equalsWithEpsilon(after.p) && before.q.equalsWithEpsilon(after.q) && before.s.equalsWithEpsilon(after.s)));
     this.pending = null;
-    const after = this.snapshot(entity);
-    if (before.p.equalsWithEpsilon(after.p) && before.q.equalsWithEpsilon(after.q) && before.s.equalsWithEpsilon(after.s)) return;
-    this.push({ undo: () => this.restore(entity, before), redo: () => this.restore(entity, after) });
+    if (!changes.length) return;
+    this.push({
+      undo: () => changes.forEach((c) => this.restore(c.entity, c.before)),
+      redo: () => changes.forEach((c) => this.restore(c.entity, c.after)),
+    });
     this.emit('transform');
+  }
+
+  /** Changes several objects in a single undo step. */
+  transformMany(entities: Entity[], fn: (e: Entity) => void) {
+    if (!entities.length) return;
+    this.endTransform();
+    this.beginTransform(entities);
+    for (const e of entities) fn(e);
+    this.endTransform();
+  }
+
+  /** Remembers where the other selected objects are, so they follow the primary one while dragging. */
+  private startFollow() {
+    this.primaryStart = this.selected?.root.position.clone() ?? null;
+    this.followStart = this.extra.map((entity) => ({ entity, pos: entity.root.position.clone() }));
+  }
+
+  /** Moves the primary selection to `pos` (grid snap + smart guides) and drags the rest along. */
+  private moveTo(e: Entity, pos: Vector3, axes: Record<Axis, boolean>) {
+    if (this.snap) {
+      for (const k of ['x', 'y', 'z'] as Axis[]) if (axes[k]) pos[k] = Math.round(pos[k] / 0.25) * 0.25;
+    }
+    const p = this.tools.snap(e, pos, axes);
+    e.root.position.copyFrom(p);
+    if (this.primaryStart) {
+      const delta = p.subtract(this.primaryStart);
+      for (const f of this.followStart) f.entity.root.position.copyFrom(f.pos.add(delta));
+    }
   }
 
   // ---------- Entities ----------
@@ -463,6 +539,7 @@ export class Editor {
   }
 
   private detach(entity: Entity) {
+    if (this.extra.includes(entity)) this.select(entity, true);
     if (this.selected === entity) this.select(null);
     entity.root.setEnabled(false);
     if (entity.light) entity.light.setEnabled(false);
@@ -753,7 +830,18 @@ export class Editor {
     }
   }
 
-  duplicate(entity = this.selected) {
+  duplicate(entity?: Entity) {
+    if (!entity) {
+      const items = this.selection;
+      if (items.length > 1) {
+        const copies: Entity[] = [];
+        this.group(() => items.forEach((e) => this.duplicate(e) && copies.push(this.selected!)));
+        this.select(copies[0] ?? null);
+        copies.slice(1).forEach((c) => this.select(c, true));
+        return;
+      }
+      entity = this.selected ?? undefined;
+    }
     if (!entity) return;
     let copy: Entity;
     if (entity.kind === 'model' && entity.source) {
@@ -776,9 +864,15 @@ export class Editor {
     copy.root.scaling.copyFrom(entity.root.scaling);
     copy.root.position.copyFrom(entity.root.position).addInPlace(new Vector3(0.6, 0, 0.6));
     this.select(copy);
+    return copy;
   }
 
-  remove(entity = this.selected) {
+  remove(entity?: Entity) {
+    if (!entity) {
+      const items = this.selection;
+      if (items.length > 1) return this.group(() => items.forEach((e) => this.remove(e)));
+      entity = this.selected ?? undefined;
+    }
     if (!entity) return;
     this.detach(entity);
     this.push({ undo: () => this.attach(entity), redo: () => this.detach(entity), entities: [entity] });
@@ -828,6 +922,7 @@ export class Editor {
   /** Really deletes everything (including what the undo history holds) to start/open another project. */
   resetScene() {
     this.select(null);
+    this.tools.clear();
     const all = new Set<Entity>(this.entities);
     for (const cmd of [...this.undoStack, ...this.redoStack]) for (const e of cmd.entities ?? []) all.add(e);
     const containers = new Set<AssetContainer>();
@@ -851,17 +946,47 @@ export class Editor {
 
   // ---------- Selection and tools ----------
 
-  select(entity: Entity | null) {
-    if (this.selected === entity) return;
-    if (this.selected) this.selected.root.removeBehavior(this.drag);
-    this.selected = entity;
+  /** Selected objects, the primary (reference) one first. */
+  get selection(): Entity[] {
+    return this.selected ? [this.selected, ...this.extra] : [];
+  }
+
+  /** Selects an object. With `additive`, toggles it in a multi-selection instead. */
+  select(entity: Entity | null, additive = false) {
+    if (additive && entity && this.selected) {
+      if (entity === this.selected) {
+        // Removing the primary: the next selected object becomes the reference
+        const [next, ...rest] = this.extra;
+        this.extra = rest;
+        this.setPrimary(next ?? null);
+      } else if (this.extra.includes(entity)) {
+        this.extra = this.extra.filter((e) => e !== entity);
+      } else {
+        this.extra.push(entity);
+      }
+    } else {
+      if (this.selected === entity && !this.extra.length) return;
+      this.extra = [];
+      this.setPrimary(entity);
+    }
     this.outline.clearSelection();
-    if (entity) {
-      const meshes = entity.kind === 'light' ? entity.root.getChildMeshes() : entity.meshes;
+    for (const e of this.selection) {
+      const meshes = e.kind === 'light' ? e.root.getChildMeshes() : e.meshes;
       if (meshes.length) this.outline.addSelection(meshes);
     }
     this.applyTool();
     this.emit('selection');
+  }
+
+  private setPrimary(entity: Entity | null) {
+    this.endTransform();
+    if (this.selected) this.selected.root.removeBehavior(this.drag);
+    this.selected = entity;
+  }
+
+  setMultiSelect(on: boolean) {
+    this.multiSelect = on;
+    this.emit('tool');
   }
 
   setTool(tool: Tool) {
@@ -879,12 +1004,12 @@ export class Editor {
   private applyTool() {
     const e = this.selected;
     const tool = e?.kind === 'light' && this.tool === 'scale' ? 'move' : this.tool;
-    const show = !!e && !this.photoMode;
+    const show = !!e && !this.photoMode && !this.tools?.measureMode;
     this.gizmos.positionGizmoEnabled = show && tool === 'move';
     this.gizmos.rotationGizmoEnabled = show && tool === 'rotate';
     this.gizmos.scaleGizmoEnabled = show && tool === 'scale';
     const g = this.gizmos.gizmos;
-    g.positionGizmo!.snapDistance = this.snap ? 0.25 : 0;
+    g.positionGizmo!.snapDistance = 0; // grid snapping is done in moveTo()
     g.rotationGizmo!.snapDistance = this.snap ? Math.PI / 12 : 0;
     g.scaleGizmo!.snapDistance = this.snap ? 0.1 : 0;
     this.gizmos.attachToMesh(show ? e!.root : null);
@@ -931,7 +1056,46 @@ export class Editor {
     this.editTransform((root) => root.lookAt(t), true);
   }
 
-  private boundsOf(entity: Entity) {
+  /** Size of the object along an axis; setting it scales the object uniformly (keeps it on the floor). */
+  setDimension(entity: Entity, axis: Axis, value: number) {
+    const b = this.boundsOf(entity);
+    if (value <= 0 || b.size[axis] <= 1e-9) return;
+    this.transformMany([entity], (e) => {
+      e.root.scaling.scaleInPlace(value / b.size[axis]);
+      e.root.position.y += b.min.y - this.boundsOf(e).min.y;
+    });
+  }
+
+  private readonly pickable = (m: AbstractMesh) => m.isPickable && m.isEnabled() && m.isVisible && !this.overlays.has(m);
+
+  /** Surface point of a model/shape under the screen position, with its world normal. */
+  pickSurface(x: number, y: number) {
+    const pick = this.scene.pick(x, y, (m) => this.pickable(m) && !this.helpers.has(m));
+    if (!pick?.hit || !pick.pickedMesh || !pick.pickedPoint) return null;
+    const entity = this.entityOf(pick.pickedMesh);
+    if (!entity || entity.kind === 'light') return null;
+    const normal = pick.getNormal(true, true) ?? Vector3.Up();
+    return { entity, mesh: pick.pickedMesh, faceId: pick.faceId, point: pick.pickedPoint, normal };
+  }
+
+  /** World position → CSS pixels relative to the canvas. */
+  toScreen(p: Vector3) {
+    const engine = this.engine;
+    const w = engine.getRenderWidth();
+    const h = engine.getRenderHeight();
+    const v = Vector3.Project(p, Matrix.IdentityReadOnly, this.scene.getTransformMatrix(), new Viewport(0, 0, w, h));
+    const canvas = engine.getRenderingCanvas()!;
+    return { x: (v.x * canvas.clientWidth) / w, y: (v.y * canvas.clientHeight) / h, visible: v.z > 0 && v.z < 1 };
+  }
+
+  /** Size in world units of one screen pixel at a given position. */
+  worldPerPixel(p: Vector3) {
+    const distance = Math.max(Vector3.Distance(this.camera.position, p), this.camera.minZ);
+    const height = this.engine.getRenderingCanvas()!.clientHeight || 1;
+    return (2 * distance * Math.tan(this.camera.fov / 2)) / height;
+  }
+
+  boundsOf(entity: Entity) {
     entity.root.computeWorldMatrix(true);
     for (const m of entity.meshes) m.computeWorldMatrix(true);
     const { min, max } = entity.root.getHierarchyBoundingVectors(true);
@@ -1155,7 +1319,7 @@ export class Editor {
 
   /** Tap on the scene with depth of field on: focuses on the tapped point. */
   focusAt(x: number, y: number) {
-    const pick = this.scene.pick(x, y, (m) => m.isPickable && m.isEnabled() && m.isVisible && !this.helpers.has(m));
+    const pick = this.scene.pick(x, y, (m) => this.pickable(m) && !this.helpers.has(m));
     if (!pick?.hit || !pick.pickedPoint) return;
     this.setPhoto({ focusDistance: Vector3.Distance(this.camera.position, pick.pickedPoint) });
   }
@@ -1197,7 +1361,7 @@ export class Editor {
   }
 
   async exportGLB() {
-    const exclude = new Set<Node>([this.ground, this.grid, ...this.helpers]);
+    const exclude = new Set<Node>([this.ground, this.grid, ...this.helpers, ...this.overlays]);
     if (this.skybox) exclude.add(this.skybox);
     const data = await GLTF2Export.GLBAsync(this.scene, 'scene', {
       shouldExportNode: (node) => {
