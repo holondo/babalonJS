@@ -1,0 +1,66 @@
+# babalon JS
+
+*[Leia em português](README.pt-BR.md)*
+
+A simple, touch-friendly 3D scene composer built on [Babylon.js](https://www.babylonjs.com/).
+Drop in your models, place them with your finger or mouse, light the scene and take photos with effects, in the spirit of a video game photo mode.
+
+The interface is in English by default and can be switched to Portuguese from the project menu (folder icon).
+
+## Running
+
+```bash
+npm install
+npm run dev
+```
+
+To try it on your phone over the same Wi-Fi network, run `npm run dev -- --host` and open the "Network" address shown in the terminal.
+
+`npm run build` produces a static build in `dist/` that can be hosted anywhere.
+
+## Features
+
+- **Add**: GLB, glTF, OBJ, STL, FBX, PLY/SPLAT/SPZ (gaussian splats), USDZ and .babylon, through the file picker or by dragging files onto the window. Also sample models, basic shapes and lights.
+- **Place**: tap to select. With *Move*, drag the object across the floor with your finger or mouse, or use the gizmos. *Rotate* and *Scale* use gizmos. The magnet toggles grid snapping.
+- **Scene**: object list, show/hide, position/rotation/scale sliders, 90° turns (handy for models that load lying down), drop to floor, duplicate, delete, model animations.
+- **Material** (Sketchfab style): color/tint, show/hide texture, metallic, roughness, clear coat, emission, opacity, double-sided, unlit and wireframe.
+- **Lights**: presets (Studio, Daylight, Sunset, Neon, Dramatic), point, spot and sun lights with color, intensity, cone angle, range, shadows and "aim at".
+- **Environment**: HDR lighting with intensity and rotation, blurred or solid background, shadow-only or solid floor, reference grid.
+- **Photo**: filter presets, field of view, exposure, contrast, saturation, temperature, vignette, bloom, grain, chromatic aberration, sharpen, depth of field (tap to focus), and frames for 16:9, Cinema, 1:1, 4:5, 9:16… Photos are rendered at 2× screen resolution; on phones the share sheet opens.
+- **Projects**: new, open and save `.babalon` projects. A project is a zip with `project.json` (objects, transforms, materials, lights, animations, environment, effects and camera) plus the original model files in `assets/`. Sample models are stored as links only. You can also open a project by dragging it onto the window.
+- **Autosave** in the browser (IndexedDB): when you come back, "Continue where you left off" restores the last session.
+- **Undo/redo**, **export the scene as .glb**, fullscreen.
+
+### Shortcuts
+
+| Key | Action |
+| --- | --- |
+| W / E / S | Move / Rotate / Scale |
+| F | Focus selection (or frame everything) |
+| P | Photo mode |
+| Ctrl+Z / Ctrl+Y | Undo / Redo |
+| Ctrl+D | Duplicate |
+| Ctrl+S / Ctrl+O | Save / open project |
+| Delete | Delete |
+| Esc | Deselect / exit photo mode |
+
+Camera: drag to orbit, pinch or scroll to zoom, two fingers (or right mouse button) to pan. Double-tap an object to focus on it.
+
+## Project structure
+
+- `src/editor.ts`: the core, with no UI. Scene, camera, loading, selection, gizmos, lights, shadows, environment, post-processing, capture, export and history.
+- `src/project.ts`: saving/opening `.babalon` projects and autosave.
+- `src/ui.ts`: panels and toolbars, plain DOM.
+- `src/dom.ts`: UI helpers (slider, toggle, color, chips…).
+- `src/i18n.ts`: translations. Keys are the English text; add a language by adding a dictionary.
+- `src/style.css`: dark glass theme, phone layout below 760px.
+
+The `editor` object is exposed on `window` for debugging from the browser console.
+
+## License
+
+Copyright (C) 2026 Guilherme Holanda Sanches
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE).
+
+Third-party libraries keep their own licenses: Babylon.js (Apache-2.0), fflate (MIT), Lucide icons (ISC). Sample models and HDR environments are loaded at runtime from the Babylon.js asset CDN and are not distributed with this repository.

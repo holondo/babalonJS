@@ -1,0 +1,20 @@
+# Auto detect text files and perform LF normalization
+* text=auto eol=lf
+
+# 3D files and images: never convert
+*.glb binary
+*.bin binary
+*.fbx binary
+*.stl binary
+*.ply binary
+*.splat binary
+*.spz binary
+*.usdz binary
+*.hdr binary
+*.ktx2 binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.babalon binary
+*.zip binary

@@ -1,0 +1,26 @@
+{
+  "name": "babalon-js",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A simple, touch-friendly 3D scene composer built on Babylon.js: place models, light them and take photos.",
+  "license": "GPL-3.0-or-later",
+  "author": "Guilherme Holanda Sanches",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^9.30.0",
+    "@babylonjs/loaders": "^9.30.0",
+    "@babylonjs/materials": "^9.30.0",
+    "@babylonjs/serializers": "^9.30.0",
+    "fflate": "^0.8.3",
+    "lucide": "^1.54.0"
+  }
+}
