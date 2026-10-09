@@ -4,6 +4,8 @@ import { UI } from './ui';
 import { locale, tr } from './i18n';
 import { registerSW } from 'virtual:pwa-register';
 import { setupSystemBars } from './systemBars';
+import { ARMode } from './ar';
+import { ARHud } from './arHud';
 
 document.documentElement.lang = locale();
 
@@ -11,6 +13,11 @@ const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
 const editor = new Editor(canvas);
 const ui = new UI(editor, document.querySelector<HTMLElement>('#app')!);
 setupSystemBars(editor);
+
+// Augmented reality (WebXR): only offered where the browser supports it (Android Chrome + ARCore)
+const ar = new ARMode(editor);
+const arHud = new ARHud(ar);
+ar.checkSupport().then(() => ui.setAR(ar, arHud.el));
 
 // PWA: offline cache + "new version" notice (the update is applied only when the user accepts)
 const updateSW = registerSW({

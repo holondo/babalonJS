@@ -219,7 +219,7 @@ export class Tools {
         if (!anchor) return true;
         if (!this.pending) {
           this.pending = anchor;
-          this.pendingMarker.setEnabled(!this.editor.photoMode);
+          this.pendingMarker.setEnabled(!this.editor.cleanView);
         } else {
           const m = this.addMeasurement(this.pending, anchor, this.surfaceDefault);
           this.cancelPending();
@@ -388,7 +388,7 @@ export class Tools {
   }
 
   private update() {
-    const visible = !this.editor.photoMode;
+    const visible = !this.editor.cleanView;
     for (const m of this.measurements) {
       const on = visible && this.alive(m.a) && this.alive(m.b);
       m.line.setEnabled(on);
@@ -440,7 +440,7 @@ export class Tools {
   }
 
   private applyVisibility() {
-    const on = !this.editor.photoMode;
+    const on = !this.editor.cleanView;
     for (const g of this.guides) g.node.setEnabled(on);
     this.pendingMarker.setEnabled(on && !!this.pending);
     this.clearSmartLines();

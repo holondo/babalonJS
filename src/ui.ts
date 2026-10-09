@@ -48,6 +48,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  View,
   X,
 } from 'lucide';
 import type { IconNode } from 'lucide';
@@ -64,6 +65,7 @@ import {
 import type { Editor, Entity, GroundMode, LightType, PhotoSettings, PrimitiveType, Tool } from './editor';
 import { PROJECT_EXT, fromZip, loadAutosave, restore, saveAutosave, snapshot, toZip } from './project';
 import type { ProjectSnapshot } from './project';
+import type { ARMode } from './ar';
 import { LANGS, getLang, locale, setLang, tr } from './i18n';
 import type { Lang } from './i18n';
 import { button, chips, colorInput, h, hint, icon, iconButton, numberInput, row, section, select, slider, toggle } from './dom';
@@ -225,6 +227,26 @@ export class UI {
     if (files.length) this.loadFiles(files);
   }
 
+  private ar: ARMode | null = null;
+  private arOverlay: HTMLElement | null = null;
+
+  /** Augmented reality: shows the AR button when the device supports it. */
+  setAR(ar: ARMode, overlay: HTMLElement) {
+    this.ar = ar;
+    this.arOverlay = overlay;
+    ar.changed.add(() => this.renderTopbar());
+    this.renderTopbar();
+  }
+
+  private async enterAR() {
+    if (!this.ar || !this.arOverlay) return;
+    try {
+      await this.ar.enter(this.arOverlay);
+    } catch (e) {
+      this.toast(tr('Could not start AR: {error}', { error: errorMessage(e) }), 'error');
+    }
+  }
+
   /** Install prompt saved from `beforeinstallprompt` (Chrome/Edge/Android). */
   private installPrompt: { prompt: () => Promise<unknown> } | null = null;
 
@@ -342,6 +364,7 @@ export class UI {
         document.fullscreenElement
           ? iconButton(Shrink, tr('Exit fullscreen'), () => toggleFullscreen())
           : iconButton(Expand, tr('Fullscreen'), () => toggleFullscreen()),
+        this.ar?.supported ? iconButton(View, tr('View in AR'), () => this.enterAR(), { cls: 'accent', label: 'AR' }) : null,
         iconButton(Camera, tr('Photo mode (P)'), () => ed.setPhotoMode(true), { cls: 'accent' }),
       ),
     );
@@ -450,7 +473,8 @@ export class UI {
   }
 
   private scheduleAutosave() {
-    if (this.restoring) return;
+    // During AR the environment is temporarily changed: don't save that state
+    if (this.restoring || this.editor.arMode) return;
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = window.setTimeout(() => this.autosaveNow(), 1500);
   }

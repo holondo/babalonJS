@@ -203,6 +203,18 @@ export class Editor {
   tool: Tool = 'move';
   snap = false;
   photoMode = false;
+  /** In an AR session: helpers hidden, no sky/background, floor becomes a shadow catcher. */
+  arMode = false;
+  private arSaved: EnvSettings | null = null;
+
+  /** No editing helpers on screen (photo mode or AR). */
+  get cleanView() {
+    return this.photoMode || this.arMode;
+  }
+
+  get groundMesh() {
+    return this.ground;
+  }
 
   env: EnvSettings = { ...DEFAULT_ENV };
   photo: PhotoSettings = { ...DEFAULT_PHOTO };
@@ -455,6 +467,8 @@ export class Editor {
 
   /** True while something is moving or loading; otherwise the last frame stays on screen. */
   private needsRender() {
+    // An AR session shows the camera feed: every frame must be drawn
+    if (this.arMode) return true;
     if (performance.now() < this.activeUntil) return true;
     const c = this.camera;
     if (c.inertialAlphaOffset || c.inertialBetaOffset || c.inertialRadiusOffset || c.inertialPanningX || c.inertialPanningY) return true;
@@ -854,7 +868,7 @@ export class Editor {
     }
     for (const p of parts) {
       this.helpers.add(p);
-      p.isVisible = !this.photoMode;
+      p.isVisible = !this.cleanView;
     }
 
     let light: ShadowLight;
@@ -1098,7 +1112,7 @@ export class Editor {
   private applyTool() {
     const e = this.selected;
     const tool = e?.kind === 'light' && this.tool === 'scale' ? 'move' : this.tool;
-    const show = !!e && !this.photoMode && !this.tools?.measureMode;
+    const show = !!e && !this.cleanView && !this.tools?.measureMode;
     this.gizmos.positionGizmoEnabled = show && tool === 'move';
     this.gizmos.rotationGizmoEnabled = show && tool === 'rotate';
     this.gizmos.scaleGizmoEnabled = show && tool === 'scale';
@@ -1271,7 +1285,7 @@ export class Editor {
   /** The ring expands and fades where the new orbit center was set, then disappears. */
   private updatePivotMarker() {
     const t = (performance.now() - this.pulseStart) / 750;
-    const on = t >= 0 && t < 1 && !this.photoMode && !!this.orbitPoint;
+    const on = t >= 0 && t < 1 && !this.cleanView && !!this.orbitPoint;
     this.pivotRing.setEnabled(on);
     if (!on) return;
     const ease = 1 - Math.pow(1 - t, 3);
@@ -1343,7 +1357,7 @@ export class Editor {
     }
     if (this.ground.material instanceof BackgroundMaterial) this.ground.material.primaryColor = groundColor;
     this.ground.setEnabled(env.ground !== 'none');
-    this.grid.setEnabled(env.grid && !this.photoMode);
+    this.grid.setEnabled(env.grid && !this.cleanView);
     this.refreshShadows();
     this.emit('env');
   }
@@ -1453,10 +1467,36 @@ export class Editor {
 
   setPhotoMode(on: boolean) {
     this.photoMode = on;
-    for (const h of this.helpers) h.isVisible = !on;
-    this.grid.setEnabled(this.env.grid && !on);
-    this.outline.isEnabled = !on;
+    this.applyCleanView();
+    this.emit('photo');
+  }
+
+  private applyCleanView() {
+    const clean = this.cleanView;
+    for (const h of this.helpers) h.isVisible = !clean;
+    this.grid.setEnabled(this.env.grid && !clean);
+    this.outline.isEnabled = !clean;
     this.applyTool();
+  }
+
+  /** Prepares the scene for AR (and restores it afterwards). */
+  setARMode(on: boolean) {
+    if (on === this.arMode) return;
+    if (on) {
+      this.select(null);
+      this.arSaved = { ...this.env };
+      this.arMode = true;
+      // Real world as background; the floor only shows shadows on the real ground
+      this.applyEnv({ skybox: false, ground: 'shadow', grid: false });
+      this.scene.clearColor = new Color4(0, 0, 0, 0);
+    } else {
+      this.arMode = false;
+      // Light estimation replaced the environment lighting during the session
+      if (this.envTexture) this.scene.environmentTexture = this.envTexture;
+      if (this.arSaved) this.applyEnv(this.arSaved);
+      this.arSaved = null;
+    }
+    this.applyCleanView();
     this.emit('photo');
   }
 

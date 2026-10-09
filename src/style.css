@@ -1245,3 +1245,62 @@ button:disabled svg.lucide {
     app-region: no-drag;
   }
 }
+
+/* ---------- AR overlay (shown over the camera during WebXR AR) ---------- */
+
+.ar-hud {
+  position: fixed;
+  inset: 0;
+  display: none;
+  z-index: 50;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  color: var(--text);
+  font-family: inherit;
+}
+.ar-hud.show {
+  display: block;
+}
+.ar-btn {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+}
+.ar-exit {
+  position: absolute;
+  top: calc(14px + var(--safe-t));
+  left: 14px;
+}
+.ar-hint {
+  position: absolute;
+  top: calc(20px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 150px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.35;
+}
+.ar-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: calc(28px + var(--safe-b));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}

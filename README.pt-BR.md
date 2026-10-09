@@ -46,6 +46,7 @@ O babalon JS é um Progressive Web App. Publicado em HTTPS (ou em `localhost`), 
 - **Luzes**: luzes prontas (Estúdio, Dia, Pôr do sol, Neon, Dramático), luz pontual, holofote e sol, com cor, intensidade, abertura, alcance, sombras e "mirar em".
 - **Ambiente**: iluminação HDR com intensidade e rotação, fundo desfocado ou cor sólida, chão só de sombra ou sólido, grade.
 - **Foto**: filtros prontos, campo de visão, exposição, contraste, saturação, temperatura, vinheta, bloom, granulado, aberração cromática, nitidez, desfoque de fundo (toque para focar), formatos 16:9, Cinema, 1:1, 4:5, 9:16… A foto sai em 2× a resolução da tela; no celular abre o menu de compartilhar.
+- **AR** (Android com ARCore, no Chrome ou no app instalado): o botão **AR** abre a câmera; toque numa superfície detectada para colocar a cena inteira em tamanho real, arraste para girar, pinça para redimensionar (**1:1** volta ao tamanho real). Os modelos fazem sombra no chão real e pegam a luz do ambiente. O botão de foto salva câmera + 3D quando o celular compartilha a imagem da câmera com o navegador; senão, use o print do sistema. Não disponível no iPhone (o Safari não tem AR via WebXR).
 - **Projeto**: novo, abrir e salvar projeto `.babalon`. O arquivo é um .zip com `project.json` (objetos, transformações, materiais, luzes, animações, ambiente, efeitos e câmera) e os arquivos originais dos modelos em `assets/`. Modelos de exemplo ficam guardados só como link. Dá para abrir também arrastando o `.babalon` para a janela.
 - **Salvamento automático** no navegador (IndexedDB): ao reabrir o app aparece "Continuar de onde parou".
 - **Desfazer/refazer**, **exportar a cena como .glb**, tela cheia.
@@ -71,6 +72,7 @@ Na câmera: arraste para orbitar, pinça/roda para zoom, dois dedos (ou botão d
 
 - `src/editor.ts`: núcleo, sem interface. Cena, câmera, carregamento, seleção, gizmos, luzes, sombras, ambiente, pós-processamento, captura, exportação e histórico.
 - `src/tools.ts`: medições (inclusive o caminho pela superfície), guias, guias inteligentes e alinhamento.
+- `src/ar.ts`, `src/arHud.ts`: realidade aumentada com WebXR e os controles sobre a câmera.
 - `src/project.ts`: salvar/abrir projeto (.babalon) e salvamento automático.
 - `src/ui.ts`: painéis e barras, em DOM puro.
 - `src/dom.ts`: helpers de interface (slider, toggle, cor, chips…).
