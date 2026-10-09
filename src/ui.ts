@@ -66,6 +66,7 @@ import type { Editor, Entity, GroundMode, LightType, PhotoSettings, PrimitiveTyp
 import { PROJECT_EXT, fromZip, loadAutosave, restore, saveAutosave, snapshot, toZip } from './project';
 import type { ProjectSnapshot } from './project';
 import type { ARMode } from './ar';
+import { canShareFile, saveFile, shareFile } from './files';
 import { LANGS, getLang, locale, setLang, tr } from './i18n';
 import type { Lang } from './i18n';
 import { button, chips, colorInput, h, hint, icon, iconButton, numberInput, row, section, select, slider, toggle } from './dom';
@@ -208,7 +209,7 @@ export class UI {
     }
   }
 
-  toast(text: string, kind: 'info' | 'error' = 'info', action?: { label: string; run: () => void }) {
+  toast(text: string, kind: 'info' | 'error' = 'info', action?: { label: string; run: () => void }, timeout?: number) {
     const t = h(
       'div',
       { class: `toast ${kind} ${action ? 'with-action' : ''}` },
@@ -216,10 +217,11 @@ export class UI {
       action ? h('button', { class: 'chip active', onClick: () => (t.remove(), action.run()) }, action.label) : null,
     );
     this.toasts.append(t);
-    // Toasts with an action stay until used (e.g. "update available")
-    if (action) return;
-    setTimeout(() => t.classList.add('out'), 3200);
-    setTimeout(() => t.remove(), 3700);
+    // Toasts with an action stay until used (e.g. "update available") unless a timeout is given
+    const life = timeout ?? (action ? 0 : 3200);
+    if (!life) return;
+    setTimeout(() => t.classList.add('out'), life);
+    setTimeout(() => t.remove(), life + 500);
   }
 
   /** Files opened from outside: the OS ("Open with" on an installed PWA) or drag and drop. */
@@ -413,8 +415,7 @@ export class UI {
   private async saveProject() {
     try {
       const blob = await toZip(snapshot(this.editor, this.projectName));
-      await this.deliver(blob, fileSafe(this.projectName) + PROJECT_EXT);
-      this.toast(tr('Project saved'));
+      this.deliver(blob, fileSafe(this.projectName) + PROJECT_EXT, tr('Project saved'));
     } catch (e) {
       this.toast(errorMessage(e), 'error');
     }
@@ -489,15 +490,11 @@ export class UI {
   }
 
   /** Hands a file to the user: share sheet on phones (when possible) or download. */
-  private async deliver(blob: Blob, name: string) {
-    const file = new File([blob], name, { type: blob.type });
-    if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file] }).catch(() => {});
-      return;
-    }
-    const a = h('a', { href: URL.createObjectURL(blob), download: name });
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  /** Saves the file to the device right away, and offers sharing it for a few seconds. */
+  private deliver(blob: Blob, name: string, message: string) {
+    saveFile(blob, name);
+    const share = canShareFile(blob, name) ? { label: tr('Share'), run: () => shareFile(blob, name) } : undefined;
+    this.toast(message, 'info', share, 7000);
   }
 
   private async exportGLB() {
@@ -1295,8 +1292,7 @@ export class UI {
     try {
       const blob = await this.editor.capture(2);
       const name = `babalon-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`;
-      await this.deliver(blob, name);
-      this.toast(tr('Photo saved!'));
+      this.deliver(blob, name, tr('Photo saved!'));
     } catch (e) {
       this.toast(errorMessage(e), 'error');
     }

@@ -44,8 +44,28 @@ export default defineConfig({
           },
         ],
         launch_handler: { client_mode: 'focus-existing' },
+        // Android: the installed app appears in the system "Share" menu for 3D files and projects
+        // (e.g. Samsung My Files → Share → babalon JS). Received by public/share-target.js.
+        share_target: {
+          action: `${base}share-target`,
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            files: [
+              {
+                name: 'files',
+                accept: [
+                  '.glb', '.gltf', '.bin', '.obj', '.mtl', '.stl', '.fbx', '.ply', '.splat', '.spz', '.usdz', '.babalon',
+                  'model/gltf-binary', 'model/gltf+json', 'model/obj', 'model/stl', 'model/vnd.usdz+zip',
+                  'application/octet-stream', 'application/zip', 'image/png', 'image/jpeg', 'image/webp',
+                ],
+              },
+            ],
+          },
+        },
       },
       workbox: {
+        importScripts: ['share-target.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,webp,svg,wasm}'],
         // Babylon.js is one big chunk; precache it so the app works offline
         maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,

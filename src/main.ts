@@ -6,6 +6,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { setupSystemBars } from './systemBars';
 import { ARMode } from './ar';
 import { ARHud } from './arHud';
+import { takeSharedFiles } from './files';
 
 document.documentElement.lang = locale();
 
@@ -30,6 +31,9 @@ window.addEventListener('beforeinstallprompt', (e) => {
   ui.setInstallPrompt(e as unknown as { prompt: () => Promise<unknown> });
 });
 window.addEventListener('appinstalled', () => ui.setInstallPrompt(null));
+
+// Files shared into the installed app from another app (Android: Share → babalon JS)
+takeSharedFiles().then((files) => ui.openFiles(files));
 
 // Installed app opened with a file ("Open with babalon JS")
 interface LaunchParams {

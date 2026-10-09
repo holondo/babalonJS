@@ -1,6 +1,7 @@
 import { Move, Ruler, SlidersHorizontal, X } from 'lucide';
 import type { ARMode } from './ar';
 import { h, icon } from './dom';
+import { canShareFile, saveFile, shareFile } from './files';
 import { tr } from './i18n';
 
 /**
@@ -11,6 +12,8 @@ export class ARHud {
   readonly el = h('div', { class: 'ar-hud' });
   private message = '';
   private settingsOpen = false;
+  /** Last photo, offered for sharing for a few seconds after it's saved. */
+  private lastPhoto: { blob: Blob; name: string } | null = null;
   private messageTimer = 0;
   private readonly ar: ARMode;
 
@@ -27,8 +30,9 @@ export class ARHud {
     clearTimeout(this.messageTimer);
     this.messageTimer = window.setTimeout(() => {
       this.message = '';
+      this.lastPhoto = null;
       this.render();
-    }, 3500);
+    }, 6000);
     this.render();
   }
 
@@ -50,7 +54,14 @@ export class ARHud {
     };
     this.el.replaceChildren(
       h('button', { class: 'ar-btn ar-exit', 'aria-label': tr('Exit AR'), onClick: stop(() => ar.exit()) }, icon(X)),
-      h('div', { class: 'ar-hint' }, hint),
+      h(
+        'div',
+        { class: 'ar-hint' },
+        h('span', {}, hint),
+        this.message && this.lastPhoto && canShareFile(this.lastPhoto.blob, this.lastPhoto.name)
+          ? h('button', { class: 'chip active', onClick: stop(() => this.lastPhoto && shareFile(this.lastPhoto.blob, this.lastPhoto.name)) }, tr('Share'))
+          : null,
+      ),
       h(
         'button',
         { class: `ar-btn ar-settings ${this.settingsOpen ? 'active' : ''}`, 'aria-label': tr('AR options'), onClick: stop(() => ((this.settingsOpen = !this.settingsOpen), this.render())) },
@@ -108,9 +119,8 @@ export class ARHud {
         return;
       }
       const name = `babalon-ar-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.jpg`;
-      const a = h('a', { href: URL.createObjectURL(blob), download: name });
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      saveFile(blob, name);
+      this.lastPhoto = { blob, name };
       this.flash(tr('Photo saved!'));
     } catch (e) {
       this.flash(e instanceof Error ? e.message : String(e));

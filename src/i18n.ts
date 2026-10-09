@@ -326,6 +326,7 @@ const PT: Record<string, string> = {
   'Drag to turn · pinch to resize': 'Arraste para girar · pinça para redimensionar',
   'Exit AR': 'Sair do AR',
   'AR options': 'Opções do AR',
+  Share: 'Compartilhar',
   'Shadows on the floor': 'Sombras no chão',
   'Room lighting (heavier)': 'Luz do ambiente (mais pesado)',
   'Move the scene': 'Mover a cena',

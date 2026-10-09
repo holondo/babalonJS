@@ -28,6 +28,7 @@ O babalon JS é um Progressive Web App. Publicado em HTTPS (ou em `localhost`), 
 
 - funciona offline (o app inteiro fica em cache; ambientes HDR e modelos de exemplo entram no cache na primeira vez que são usados);
 - no computador, aparece em "Abrir com" para arquivos `.babalon`, `.glb`, `.gltf`, `.obj`, `.stl`, `.fbx`, `.ply`, `.splat` e `.spz`;
+- no Android, aparece no menu **Compartilhar** do sistema: em qualquer gerenciador de arquivos (ex.: Meus Arquivos da Samsung) selecione um arquivo 3D ou um projeto `.babalon` → Compartilhar → babalon JS;
 - mostra um botão **Atualizar** quando sai uma versão nova, em vez de recarregar sozinho.
 
 ## O que dá para fazer
@@ -45,7 +46,7 @@ O babalon JS é um Progressive Web App. Publicado em HTTPS (ou em `localhost`), 
 - **Material** (estilo Sketchfab): cor/tom, mostrar ou ocultar textura, metálico, rugosidade, verniz, emissão, opacidade, dupla face, sem iluminação e wireframe.
 - **Luzes**: luzes prontas (Estúdio, Dia, Pôr do sol, Neon, Dramático), luz pontual, holofote e sol, com cor, intensidade, abertura, alcance, sombras e "mirar em".
 - **Ambiente**: iluminação HDR com intensidade e rotação, fundo desfocado ou cor sólida, chão só de sombra ou sólido, grade.
-- **Foto**: filtros prontos, campo de visão, exposição, contraste, saturação, temperatura, vinheta, bloom, granulado, aberração cromática, nitidez, desfoque de fundo (toque para focar), formatos 16:9, Cinema, 1:1, 4:5, 9:16… A foto sai em 2× a resolução da tela; no celular abre o menu de compartilhar.
+- **Foto**: filtros prontos, campo de visão, exposição, contraste, saturação, temperatura, vinheta, bloom, granulado, aberração cromática, nitidez, desfoque de fundo (toque para focar), formatos 16:9, Cinema, 1:1, 4:5, 9:16… A foto sai em 2× a resolução da tela e é salva direto no aparelho, com um botão **Compartilhar** por alguns segundos.
 - **AR** (Android com ARCore, no Chrome ou no app instalado): o botão **AR** abre a câmera; toque numa superfície detectada para colocar a cena inteira em tamanho real, arraste para girar, pinça para redimensionar (**1:1** volta ao tamanho real). Os modelos fazem sombra no chão real. O botão de foto salva câmera + 3D quando o celular compartilha a imagem da câmera com o navegador; senão, use o print do sistema. Não disponível no iPhone (o Safari não tem AR via WebXR).
 - **Projeto**: novo, abrir e salvar projeto `.babalon`. O arquivo é um .zip com `project.json` (objetos, transformações, materiais, luzes, animações, ambiente, efeitos e câmera) e os arquivos originais dos modelos em `assets/`. Modelos de exemplo ficam guardados só como link. Dá para abrir também arrastando o `.babalon` para a janela.
 - **Salvamento automático** no navegador (IndexedDB): ao reabrir o app aparece "Continuar de onde parou".
