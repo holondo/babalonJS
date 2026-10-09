@@ -30,9 +30,11 @@ function syncThemeColor(editor: Editor) {
   if (!ctx) return;
   let last = '';
   let lastTime = 0;
+  // Reading pixels back makes the GPU wait, so sample rarely: only after a new frame was drawn,
+  // once the camera has settled, and at most once a second.
   editor.scene.onAfterRenderObservable.add(() => {
     const now = performance.now();
-    if (now - lastTime < 500 || document.hidden || !canvas.width) return;
+    if (now - lastTime < 1000 || now - editor.lastCameraMoveTime < 300 || document.hidden || !canvas.width) return;
     lastTime = now;
     // Sample a thin strip along the top of the scene (the canvas keeps its buffer, so this is safe)
     const strip = Math.max(1, Math.round(canvas.height * 0.02));

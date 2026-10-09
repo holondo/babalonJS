@@ -53,6 +53,8 @@ export interface Measurement {
   length: number;
   line: GreasedLineBaseMesh;
   markers: [Mesh, Mesh];
+  /** Last points sent to the line, to skip rebuilding it when nothing moved. */
+  drawn?: Vector3[];
 }
 
 export interface Guide {
@@ -398,8 +400,10 @@ export class Tools {
         this.editor.overlays.delete(m.line);
         m.line.dispose();
         m.line = this.screenLine(`measure${m.id}`, pts, MEASURE_COLOR, 3, true);
-      } else {
+        m.drawn = pts;
+      } else if (!m.drawn || pts.some((p, i) => !p.equalsWithEpsilon(m.drawn![i], 1e-6))) {
         m.line.setPoints(pts);
+        m.drawn = pts;
       }
       let length = 0;
       for (let i = 1; i < pts.length; i++) length += Vector3.Distance(pts[i - 1], pts[i]);

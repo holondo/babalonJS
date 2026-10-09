@@ -389,7 +389,11 @@ export class Editor {
       this.updateCameraTween();
       this.updatePivotMarker();
     });
-    camera.onViewMatrixChangedObservable.add(() => (this.lastCameraMove = performance.now()));
+    camera.onViewMatrixChangedObservable.add(() => {
+      this.lastCameraMove = performance.now();
+      // Keep drawing a little after the camera stops (pivot dot fade, splat sorting, labels)
+      this.invalidate(1000);
+    });
 
     this.tools = new Tools(this);
 
@@ -406,11 +410,57 @@ export class Editor {
     this.applyEnv();
     this.addDefaultLight();
 
-    this.engine.runRenderLoop(() => scene.render());
-    window.addEventListener('resize', () => this.engine.resize());
+    // Nothing in the app needs "what's under the pointer" on every move; this avoids testing every
+    // triangle of heavy models while the mouse/finger moves (drags still get the pointer ray).
+    scene.skipPointerMovePicking = true;
+
+    // Draw on demand: only while something changes, so an idle editor doesn't heat the phone
+    this.changed.add(() => this.invalidate());
+    this.loading.add(() => this.invalidate());
+    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'input', 'change']) {
+      window.addEventListener(type, () => this.invalidate(), { capture: true, passive: true });
+    }
+    this.engine.runRenderLoop(() => {
+      if (this.needsRender()) scene.render();
+    });
+    window.addEventListener('resize', () => {
+      this.engine.resize();
+      this.invalidate();
+    });
   }
 
   // ---------- Events / history ----------
+
+  private activeUntil = 0;
+  private lastCameraState = '';
+
+  /** Keeps the scene drawing for a while (call after any change that should show on screen). */
+  invalidate(ms = 1500) {
+    this.activeUntil = Math.max(this.activeUntil, performance.now() + ms);
+  }
+
+  /** True while something is moving or loading; otherwise the last frame stays on screen. */
+  private needsRender() {
+    if (performance.now() < this.activeUntil) return true;
+    const c = this.camera;
+    if (c.inertialAlphaOffset || c.inertialBetaOffset || c.inertialRadiusOffset || c.inertialPanningX || c.inertialPanningY) return true;
+    if (this.cameraTween) return true;
+    // Camera changed from code (not from a touch): compare with the last drawn state
+    const state = `${c.alpha},${c.beta},${c.radius},${c.target.x},${c.target.y},${c.target.z},${c.fov}`;
+    if (state !== this.lastCameraState) {
+      this.lastCameraState = state;
+      return true;
+    }
+    if (this.scene.getWaitingItemsCount() > 0) return true;
+    // Running animations (paused ones don't need new frames)
+    if (this.scene.animatables.some((a) => !a.paused)) return true;
+    return false;
+  }
+
+  /** Time of the last camera movement (used to sample the scene only once it settles). */
+  get lastCameraMoveTime() {
+    return this.lastCameraMove;
+  }
 
   private emit(kind: ChangeKind) {
     this.changed.notifyObservers(kind);
@@ -635,12 +685,16 @@ export class Editor {
     this.loading.notifyObservers({ name: asset.name, progress: 0 });
     try {
       if (asset.main) for (const f of [asset.main, ...(asset.deps ?? [])]) FilesInputStore.FilesToLoad[f.name.toLowerCase()] = f;
-      return await LoadAssetContainerAsync(asset.main ?? asset.url!, this.scene, {
+      const container = await LoadAssetContainerAsync(asset.main ?? asset.url!, this.scene, {
         rootUrl: asset.main ? 'file:' : undefined,
         onProgress: (ev) => {
           if (ev.lengthComputable) this.loading.notifyObservers({ name: asset.name, progress: ev.loaded / ev.total });
         },
       });
+      // The glTF loader auto-starts the first animation on the container's hidden template;
+      // only the instances placed in the scene should animate.
+      container.animationGroups.forEach((g) => g.stop());
+      return container;
     } finally {
       this.loading.notifyObservers(null);
     }
@@ -1384,6 +1438,8 @@ export class Editor {
 
   /** Renders the scene without helpers (gizmos, grid, outline) and returns the image cropped to the chosen aspect. */
   async capture(multiplier = 2): Promise<Blob> {
+    // The capture waits for rendered frames
+    this.invalidate(8000);
     const prevPhoto = this.photoMode;
     if (!prevPhoto) this.setPhotoMode(true);
     const prevScale = this.engine.getHardwareScalingLevel();
