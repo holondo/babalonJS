@@ -28,9 +28,9 @@ export const UNITS: Record<Unit, { factor: number; decimals: number }> = {
   ft: { factor: 3.28084, decimals: 2 },
 };
 
-const MEASURE_COLOR = Color3.FromHexString('#ffc53d');
-const GUIDE_COLOR = Color3.FromHexString('#2fd6ff');
-const SMART_COLOR = Color3.FromHexString('#ff3d5a');
+const MEASURE_COLOR = Color3.FromHexString('#e9a83b');
+const GUIDE_COLOR = Color3.FromHexString('#b98bd0');
+const SMART_COLOR = Color3.FromHexString('#e0705a');
 /** Rendering group drawn after clearing depth: always on top of the scene. */
 const ON_TOP = 2;
 

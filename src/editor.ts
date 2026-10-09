@@ -161,9 +161,9 @@ export const DEFAULT_ENV: EnvSettings = {
   rotation: 0,
   skybox: true,
   skyboxBlur: 0.6,
-  background: '#1a1215',
+  background: '#1b1526',
   ground: 'shadow',
-  groundColor: '#2b2e35',
+  groundColor: '#2c2438',
   grid: true,
   ambient: 0.15,
 };
@@ -187,7 +187,7 @@ export const DEFAULT_PHOTO: PhotoSettings = {
 };
 
 const isTouch = matchMedia('(pointer: coarse)').matches;
-const ACCENT = Color3.FromHexString('#ff3d5a');
+const ACCENT = Color3.FromHexString('#e9a83b');
 
 export class Editor {
   readonly engine: Engine;

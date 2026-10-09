@@ -16,8 +16,8 @@ export default defineConfig({
         display: 'standalone',
         display_override: ['window-controls-overlay', 'standalone'],
         orientation: 'any',
-        background_color: '#120a0d',
-        theme_color: '#120a0d',
+        background_color: '#120d1b',
+        theme_color: '#120d1b',
         categories: ['graphics', 'design', 'photo'],
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
