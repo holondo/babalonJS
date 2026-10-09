@@ -1,6 +1,10 @@
-# babalon JS
-
-*[Leia em português](README.pt-BR.md)*
+<p align="center">
+  <img src="public/icons/icon-512.png" alt="babalon JS icon" width="160" />
+</p>
+<h1 align="center">
+  <img src="design/lettering.png" alt="babalon JS" width="360" />
+</h1>
+<p align="center"><em><a href="README.pt-BR.md">Leia em português</a></em></p>
 
 A simple, touch-friendly 3D scene composer built on [Babylon.js](https://www.babylonjs.com/).
 Drop in your models, place them with your finger or mouse, light the scene and take photos with effects, in the spirit of a video game photo mode.

@@ -1,6 +1,10 @@
-# babalon JS
-
-*[Read in English](README.md)*
+<p align="center">
+  <img src="public/icons/icon-512.png" alt="babalon JS icon" width="160" />
+</p>
+<h1 align="center">
+  <img src="design/lettering.png" alt="babalon JS" width="360" />
+</h1>
+<p align="center"><em><a href="README.md">Read in English</a></em></p>
 
 Editor de cenas 3D simples e amigável ao toque, feito com [Babylon.js](https://www.babylonjs.com/).
 Coloque seus modelos, posicione com o dedo ou o mouse, ilumine a cena e tire fotos com efeitos, no estilo do modo foto dos jogos.
