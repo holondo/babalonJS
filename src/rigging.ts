@@ -1,5 +1,5 @@
-import { Bone, Matrix, Mesh, Quaternion, Skeleton, SkeletonViewer, TransformNode, Vector3, VertexBuffer } from '@babylonjs/core';
-import type { AbstractMesh, Geometry, Material, Node } from '@babylonjs/core';
+import { Animation, Bone, Matrix, Mesh, Quaternion, Skeleton, SkeletonViewer, TransformNode, Vector3, VertexBuffer } from '@babylonjs/core';
+import type { AbstractMesh, AnimationGroup, Geometry, Material, Node } from '@babylonjs/core';
 import type { Editor, Entity } from './editor';
 import { forgetHumanoid, jointPosition, skeletonsOf, worldMatrix } from './humanoid';
 import type { HumanBone, HumanoidMap } from './humanoid';
@@ -7,9 +7,11 @@ import { BONE_END, RIG_TEMPLATE, TEMPLATE_HEIGHT, TIP_JOINTS, templateJoint } fr
 import type { RigJoint } from './humanoidTemplate';
 import { applyBoneDirections, captureJoints, characterFrame, restoreJoints } from './pose';
 import type { JointState } from './pose';
-import { INFLUENCES, computeSkinWeights, envelopeWeights, strongest } from './weights';
+import { INFLUENCES, computeSkinWeights, envelopeWeights, strongest, weld } from './weights';
 import type { WeightJob, SkinInput, SkinWeights } from './weights';
 import { tr } from './i18n';
+import { SHOULDER_STRATEGIES, shoulderWeights } from './shoulderWeights';
+import type { ShoulderStrategy } from './shoulderWeights';
 
 /**
  * Manual rigging (E1/E2): the standard skeleton (humanoidTemplate.ts) appears fitted to a static
@@ -30,6 +32,9 @@ export interface RigData {
   /** Which way the model faces, as a turn around the vertical axis (0 = +Z). */
   yaw?: number;
   method: WeightMethod;
+  shoulderStrategy?: ShoulderStrategy;
+  /** Comparisons share ready poses, including after reloading the project. */
+  comparison?: string;
 }
 
 interface MeshBackup {
@@ -51,6 +56,7 @@ export interface RigState {
   backups: MeshBackup[];
   /** Bound geometry of each mesh (with skin weights). */
   geometries: (Geometry | null)[];
+  helpers: { node: TransformNode; driver: TransformNode }[];
 }
 
 /** Center joints: kept on the middle line when symmetry is on. */
@@ -77,6 +83,8 @@ export class Rigger {
   /** Which way the model faces (radians around Y in its own space; 0 = +Z, π/2 = +X). */
   yaw = 0;
   method: WeightMethod = 'envelope';
+  shoulderStrategy: ShoulderStrategy = 'current';
+  comparing = false;
   /** Heat weights progress (0–1) while computing. */
   progress: number | null = null;
   testPose = 0;
@@ -97,6 +105,11 @@ export class Rigger {
 
   constructor(editor: Editor) {
     this.editor = editor;
+  }
+
+  updateHelpers() {
+    for (const e of this.editor.entities) if (e.rig && e.root.isEnabled()) updateShoulderHelpers(e.rig);
+    if (this.pending) updateShoulderHelpers(this.pending);
   }
 
   get active() {
@@ -599,7 +612,7 @@ export class Rigger {
   /** Binds the mesh to the skeleton and moves on to checking it. */
   async bind() {
     const e = this.entity;
-    if (!e || this.pending || this.progress !== null) return;
+    if (!e || this.pending || this.progress !== null || this.comparing) return;
     const positions = new Map<RigJoint, Vector3>([...this.joints].map(([id, p]) => [id, p.clone()]));
     const state = this.build(e, positions);
     let weights: SkinWeights;
@@ -617,6 +630,56 @@ export class Rigger {
     this.rest = captureJoints([...state.joints.values()]);
     this.editor.invalidate();
     this.editor.notify('rig');
+  }
+
+  /** Prepare all variants from one solver run and publish them atomically; the source stays untouched. */
+  async createComparison() {
+    const source = this.entity;
+    if (!source?.source || this.step !== 'place' || this.progress !== null || this.comparing) return;
+    const positions = new Map([...this.joints].map(([id, p]) => [id, p.clone()]));
+    const copies: Entity[] = [];
+    const states: RigState[] = [];
+    this.comparing = true;
+    const comparison = crypto.randomUUID();
+    try {
+      const direction = Vector3.TransformNormal(this.right, worldMatrix(source.root)).normalize();
+      const size = this.box.max.subtract(this.box.min);
+      const spacing = (Math.abs(this.right.x)*size.x + Math.abs(this.right.z)*size.z) * Math.max(source.root.scaling.x, source.root.scaling.z) * 1.15;
+      for (const [i, strategy] of SHOULDER_STRATEGIES.entries()) {
+        const copy = this.editor.createModelCopy(source);
+        copies.push(copy);
+        copy.name = `${source.name} — ${tr(strategy.label)}`;
+        const st = this.build(copy, positions, undefined, strategy.value);
+        states.push(st);
+        st.data.comparison = comparison;
+        // Joint positions are transformed while the copy still has the source's exact transform.
+        copy.root.position.addInPlace(direction.scale(spacing * (i - 1)));
+      }
+      const weights = await this.computeWeights(states[0], true);
+      if (this.entity !== source) throw new DOMException('Cancelled', 'AbortError');
+      if (!weights.variants) throw new Error(tr('Could not create the rig comparison.'));
+      states.forEach((st, i) => {
+        st.data.method = states[0].data.method;
+        this.applyWeights(st, weights.variants![SHOULDER_STRATEGIES[i].value]);
+        copies[i].rig = st;
+        forgetHumanoid(copies[i]);
+      });
+      this.entity = null;
+      this.editor.addModelComparison(copies, source);
+    } catch (err) {
+      states.forEach((st, i) => this.unbind(copies[i], st, true));
+      copies.forEach(e => e.root.dispose(false, false));
+      if (!(err instanceof DOMException && err.name === 'AbortError')) throw err;
+    } finally {
+      this.comparing = false;
+      this.editor.refreshTool();
+      this.editor.notify('rig');
+    }
+  }
+
+  comparisonMembers(e: Entity) {
+    const id = e.rig?.data.comparison;
+    return id ? this.editor.entities.filter(other => other.rig?.data.comparison === id) : [e];
   }
 
   /** Back to placing the joints (drops the binding). */
@@ -668,6 +731,7 @@ export class Rigger {
       }
       applyBoneDirections(map, frame, dirs);
     }
+    updateShoulderHelpers(st);
     this.editor.invalidate();
   }
 
@@ -699,7 +763,8 @@ export class Rigger {
   }
 
   /** Skeleton + joint nodes in the model's fitting space; meshes moved into that space. */
-  private build(e: Entity, positions: Map<RigJoint, Vector3>, data?: RigData): RigState {
+  private build(e: Entity, positions: Map<RigJoint, Vector3>, data?: RigData, strategy = this.shoulderStrategy): RigState {
+    const shoulderStrategy = data ? data.shoulderStrategy ?? 'current' : strategy;
     const scene = this.editor.scene;
     const fit = fitNodeOf(e);
     const node = new TransformNode('rig', scene);
@@ -733,6 +798,22 @@ export class Rigger {
       t.position.copyFrom(rigPos.get(id)!.subtract(rigPos.get(parent)!));
       joints.set(id, t);
     }
+    const helpers: RigState['helpers'] = [];
+    if (shoulderStrategy === 'helper') {
+      for (const id of ['leftUpperArm', 'rightUpperArm'] as const) {
+        const driver = joints.get(id)!;
+        const name = `deform_support.${id.startsWith('left') ? 'L' : 'R'}`;
+        const parent = templateJoint(id).parent!;
+        const local = Matrix.Translation(driver.position.x, driver.position.y, driver.position.z);
+        const bone = new Bone(name, skeleton, bones.get(parent)!, local, local.clone(), local.clone());
+        const helper = new TransformNode(name, scene);
+        helper.parent = driver.parent;
+        helper.position.copyFrom(driver.position);
+        helper.rotationQuaternion = Quaternion.Identity();
+        bone.linkTransformNode(helper);
+        helpers.push({ node: helper, driver });
+      }
+    }
     const backups: MeshBackup[] = [];
     const geometries: (Geometry | null)[] = [];
     for (const m of e.meshes as Mesh[]) {
@@ -757,9 +838,9 @@ export class Rigger {
       geometries.push(m.geometry);
     }
     const out: RigJoint[] = [...joints.keys()];
-    const saved: RigData = data ?? { joints: {}, facing: Math.cos(this.yaw) >= 0 ? 1 : -1, yaw: this.yaw, method: this.method };
+    const saved: RigData = data ?? { joints: {}, facing: Math.cos(this.yaw) >= 0 ? 1 : -1, yaw: this.yaw, method: this.method, shoulderStrategy };
     if (!data) for (const id of out) saved.joints[id] = rigPos.get(id)!.asArray().map((v) => +v.toFixed(5));
-    return { data: saved, node, skeleton, joints, backups, geometries };
+    return { data: saved, node, skeleton, joints, backups, geometries, helpers };
   }
 
   private skinInput(st: RigState): SkinInput {
@@ -782,7 +863,8 @@ export class Rigger {
       v += m.getTotalVertices();
       t += idx.length;
     }
-    const bones = new Float32Array(st.skeleton.bones.length * 6);
+    // Auxiliary bones receive transferred influence after solving; they are not additional heat sources.
+    const bones = new Float32Array(BONES.length * 6);
     BONES.forEach((j, i) => {
       const a = rigPosition(st, j.id);
       const b = rigPosition(st, BONE_END[j.id as HumanBone]);
@@ -808,11 +890,15 @@ export class Rigger {
       axis.normalize();
       limbAxes.set(axis.asArray(), i * 3);
     });
-    return { points, triangles, bones, limbRoots, limbRootOf, limbAxes };
+    const armRoots = new Uint32Array(['leftUpperArm', 'rightUpperArm'].map(id => BONES.findIndex(j => j.id === id)));
+    const torsoUp = new Float32Array(rigPosition(st, 'neck').subtract(rigPosition(st, 'hips')).normalize().asArray());
+    const torsoBones = new Uint32Array(['spine', 'chest', 'upperChest'].map(id => BONES.findIndex(j => j.id === id)));
+    return { points, triangles, bones, limbRoots, limbRootOf, limbAxes, armRoots, torsoUp, torsoBones, shoulderStrategy: st.data.shoulderStrategy ?? 'current' };
   }
 
-  private async computeWeights(st: RigState): Promise<SkinWeights> {
+  private async computeWeights(st: RigState, comparison = false): Promise<SkinWeights> {
     const input = this.skinInput(st);
+    input.comparison = comparison;
     this.progress = 0;
     this.editor.notify('rig');
     const onProgress = (p: number) => {
@@ -940,7 +1026,9 @@ export class Rigger {
     } else {
       const input = this.skinInput(st);
       const { dense, map } = envelopeWeights(input);
-      w = strongest(dense, map, input.bones.length / 6);
+      const weldedPoints = weld(input.points).points;
+      const treated = shoulderWeights(dense, { ...input, points: weldedPoints }, input.shoulderStrategy!);
+      w = strongest(treated, map, treated.length / (weldedPoints.length / 3));
     }
     this.applyWeights(st, w);
     e.rig = st;
@@ -950,7 +1038,7 @@ export class Rigger {
   /** Same rig on a duplicate (same model file, so same vertices). */
   copy(from: Entity, to: Entity) {
     const saved = this.serialize(from);
-    if (saved) this.restore(to, saved.data, saved.weights);
+    if (saved) this.restore(to, { ...saved.data, comparison: undefined }, saved.weights);
   }
 
   // ---------- Spaces ----------
@@ -997,4 +1085,30 @@ function humanoidMap(st: RigState): HumanoidMap {
   const map: HumanoidMap = {};
   for (const [id, node] of st.joints) if (!TIP_JOINTS.includes(id)) map[id as HumanBone] = node;
   return map;
+}
+
+const HELPER_REST = Quaternion.Identity();
+
+/** No geometry work: each support joint follows half of the upper arm's local rotation. */
+export function updateShoulderHelpers(st: RigState) {
+  for (const { node, driver } of st.helpers) {
+    Quaternion.SlerpToRef(HELPER_REST, driver.rotationQuaternion ?? HELPER_REST, .5, node.rotationQuaternion!);
+    node.position.copyFrom(driver.position);
+  }
+}
+
+/** Bake support rotations into added clips too, so exported GLB animations need no app callbacks. */
+export function addShoulderHelperTracks(entity: Entity, group: AnimationGroup) {
+  for (const { node, driver } of entity.rig?.helpers ?? []) {
+    const source = group.targetedAnimations.find(t => t.target === driver && t.animation.targetProperty === 'rotationQuaternion')?.animation;
+    if (source) {
+      const track = new Animation(`${node.name} rotation`, 'rotationQuaternion', source.framePerSecond, Animation.ANIMATIONTYPE_QUATERNION, source.loopMode);
+      const frames = new Set(source.getKeys().map(k => k.frame));
+      for (let frame = Math.ceil(group.from); frame <= group.to; frame++) frames.add(frame);
+      track.setKeys([...frames].sort((a,b) => a-b).map(frame => ({ frame, value: Quaternion.Slerp(HELPER_REST, source.evaluate(frame) as Quaternion, .5) })));
+      group.addTargetedAnimation(track, node);
+    }
+    const position = group.targetedAnimations.find(t => t.target === driver && t.animation.targetProperty === 'position')?.animation;
+    if (position) group.addTargetedAnimation(position.clone(), node);
+  }
 }

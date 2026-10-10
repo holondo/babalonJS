@@ -15,9 +15,9 @@ function sourceModule(url) {
   modules.set(url.href, encoded); return encoded;
 }
 const load = name => import(sourceModule(new URL(`../src/${name}.ts`, import.meta.url)));
-const { Rigger } = await load('rigging');
+const { Rigger, updateShoulderHelpers } = await load('rigging');
 const { strongest } = await load('weights');
-const { applyBoneDirections, characterFrame } = await load('pose');
+const { applyBoneDirections, characterFrame, captureJoints, restoreJoints } = await load('pose');
 const { worldMatrix } = await load('humanoid');
 const { RIG_TEMPLATE, TIP_JOINTS } = await load('humanoidTemplate');
 const { POSE_PRESETS } = await load('presets');
@@ -49,11 +49,12 @@ const root = new TransformNode('root',scene), fit = new TransformNode('fit',scen
 fit.parent = root; mesh.parent = fit;
 const vd = new VertexData(); vd.positions=positions; vd.indices=triangles; vd.normals=normals; vd.applyToMesh(mesh);
 const entity = {id:1,name:'model',kind:'model',root,meshes:[mesh],animations:[]};
-const editor = {scene,pose:{stop(){}},viewFrom(){},refreshTool(){},notify(){},invalidate(){}};
+const editor = {scene,pose:{stop(){}},viewFrom(){},refreshTool(){},refreshShadowCasters(){},notify(){},invalidate(){}};
 const rig = new Rigger(editor);
 rig.start(entity); rig.findPose();
 const state = rig.build(entity,rig.joints);
 const input = rig.skinInput(state);
+input.comparison = process.argv[4] === 'comparison';
 const B = input.bones.length/6;
 const armBones = new Set(RIG_TEMPLATE.filter(j=>!TIP_JOINTS.includes(j.id)).flatMap((j,i)=>/Arm|Hand/.test(j.id)?[i]:[]));
 const method = process.argv[3] ?? 'heat';
@@ -73,6 +74,83 @@ try {
 assert.ok(ticks>1,'The weight worker must keep the calling thread responsive');
 console.log('Calling-thread heartbeat ticks',ticks);
 console.timeEnd(method);
+if (input.comparison) {
+  assert.ok(result.variants, 'The worker must produce all shoulder variants from the same solve');
+  for (const [name, variant] of Object.entries(result.variants)) {
+    const boneCount = B + (name === 'helper' ? 2 : 0);
+    let helperVertices = 0, changedVertices = 0;
+    for (let i=0; i<variant.weights.length; i+=4) {
+      let sum=0, changed=false, helper=false;
+      for (let k=0;k<4;k++) {
+        const w=variant.weights[i+k], index=variant.indices[i+k];
+        assert.ok(Number.isFinite(w) && w>=0 && index>=0 && index<boneCount);
+        sum+=w;
+        if (index>=B && w>0) helper=true;
+        if (index!==result.indices[i+k] || Math.abs(w-result.weights[i+k])>1e-5) changed=true;
+      }
+      assert.ok(Math.abs(sum-1)<1e-5);
+      if(helper) helperVertices++;
+      if(changed) changedVertices++;
+    }
+    if(name==='current') assert.equal(changedVertices,0);
+    else assert.ok(changedVertices>0, 'The experimental variant must actually change weights');
+    if(name==='helper') assert.ok(helperVertices>0);
+    console.log('Variant',name,{changedVertices,helperVertices});
+  }
+
+  // Audit the final Babylon skinning, not just the solver output. Each copy receives its
+  // own geometry, packed vertex buffers and strategy-specific skeleton exactly as in the app.
+  const poses = ['relaxed', 'arms-up', 'wave'];
+  const outputs = {};
+  for (const [name, variant] of Object.entries(result.variants)) {
+    const copyRoot=new TransformNode(`audit-${name}`,scene), copyFit=new TransformNode(`audit-fit-${name}`,scene), copyMesh=new Mesh(`audit-mesh-${name}`,scene);
+    copyFit.parent=copyRoot; copyMesh.parent=copyFit;
+    const copyData=new VertexData();copyData.positions=positions.slice();copyData.indices=triangles;copyData.normals=normals.slice();copyData.applyToMesh(copyMesh);
+    const copy={id:name,name,kind:'model',root:copyRoot,meshes:[copyMesh],animations:[]};
+    const st=rig.build(copy,rig.joints,undefined,name);
+    rig.applyWeights(st,variant);
+    assert.deepEqual(Float32Array.from(copyMesh.getVerticesData('matricesWeights')), variant.weights, 'The mesh must receive its own variant weights');
+    const joints=Object.fromEntries([...st.joints].filter(([id])=>!TIP_JOINTS.includes(id)));
+    const rest=captureJoints([...st.joints.values()]);
+    const localFrame=characterFrame(joints,copyRoot);
+    outputs[name]={};
+    for (const poseId of poses) {
+      restoreJoints(rest);
+      const dirs=POSE_PRESETS.find(p=>p.id===poseId).dirs;
+      applyBoneDirections(joints,localFrame,Object.fromEntries(Object.entries(dirs).map(([id,d])=>[id,Vector3.FromArray(d).normalize()])));
+      updateShoulderHelpers(st);
+      for(const n of [...st.joints.values(),...st.helpers.map(h=>h.node)]) worldMatrix(n);
+      // Multiple poses are evaluated without rendering; force the linked bone matrices
+      // to update rather than reusing Babylon's matrices from the same render frame.
+      st.skeleton.prepare(true);
+      outputs[name][poseId]=Float32Array.from(copyMesh.getPositionData(true,false));
+    }
+    st.skeleton.dispose();copyRoot.dispose(false,false);
+  }
+  for(const name of Object.keys(outputs)) assert.ok(outputs[name]['arms-up'].some((v,i)=>Math.abs(v-outputs[name].relaxed[i])>.001), 'Different poses must not reuse cached skin matrices');
+  const auditHips=Vector3.FromArray(state.data.joints.hips),auditNeck=Vector3.FromArray(state.data.joints.neck);
+  const auditFrame=characterFrame(Object.fromEntries([...state.joints].filter(([id])=>!TIP_JOINTS.includes(id))),root);
+  const auditWidth=Vector3.Distance(Vector3.FromArray(state.data.joints.leftUpperArm),Vector3.FromArray(state.data.joints.rightUpperArm));
+  for(const poseId of poses) for(const [left,right] of [['current','protected'],['current','helper'],['protected','helper']]) {
+    const a=outputs[left][poseId],b=outputs[right][poseId];
+    let maximum=0,sum=0,count=0,above1mm=0,above5mm=0;
+    let backMax=0,backSum=0,backCount=0,backAbove1mm=0;
+    for(let i=0;i<a.length;i+=3) {
+      const d=Math.hypot(a[i]-b[i],a[i+1]-b[i+1],a[i+2]-b[i+2]);
+      assert.ok(Number.isFinite(d));maximum=Math.max(maximum,d);sum+=d;count++;
+      if(d>.001)above1mm++;if(d>.005)above5mm++;
+      const x=input.points[i]-auditHips.x,y=input.points[i+1]-auditHips.y,z=input.points[i+2]-auditHips.z;
+      const lateral=Math.abs(x*auditFrame.right.x+y*auditFrame.right.y+z*auditFrame.right.z);
+      const height=auditNeck.y-auditHips.y;
+      if(lateral>auditWidth*.2 && lateral<auditWidth*.6 && y>height*.15 && y<height*.85 && x*auditFrame.forward.x+y*auditFrame.forward.y+z*auditFrame.forward.z<0) {
+        backCount++;backSum+=d;backMax=Math.max(backMax,d);if(d>.001)backAbove1mm++;
+      }
+    }
+    assert.ok(maximum>1e-6, `${poseId}: ${left} and ${right} must produce distinct final geometry`);
+    console.log('Final Babylon deformation',poseId,`${left} vs ${right}`,{maxMm:maximum*1000,meanMm:sum/count*1000,verticesAbove1mm:above1mm,verticesAbove5mm:above5mm});
+    console.log('Lateral back',poseId,`${left} vs ${right}`,{sampleVertices:backCount,maxMm:backMax*1000,meanMm:backSum/backCount*1000,verticesAbove1mm:backAbove1mm});
+  }
+}
 const skin = result.indices ? result : strongest(result.dense,result.map,B);
 const map = Object.fromEntries([...state.joints].filter(([id])=>!TIP_JOINTS.includes(id)));
 const frame = characterFrame(map,root);

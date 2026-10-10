@@ -11,8 +11,10 @@
 import { surfaceClusters, vertexNormals, weld } from './skinMath';
 import { visibleBoneDistances } from './skinVisibility';
 import { envelopeWeights, limitLimbInfluence, strongest } from './weights';
+import type { SkinInput } from './weights';
+import { SHOULDER_STRATEGIES, shoulderWeights } from './shoulderWeights';
 
-interface Job {
+interface Job extends SkinInput {
   points: Float32Array;
   triangles: Uint32Array;
   bones: Float32Array;
@@ -29,8 +31,7 @@ self.onmessage = (ev: MessageEvent<Job>) => {
   try {
     if (ev.data.method === 'envelope') {
       const { dense, map } = envelopeWeights(ev.data, value => post({ type: 'progress', value }));
-      const result = strongest(dense, map, ev.data.bones.length / 6);
-      post({ type: 'done', ...result }, [result.indices.buffer, result.weights.buffer]);
+      finish(dense, map, { ...ev.data, points: weld(ev.data.points).points });
       return;
     }
     const { points, triangles, bones, limbRoots, limit } = ev.data;
@@ -56,12 +57,27 @@ self.onmessage = (ev: MessageEvent<Job>) => {
       for (let i = 0; i < nWelded; i++) dense.set(proxy.subarray(cluster[i] * B, cluster[i] * B + B), i * B);
     }
     limitLimbInfluence(welded.points, bones, ev.data.limbRootOf, dense, ev.data.limbAxes);
-    const result = strongest(dense, welded.map, B);
-    post({ type: 'done', ...result }, [result.indices.buffer, result.weights.buffer]);
+    finish(dense, welded.map, { ...ev.data, points: welded.points });
   } catch (err) {
     post({ type: 'error', message: err instanceof Error ? err.message : String(err) });
   }
 };
+
+function finish(dense: Float32Array, map: Uint32Array, input: SkinInput) {
+  const B = input.bones.length / 6;
+  const pack = (strategy: import('./shoulderWeights').ShoulderStrategy) => {
+    const treated = shoulderWeights(dense, input, strategy);
+    return strongest(treated, map, treated.length / (input.points.length / 3));
+  };
+  if (input.comparison) {
+    const variants = Object.fromEntries(SHOULDER_STRATEGIES.map(({ value }) => [value, pack(value)]));
+    const transfer = Object.values(variants).flatMap(v => [v.indices.buffer, v.weights.buffer]);
+    post({ type: 'done', ...variants.current, variants }, transfer);
+  } else {
+    const result = input.shoulderStrategy ? pack(input.shoulderStrategy) : strongest(dense, map, B);
+    post({ type: 'done', ...result }, [result.indices.buffer, result.weights.buffer]);
+  }
+}
 
 function remapTriangles(tris: Uint32Array, map: Uint32Array) {
   const out: number[] = [];

@@ -50,7 +50,7 @@ import { findLightPreset, presetIntensity } from './presets';
 import { Animator } from './animation';
 import { Poser, captureJoints, restoreJoints } from './pose';
 import { Motion } from './motion';
-import { Rigger } from './rigging';
+import { Rigger, updateShoulderHelpers } from './rigging';
 import type { RigState } from './rigging';
 import type { MotionSettings } from './motion';
 import type { ClipState } from './animation';
@@ -534,6 +534,7 @@ export class Editor {
 
     // Draw on demand: only while something changes, so an idle editor doesn't heat the phone
     this.changed.add(() => this.invalidate());
+    scene.onAfterAnimationsObservable.add(() => this.rigger.updateHelpers());
     this.loading.add(() => this.invalidate());
     for (const type of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'input', 'change']) {
       window.addEventListener(type, () => this.invalidate(), { capture: true, passive: true });
@@ -599,13 +600,14 @@ export class Editor {
   private batch: Command[] | null = null;
 
   /** Groups several changes into a single undo step. */
-  private group(fn: () => void) {
+  group(fn: () => void) {
     const cmds: Command[] = [];
+    const parentBatch = this.batch;
     this.batch = cmds;
     try {
       fn();
     } finally {
-      this.batch = null;
+      this.batch = parentBatch;
     }
     if (cmds.length)
       this.push({
@@ -1052,8 +1054,7 @@ export class Editor {
     if (!entity) return;
     let copy: Entity;
     if (entity.kind === 'model' && entity.source) {
-      copy = this.instantiate(entity.source.container, entity.name.replace(/ \d+$/, ''), entity.source);
-      copy.castShadows = entity.castShadows;
+      copy = this.createModelCopy(entity);
       this.register(copy, true, false);
     } else if (entity.kind === 'primitive' && entity.primitive) {
       copy = this.addPrimitive(entity.primitive);
@@ -1082,6 +1083,30 @@ export class Editor {
     copy.root.position.copyFrom(entity.root.position).addInPlace(new Vector3(0.6, 0, 0.6));
     this.select(copy);
     return copy;
+  }
+
+  /** Unregistered copy for preparing a rig comparison without exposing partial results. */
+  createModelCopy(entity: Entity) {
+    if (!entity.source) throw new Error(tr('This model cannot be copied.'));
+    const copy = this.instantiate(entity.source.container, entity.name.replace(/ \d+$/, ''), entity.source);
+    copy.castShadows = entity.castShadows;
+    copy.root.rotationQuaternion!.copyFrom(entity.root.rotationQuaternion!);
+    copy.root.scaling.copyFrom(entity.root.scaling);
+    copy.root.position.copyFrom(entity.root.position);
+    copy.root.setEnabled(false);
+    return copy;
+  }
+
+  /** Publish prepared copies together; undo removes the complete comparison. */
+  addModelComparison(copies: Entity[], source: Entity) {
+    const visible = source.visible;
+    this.group(() => {
+      copies.forEach(e => this.register(e, true, false));
+      this.setVisible(source, false);
+      this.record({ undo: () => this.setVisible(source, visible), redo: () => this.setVisible(source, false) });
+    });
+    this.select(copies[0] ?? null);
+    this.frameAll();
   }
 
   remove(entity?: Entity) {
@@ -1687,7 +1712,12 @@ export class Editor {
   }
 
   async exportGLB() {
+    for (const e of this.entities) if (e.rig) updateShoulderHelpers(e.rig);
     const exclude = new Set<Node>([this.ground, this.grid, ...this.helpers, ...this.overlays]);
+    for (const e of this.entities) if (!e.visible) {
+      exclude.add(e.root);
+      for (const node of e.root.getDescendants()) exclude.add(node);
+    }
     if (this.skybox) exclude.add(this.skybox);
     exclude.add(this.pose.ikTarget);
     exclude.add(this.rigger.handle);

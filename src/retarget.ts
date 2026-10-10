@@ -6,6 +6,7 @@ import { aimBone, bonesTopDown, captureJoints, characterFrame, restoreJoints, ro
 import { tr } from './i18n';
 import { libraryClipUrl } from './presets';
 import type { AssetRef, Editor, Entity } from './editor';
+import { addShoulderHelperTracks, updateShoulderHelpers } from './rigging';
 
 /**
  * Plays animations made for one humanoid on another (imported clips and the built-in library).
@@ -90,6 +91,7 @@ export function retargetClip(source: ClipSource, group: AnimationGroup, entity: 
       fixGroundReferenceDynamicRefNode: true,
     });
     if (opts.inPlace) keepInPlace(out, tgtHips);
+    addShoulderHelperTracks(entity, out);
     return out;
   } finally {
     filtered.dispose();
@@ -251,8 +253,19 @@ export class ClipManager {
 
   /** Poses a character like a frame of a library clip (one undo step, kept as a hand-made pose). */
   async poseFromClip(e: Entity, clipId: string, seconds: number) {
-    const map = this.targetMap(e);
+    return this.poseManyFromClip([e], clipId, seconds);
+  }
+
+  /** Load once, then apply the same frame to comparison members in one undo step. */
+  async poseManyFromClip(entities: Entity[], clipId: string, seconds: number) {
     const source = await this.source({ library: clipId });
+    this.editor.group(() => {
+      for (const e of entities) this.applyClipPose(e, source, seconds);
+    });
+  }
+
+  private applyClipPose(e: Entity, source: ClipSource, seconds: number) {
+    const map = this.targetMap(e);
     const pose = this.editor.pose;
     pose.start(e);
     pose.begin();
@@ -261,6 +274,7 @@ export class ClipManager {
     g.start(false, 1, g.from, g.to);
     g.pause();
     g.goToFrame(Math.min(g.to, g.from + seconds * fps));
+    if (e.rig) updateShoulderHelpers(e.rig);
     const frame = captureJoints(jointNodes(e));
     g.stop();
     g.dispose();

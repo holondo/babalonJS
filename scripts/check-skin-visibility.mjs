@@ -12,7 +12,7 @@ const moduleUrl = (file, imports = {}) => {
 const math = moduleUrl('../src/skinMath.ts');
 const visibility = moduleUrl('../src/skinVisibility.ts', { './skinMath': math });
 const { visibleBoneDistances } = await import(visibility);
-const imports = { './skinMath': math, './skinVisibility': visibility };
+const imports = { './skinMath': math, './skinVisibility': visibility, './shoulderWeights': moduleUrl('../src/shoulderWeights.ts') };
 const weightsModule = moduleUrl('../src/weights.ts', imports);
 const { envelopeWeights, strongest } = await import(weightsModule);
 let heatResult;

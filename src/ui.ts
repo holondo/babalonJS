@@ -84,6 +84,8 @@ import type { PoseJoint } from './pose';
 import { RIG_TEMPLATE } from './humanoidTemplate';
 import type { RigJoint } from './humanoidTemplate';
 import type { WeightMethod } from './rigging';
+import { SHOULDER_STRATEGIES } from './shoulderWeights';
+import type { ShoulderStrategy } from './shoulderWeights';
 import { ANIMATION_LIBRARY, ANIMATION_SOURCE, POSE_PRESETS } from './presets';
 import type { ARMode } from './ar';
 import type { GyroControl } from './gyro';
@@ -126,6 +128,7 @@ export class UI {
   private busy = false;
   private materialIndex = 0;
   private photoPanel = false;
+  private rigOutput: 'single' | 'comparison' = 'single';
   /** Selected part of each panel (e.g. Object | Material), remembered per tab. */
   private segment: Partial<Record<Tab, string>> = {};
   private projectName = tr('my-scene');
@@ -686,13 +689,14 @@ export class UI {
   private renderRigBar() {
     const r = this.editor.rigger;
     this.selbar.classList.add('show');
-    const computing = r.progress !== null;
+    const computing = r.progress !== null || r.comparing;
+    const comparison = this.rigOutput === 'comparison' && !!r.entity?.source;
     this.selbar.replaceChildren(
       h(
         'div',
         { class: 'sel-name always' },
         icon(Bone, 16),
-        h('span', {}, computing ? tr('Computing weights… {pct}%', { pct: Math.round(r.progress! * 100) }) : r.step === 'place' ? tr('Place the joints') : tr('Check the skin')),
+        h('span', {}, computing ? tr('Computing weights… {pct}%', { pct: Math.round((r.progress ?? 0) * 100) }) : r.step === 'place' ? tr('Place the joints') : tr('Check the skin')),
       ),
       h(
         'div',
@@ -700,7 +704,7 @@ export class UI {
         computing
           ? button(tr('Stop'), () => r.stopComputing(), { icon: X, cls: 'small' })
           : r.step === 'place'
-            ? button(tr('Bind skin'), () => this.run(() => r.bind()), { icon: Check, cls: 'small primary' })
+            ? button(tr(comparison ? 'Create comparison' : 'Apply rig'), () => this.applyRig(), { icon: comparison ? Copy : Check, cls: 'small primary' })
             : button(tr('Done'), () => r.confirm(), { icon: Check, cls: 'small primary' }),
         iconButton(X, tr('Cancel rigging'), () => r.cancel()),
       ),
@@ -854,7 +858,9 @@ export class UI {
           { id: 'object', label: tr('Object') },
           ...(this.editor.materialsOf(e).length ? [{ id: 'material', label: tr('Material') }] : []),
           { id: 'animate', label: tr('Animate') },
-          ...(skeletonsOf(e).length ? [{ id: 'pose', label: tr('Pose') }] : this.editor.rigger.canRig(e) ? [{ id: 'rig', label: tr('Rig') }] : []),
+          ...(this.editor.rigger.active && this.editor.rigger.entity === e
+            ? [{ id: 'rig', label: tr('Rig') }]
+            : skeletonsOf(e).length ? [{ id: 'pose', label: tr('Pose') }] : this.editor.rigger.canRig(e) ? [{ id: 'rig', label: tr('Rig') }] : []),
         ];
       }
       case 'light':
@@ -1571,6 +1577,7 @@ export class UI {
       out.push(
         section(
           tr('Ready poses'),
+          e.rig?.data.comparison ? hint(tr('Ready poses apply to all models in this comparison.')) : null,
           h(
             'div',
             { class: 'chips' },
@@ -1579,12 +1586,12 @@ export class UI {
                 'button',
                 {
                   class: 'chip',
-                  onClick: () =>
-                    this.run(() =>
-                      preset.dirs
-                        ? p.applyDirections(e, Object.fromEntries(Object.entries(preset.dirs).map(([b, v]) => [b, Vector3.FromArray(v).normalize()])))
-                        : ed.clips.poseFromClip(e, preset.clip!, preset.time ?? 0),
-                    ),
+                  onClick: () => this.run(() => {
+                    const targets = [...ed.rigger.comparisonMembers(e).filter(other => other !== e), e];
+                    if (!preset.dirs) return ed.clips.poseManyFromClip(targets, preset.clip!, preset.time ?? 0);
+                    const dirs = Object.fromEntries(Object.entries(preset.dirs).map(([b, v]) => [b, Vector3.FromArray(v).normalize()]));
+                    ed.group(() => targets.forEach(target => p.applyDirections(target, dirs)));
+                  }),
                 },
                 tr(preset.label),
               ),
@@ -1599,6 +1606,35 @@ export class UI {
 
   // ---------- Rig ----------
 
+  private applyRig() {
+    const r = this.editor.rigger;
+    return this.run(() => this.rigOutput === 'comparison' && r.entity?.source ? r.createComparison() : r.bind());
+  }
+
+  private rigWeightOptions(): Node[] {
+    const r = this.editor.rigger;
+    return [
+      hint(tr('Weight calculation')),
+      chips([{ value: 'envelope', label: tr('Envelope weights') }, { value: 'heat', label: tr('Heat diffusion') }], r.method,
+        v => { if (r.progress === null && !r.comparing) { r.method = v as WeightMethod; this.renderPanel(); } }),
+    ];
+  }
+
+  private rigDeformationOptions(): Node[] {
+    const r = this.editor.rigger;
+    const descriptions: Record<ShoulderStrategy, string> = {
+      current: 'Uses the calculated skin weights without an additional treatment.',
+      protected: 'Transfers arm influence on the trunk to nearby spine bones.',
+      helper: 'Uses auxiliary bones to distribute rotation where the arms meet the trunk.',
+    };
+    return [
+      hint(tr('Deformation treatment (experimental)')),
+      chips(SHOULDER_STRATEGIES.map(s => ({ value: s.value, label: tr(s.label) })), r.shoulderStrategy,
+        v => { if (r.progress === null && !r.comparing) { r.shoulderStrategy = v as ShoulderStrategy; this.renderPanel(); } }),
+      hint(tr(descriptions[r.shoulderStrategy])),
+    ];
+  }
+
   private rigPanel(): (Node | null)[] {
     const ed = this.editor;
     const e = ed.selected;
@@ -1610,15 +1646,7 @@ export class UI {
           tr('Give it a skeleton'),
           hint(tr('For a standing person or character without a skeleton. You place the joints of a standard free skeleton on it; then it can be posed and animated.')),
           hint(tr('Works best with arms open (T or A pose), facing forward.')),
-          chips(
-            [
-              { value: 'envelope', label: tr('Envelope weights') },
-              { value: 'heat', label: tr('Heat diffusion') },
-            ],
-            r.method,
-            (v) => ((r.method = v as WeightMethod), this.renderPanel()),
-          ),
-          row(button(tr('Start rigging'), () => r.start(e), { icon: Bone, cls: 'primary' })),
+          row(button(tr('Start rigging'), () => { this.rigOutput = 'single'; r.start(e); }, { icon: Bone, cls: 'primary' })),
         ),
       ];
     }
@@ -1636,17 +1664,26 @@ export class UI {
             button(tr('Turn 180°'), () => r.turn(), { icon: RotateCcw, cls: 'small' }),
             button(tr('Reset joints'), () => (r.remember(), r.fit(), ed.notify('rig')), { cls: 'small ghost' }),
           ),
-          chips(
-            [
-              { value: 'envelope', label: tr('Envelope weights') },
-              { value: 'heat', label: tr('Heat diffusion') },
-            ],
-            r.method,
-            (v) => ((r.method = v as WeightMethod), this.renderPanel()),
-          ),
-          r.progress !== null
-            ? hint(tr('Computing weights… {pct}%', { pct: Math.round(r.progress * 100) }))
-            : row(button(tr('Bind skin'), () => this.run(() => r.bind()), { icon: Check, cls: 'primary' }), button(tr('Cancel'), () => r.cancel(), { cls: 'ghost' })),
+        ),
+        section(
+          tr('Bind the mesh'),
+          hint(tr('After adjusting the joints, calculate how the skeleton moves the mesh.')),
+          e.source ? segmented([
+            { id: 'single', label: tr('Apply rig') },
+            { id: 'comparison', label: tr('Compare treatments') },
+          ], this.rigOutput, v => {
+            if (r.progress === null && !r.comparing && (v === 'single' || v === 'comparison')) { this.rigOutput = v; this.renderPanel(); this.renderRigBar(); }
+          }) : null,
+          ...this.rigWeightOptions(),
+          ...(this.rigOutput === 'comparison' && e.source
+            ? [hint(tr('Creates Direct weights, Trunk protection and Distributed rotation with the same joints and weight calculation. Ready poses move all three together. The original is kept hidden.'))]
+            : this.rigDeformationOptions()),
+          r.progress !== null || r.comparing
+            ? hint(tr('Computing weights… {pct}%', { pct: Math.round((r.progress ?? 0) * 100) }))
+            : row(this.rigOutput === 'comparison' && e.source
+                ? button(tr('Create comparison'), () => this.applyRig(), { icon: Copy, cls: 'primary' })
+                : button(tr('Apply rig'), () => this.applyRig(), { icon: Check, cls: 'primary' }),
+                button(tr('Cancel'), () => r.cancel(), { cls: 'ghost' })),
         ),
       ];
     }

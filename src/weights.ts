@@ -14,8 +14,11 @@
 
 import { segmentDistance, surfaceClusters, vertexNormals, weld } from './skinMath';
 import { visibleBoneDistances } from './skinVisibility';
+import type { ShoulderInput, ShoulderStrategy } from './shoulderWeights';
 
-export interface SkinInput {
+export interface SkinInput extends ShoulderInput {
+  shoulderStrategy?: ShoulderStrategy;
+  comparison?: boolean;
   /** Vertex positions (x, y, z), all meshes together, in the skeleton's space. */
   points: Float32Array;
   /** Triangles (vertex indices into `points`). */
@@ -35,6 +38,7 @@ export interface SkinWeights {
   indices: Float32Array;
   /** 4 weights per vertex (sum 1). */
   weights: Float32Array;
+  variants?: Record<ShoulderStrategy, { indices: Float32Array; weights: Float32Array }>;
 }
 
 export const INFLUENCES = 4;
@@ -231,7 +235,7 @@ export function computeSkinWeights(input: SkinInput, method: 'heat' | 'envelope'
       if (m.type === 'progress') onProgress(m.value);
       else if (m.type === 'done') {
         worker.terminate();
-        resolve({ indices: m.indices, weights: m.weights });
+        resolve({ indices: m.indices, weights: m.weights, variants: m.variants });
       } else if (m.type === 'error') {
         worker.terminate();
         rej(new Error(m.message));
@@ -241,7 +245,7 @@ export function computeSkinWeights(input: SkinInput, method: 'heat' | 'envelope'
       worker.terminate();
       rej(new Error(e.message || 'Worker error'));
     };
-    worker.postMessage({ points: input.points, triangles: input.triangles, bones: input.bones, limbRoots: input.limbRoots, limbRootOf: input.limbRootOf, limbAxes: input.limbAxes, method, limit: heatLimit() });
+    worker.postMessage({ ...input, method, limit: heatLimit() });
   });
   return {
     promise,
