@@ -844,7 +844,7 @@ body.photo .panel {
 }
 @media (min-width: 761px) and (max-width: 1240px) {
   body.panel-open .selbar .ibtn.tool span,
-  body.panel-open .selbar .sel-name {
+  body.panel-open .selbar .sel-name:not(.always) {
     display: none;
   }
 }
@@ -1665,4 +1665,151 @@ body.ui-hidden .ui-restore {
   .selbar .play-btn {
     display: none;
   }
+}
+
+/* ---------- Rigging: step count, progress, readouts ---------- */
+
+.step-count {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--radius);
+  background: var(--lilac);
+  color: var(--purple);
+  font-size: 11px;
+  font-weight: 700;
+}
+.progress {
+  position: relative;
+  height: 28px;
+  border-radius: var(--radius);
+  background: var(--line);
+  overflow: hidden;
+}
+.progress i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--gold);
+  transition: width 0.2s;
+}
+.progress span {
+  position: relative;
+  display: block;
+  line-height: 28px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  mix-blend-mode: difference;
+}
+.readout {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12.5px;
+}
+.readout li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+.readout li span {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.readout li b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Steps at the top of a panel (rigging) */
+.stepper {
+  display: flex;
+  margin: 0;
+  padding: 2px 16px 10px;
+  list-style: none;
+  counter-reset: none;
+}
+.stepper li {
+  flex: 1;
+  position: relative;
+}
+/* Line joining each step to the next */
+.stepper li + li::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  left: calc(-50% + 18px);
+  right: calc(50% + 18px);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line);
+}
+.stepper li.done + li::before,
+.stepper li.done + li.active::before {
+  background: var(--lilac);
+}
+.stepper button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.stepper button:disabled {
+  cursor: default;
+}
+/* The current step is not clickable but must not look faded (only later steps do) */
+.stepper li.active button:disabled {
+  opacity: 1;
+}
+.stepper b {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  font-size: 13px;
+  font-weight: 700;
+}
+.stepper li.done b {
+  background: var(--lilac);
+  border-color: var(--lilac);
+  color: var(--purple);
+}
+.stepper li.active b {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.stepper li.active span {
+  color: var(--text);
+  font-weight: 600;
+}
+.stepper li:not(.active) button:not(:disabled):hover span {
+  color: var(--text);
+}
+
+/* Fixed actions at the bottom of a panel */
+.panel-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--line);
+}
+.panel-foot .grow {
+  flex: 1;
 }

@@ -215,3 +215,36 @@ export function numberInput(label: string, value: number, opts: { step?: number;
   });
   return h('label', { class: 'num' }, h('span', {}, label), h('div', { class: 'num-field' }, input, opts.suffix ? h('em', {}, opts.suffix) : null));
 }
+
+/** Progress of a long task (0–1), with its message. */
+export function progressBar(fraction: number, label: string) {
+  return h(
+    'div',
+    { class: 'progress', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.round(fraction * 100)) },
+    h('i', { style: `width: ${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%` }),
+    h('span', {}, label),
+  );
+}
+
+/**
+ * Numbered steps of a process. Steps up to `reachable` (index) can be picked; the current one is
+ * highlighted and earlier ones are marked done.
+ */
+export function stepper(labels: string[], current: number, onPick: (index: number) => void, reachable = current) {
+  return h(
+    'ol',
+    { class: 'stepper' },
+    ...labels.map((label, i) =>
+      h(
+        'li',
+        { class: i === current ? 'active' : i < current ? 'done' : '' },
+        h(
+          'button',
+          { disabled: i === current || i > reachable, 'aria-current': i === current ? 'step' : undefined, onClick: () => onPick(i) },
+          h('b', {}, String(i + 1)),
+          h('span', {}, label),
+        ),
+      ),
+    ),
+  );
+}
