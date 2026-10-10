@@ -325,6 +325,8 @@ const PT: Record<string, string> = {
   More: 'Mais',
   Duplicate: 'Duplicar',
   'Deselect (Esc)': 'Desmarcar (Esc)',
+  Align: 'Alinhar',
+  Style: 'Estilo',
   'Hide interface (H)': 'Esconder interface (H)',
   'Orbit around this object': 'Orbitar em volta deste objeto',
   'Orbiting around {name}': 'Orbitando em volta de {name}',

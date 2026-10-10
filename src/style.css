@@ -1599,3 +1599,46 @@ body.ui-hidden .ui-restore {
     top: calc(var(--top) + 52px);
   }
 }
+
+/* ---------- Panel parts switch ---------- */
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  margin: 2px 16px 6px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.segmented button {
+  flex: 1;
+  height: 34px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.segmented button.active {
+  background: rgba(165, 122, 187, 0.4);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---------- Touch: room to scroll without hitting controls ---------- */
+
+.slider-track {
+  position: relative;
+}
+@media (pointer: coarse) {
+  /* A strip on the right edge with no controls, for the thumb to scroll the panel */
+  .panel-body {
+    padding-right: 34px;
+  }
+  .panel-body .sec > * + * {
+    margin-top: 12px;
+  }
+  .slider-track.dragging input[type='range']::-webkit-slider-thumb {
+    transform: scale(1.15);
+  }
+}

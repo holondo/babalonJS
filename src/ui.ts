@@ -70,7 +70,7 @@ import type { GyroControl } from './gyro';
 import { canShareFile, saveFile, shareFile } from './files';
 import { LANGS, getLang, locale, setLang, tr } from './i18n';
 import type { Lang } from './i18n';
-import { button, chips, colorInput, h, hint, icon, iconButton, numberInput, row, section, select, slider, toggle } from './dom';
+import { button, chips, colorInput, h, hint, icon, iconButton, numberInput, row, section, segmented, select, slider, toggle } from './dom';
 import { UNITS } from './tools';
 import type { Axis, Edge, Guide, Measurement, Unit } from './tools';
 
@@ -113,6 +113,8 @@ export class UI {
   private busy = false;
   private materialIndex = 0;
   private photoPanel = false;
+  /** Selected part of each panel (e.g. Object | Material), remembered per tab. */
+  private segment: Partial<Record<Tab, string>> = {};
   private projectName = tr('my-scene');
   private menuOpen = false;
   /** Autosaved session found when the app opens (offered to continue). */
@@ -674,7 +676,9 @@ export class UI {
     if (!tab) return this.panel.replaceChildren();
     const title = tr(PANEL_TITLES[tab]);
     const scroll = this.panel.querySelector('.panel-body')?.scrollTop ?? 0;
-    const body = h('div', { class: 'panel-body' }, ...this.panelContent(tab));
+    const parts = this.panelParts(tab);
+    const current = parts?.find((p) => p.id === this.segment[tab]) ? this.segment[tab]! : parts?.[0].id ?? '';
+    const body = h('div', { class: 'panel-body' }, ...this.panelContent(tab, current));
     this.panel.replaceChildren(
       h(
         'div',
@@ -682,23 +686,70 @@ export class UI {
         h('h2', {}, title),
         iconButton(X, tr('Close'), () => (ed.photoMode ? ((this.photoPanel = false), this.renderAll()) : this.openTab(null))),
       ),
+      ...(parts
+        ? [
+            segmented(parts, current, (id) => {
+              this.segment[tab] = id;
+              this.panel.querySelector('.panel-body')!.scrollTop = 0;
+              this.renderPanel();
+              this.buildLabels();
+            }),
+          ]
+        : []),
       body,
     );
     body.scrollTop = scroll;
   }
 
-  private panelContent(tab: Tab): (Node | null)[] {
+  /** Parts of a panel, switched at its top (one level: no nested menus). */
+  private panelParts(tab: Tab): { id: string; label: string }[] | null {
+    switch (tab) {
+      case 'objects': {
+        const e = this.editor.selected;
+        return e && e.kind !== 'light' && this.editor.materialsOf(e).length
+          ? [
+              { id: 'object', label: tr('Object') },
+              { id: 'material', label: tr('Material') },
+            ]
+          : null;
+      }
+      case 'light':
+        return [
+          { id: 'lights', label: tr('Lights') },
+          { id: 'environment', label: tr('Environment') },
+        ];
+      case 'tools':
+        return [
+          { id: 'measure', label: tr('Measure') },
+          { id: 'guides', label: tr('Guides') },
+          { id: 'align', label: tr('Align') },
+        ];
+      case 'photo':
+        return [
+          { id: 'style', label: tr('Style') },
+          { id: 'camera', label: tr('Camera') },
+        ];
+    }
+    return null;
+  }
+
+  private panelContent(tab: Tab, part: string): (Node | null)[] {
     switch (tab) {
       case 'add':
         return this.addPanel();
       case 'objects':
-        return [...this.scenePanel(), ...this.objectMaterial()];
+        return part === 'material' ? this.materialPanel() : this.scenePanel();
       case 'light':
-        return [...this.lightsPanel(), ...this.envPanel()];
-      case 'photo':
-        return this.photoPanelContent();
-      case 'tools':
-        return this.toolsPanel();
+        return part === 'environment' ? this.envPanel() : this.lightsPanel();
+      case 'photo': {
+        // [enter, filters, camera, light & color, effects, depth of field, reset]
+        const all = this.photoPanelContent();
+        return part === 'camera' ? [all[2], all[5]] : [all[0], all[1], all[3], all[4], all[6]];
+      }
+      case 'tools': {
+        const [measure, guides, align] = this.toolsPanel();
+        return [part === 'guides' ? guides : part === 'align' ? align : measure];
+      }
     }
   }
 
@@ -1126,13 +1177,6 @@ export class UI {
   }
 
   // ---------- Material ----------
-
-  /** Materials of the selected object, as part of the Objects panel. */
-  private objectMaterial(): (Node | null)[] {
-    const e = this.editor.selected;
-    if (!e || e.kind === 'light') return [];
-    return [h('h2', { class: 'group-title' }, tr('Material')), ...this.materialPanel()];
-  }
 
   private materialPanel() {
     const ed = this.editor;

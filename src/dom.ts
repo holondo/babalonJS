@@ -97,7 +97,61 @@ export function slider(label: string, value: number, opts: SliderOpts, onInput: 
       opts.onCommit?.();
     },
   }, label);
-  return h('div', { class: 'slider' }, h('div', { class: 'slider-head' }, lab, out), input);
+  const track = h('div', { class: 'slider-track' }, input);
+  if (matchMedia('(pointer: coarse)').matches) scrollFriendlyRange(track, input);
+  return h('div', { class: 'slider' }, h('div', { class: 'slider-head' }, lab, out), track);
+}
+
+/**
+ * On touch screens a native range jumps to the finger as soon as it lands, so scrolling a panel
+ * over a slider changes its value by accident. Here the slider only reacts to a sideways drag
+ * (a vertical start is left to the scroll), moves relative to its current value, and ignores taps.
+ */
+export function scrollFriendlyRange(track: HTMLElement, input: HTMLInputElement) {
+  input.style.pointerEvents = 'none';
+  track.style.touchAction = 'pan-y';
+  let drag: { id: number; x: number; y: number; value: number; active: boolean } | null = null;
+  track.addEventListener('pointerdown', (e) => {
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, value: parseFloat(input.value), active: false };
+  });
+  track.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    if (!drag.active) {
+      // Mostly vertical: it's a scroll, let the panel have it
+      if (Math.abs(dy) > 8 && Math.abs(dy) >= Math.abs(dx)) {
+        drag = null;
+        return;
+      }
+      if (Math.abs(dx) < 8) return;
+      drag.active = true;
+      track.setPointerCapture(e.pointerId);
+      track.classList.add('dragging');
+    }
+    const min = parseFloat(input.min);
+    const max = parseFloat(input.max);
+    const width = track.clientWidth || 1;
+    input.value = String(Math.min(max, Math.max(min, drag.value + (dx / width) * (max - min))));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const end = (e: PointerEvent) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (drag.active) input.dispatchEvent(new Event('change', { bubbles: true }));
+    track.classList.remove('dragging');
+    drag = null;
+  };
+  track.addEventListener('pointerup', end);
+  track.addEventListener('pointercancel', end);
+}
+
+/** One-level switch at the top of a panel (e.g. Object | Material). */
+export function segmented(options: { id: string; label: string }[], value: string, onPick: (id: string) => void) {
+  return h(
+    'div',
+    { class: 'segmented', role: 'tablist' },
+    ...options.map((o) => h('button', { class: o.id === value ? 'active' : '', role: 'tab', 'aria-selected': String(o.id === value), onClick: () => onPick(o.id) }, o.label)),
+  );
 }
 
 export function colorInput(label: string, value: string, onInput: (hex: string) => void) {
