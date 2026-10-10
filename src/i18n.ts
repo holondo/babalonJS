@@ -324,6 +324,7 @@ const PT: Record<string, string> = {
   Project: 'Projeto',
   More: 'Mais',
   Duplicate: 'Duplicar',
+  'Deselect (Esc)': 'Desmarcar (Esc)',
   'Hide interface (H)': 'Esconder interface (H)',
   'Orbit around this object': 'Orbitar em volta deste objeto',
   'Orbiting around {name}': 'Orbitando em volta de {name}',

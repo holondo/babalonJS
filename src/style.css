@@ -921,8 +921,12 @@ body.photo .panel {
     display: none;
   }
   .sel-tools .ibtn {
-    min-width: 38px;
-    padding: 0 6px;
+    min-width: 36px;
+    padding: 0 5px;
+    gap: 4px;
+  }
+  .sel-tools .sep {
+    margin: 0 2px;
   }
   .selbar {
     overflow-x: auto;

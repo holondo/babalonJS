@@ -606,6 +606,7 @@ export class UI {
         h('span', { class: 'sep' }),
         iconButton(Trash2, tr('Delete (Del)'), () => ed.remove(), { cls: 'danger' }),
         iconButton(Ellipsis, tr('More'), () => this.toggleSelMenu(), { cls: 'more-btn', active: this.selMenuOpen }),
+        iconButton(X, tr('Deselect (Esc)'), () => ed.select(null)),
       ),
     );
     if (this.selMenuOpen) this.toggleSelMenu(true);
@@ -636,7 +637,6 @@ export class UI {
       }, { on: ed.orbitEntity === e, kbd: 'O' }),
       item(Group, tr('Multi-select'), () => (ed.setMultiSelect(!ed.multiSelect), this.toggleSelMenu(true)), { on: ed.multiSelect, keep: true }),
       item(Magnet, tr('Snap to grid'), () => (ed.setSnap(!ed.snap), this.toggleSelMenu(true)), { on: ed.snap, keep: true }),
-      item(X, tr('Deselect'), () => ed.select(null), { kbd: 'Esc' }),
     );
   }
 

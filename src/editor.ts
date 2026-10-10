@@ -379,14 +379,17 @@ export class Editor {
       if (this.tools.handlePointer(info)) return;
       if (info.type === PointerEventTypes.POINTERTAP) {
         if (this.tools.measureMode) return;
-        if (this.gizmos.isHovered) return;
+        const ev = info.event as PointerEvent;
+        // "Hovered" only means something for a mouse: after a touch drag on a gizmo it stays
+        // stuck and would swallow every later tap. The geometric pick below covers touch.
+        if (ev.pointerType === 'mouse' && this.gizmos.isHovered) return;
         const util = this.gizmos.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY);
         if (util?.hit) return;
         const pick = scene.pick(scene.pointerX, scene.pointerY, this.pickable);
-        const ev = info.event as PointerEvent;
-        const additive = this.multiSelect || ev.shiftKey || ev.ctrlKey || ev.metaKey;
         const entity = pick?.pickedMesh ? this.entityOf(pick.pickedMesh) : null;
-        if (additive && !entity) return;
+        // Tapping empty space always deselects (also with multi-select on)
+        if (!entity) return this.select(null);
+        const additive = this.multiSelect || ev.shiftKey || ev.ctrlKey || ev.metaKey;
         this.select(entity, additive);
       } else if (info.type === PointerEventTypes.POINTERDOUBLETAP) {
         const pick = scene.pick(scene.pointerX, scene.pointerY, this.pickable);
