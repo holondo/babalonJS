@@ -14,10 +14,10 @@
 
 import { segmentDistance, surfaceClusters, vertexNormals, weld } from './skinMath';
 import { visibleBoneDistances } from './skinVisibility';
-import type { ShoulderInput, ShoulderStrategy } from './shoulderWeights';
+import type { TreatmentInput, SkinTreatment } from './skinTreatments';
 
-export interface SkinInput extends ShoulderInput {
-  shoulderStrategy?: ShoulderStrategy;
+export interface SkinInput extends TreatmentInput {
+  treatment?: SkinTreatment;
   comparison?: boolean;
   /** Vertex positions (x, y, z), all meshes together, in the skeleton's space. */
   points: Float32Array;
@@ -38,7 +38,7 @@ export interface SkinWeights {
   indices: Float32Array;
   /** 4 weights per vertex (sum 1). */
   weights: Float32Array;
-  variants?: Record<ShoulderStrategy, { indices: Float32Array; weights: Float32Array }>;
+  variants?: Record<SkinTreatment, { indices: Float32Array; weights: Float32Array }>;
 }
 
 export const INFLUENCES = 4;

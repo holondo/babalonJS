@@ -12,7 +12,7 @@ import { surfaceClusters, vertexNormals, weld } from './skinMath';
 import { visibleBoneDistances } from './skinVisibility';
 import { envelopeWeights, limitLimbInfluence, strongest } from './weights';
 import type { SkinInput } from './weights';
-import { SHOULDER_STRATEGIES, shoulderWeights } from './shoulderWeights';
+import { SKIN_TREATMENTS, applySkinTreatment } from './skinTreatments';
 
 interface Job extends SkinInput {
   points: Float32Array;
@@ -65,16 +65,16 @@ self.onmessage = (ev: MessageEvent<Job>) => {
 
 function finish(dense: Float32Array, map: Uint32Array, input: SkinInput) {
   const B = input.bones.length / 6;
-  const pack = (strategy: import('./shoulderWeights').ShoulderStrategy) => {
-    const treated = shoulderWeights(dense, input, strategy);
+  const pack = (strategy: import('./skinTreatments').SkinTreatment) => {
+    const treated = applySkinTreatment(dense, input, strategy);
     return strongest(treated, map, treated.length / (input.points.length / 3));
   };
   if (input.comparison) {
-    const variants = Object.fromEntries(SHOULDER_STRATEGIES.map(({ value }) => [value, pack(value)]));
+    const variants = Object.fromEntries(SKIN_TREATMENTS.map(({ value }) => [value, pack(value)]));
     const transfer = Object.values(variants).flatMap(v => [v.indices.buffer, v.weights.buffer]);
     post({ type: 'done', ...variants.current, variants }, transfer);
   } else {
-    const result = input.shoulderStrategy ? pack(input.shoulderStrategy) : strongest(dense, map, B);
+    const result = input.treatment ? pack(input.treatment) : strongest(dense, map, B);
     post({ type: 'done', ...result }, [result.indices.buffer, result.weights.buffer]);
   }
 }

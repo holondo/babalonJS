@@ -11,7 +11,8 @@ npm run build      # type-check (app + vite config) and production build in dist
 npm run preview    # serves dist/ (the only way to test the PWA / service worker locally)
 ```
 
-- There are no automated tests. Verify every change with `npm run build` and in a browser (see [Verifying changes](#verifying-changes)).
+- There is no test runner. Verify every change with `npm run build` and in a browser (see [Verifying changes](#verifying-changes)).
+- Rigging has focused checks (Node, no browser): `node scripts/check-leg-junction.mjs`, `check-skin-treatments.mjs`, `check-helper-bones.mjs`, `check-skin-visibility.mjs`. `node scripts/check-rig-deformation.mjs <model.glb> <envelope|heat> [comparison]` audits final deformation on a model you provide (meshopt-compressed GLB); no model is bundled for it.
 - GitHub Pages deploys on every push to `main` (`.github/workflows/deploy.yml`). The build runs with `BASE_PATH=/<repo>/`.
 
 ## Code map
@@ -27,6 +28,9 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | `src/retarget.ts` | Playing clips made for another humanoid (`AnimatorAvatar` + rest-pose alignment) and clips added to objects (`ClipManager`) |
 | `src/humanoidTemplate.ts`, `src/rigging.ts` | The standard skeleton (CC0 rig) and manual rigging (`Rigger`) |
 | `src/weights.ts`, `src/weights.worker.ts`, `src/skinMath.ts` | Skin weights: envelope and heat diffusion (both in a Web Worker) |
+| `src/skinTreatments.ts` | Optional treatments where limbs meet the trunk (direct, trunk protection, helper bones) |
+| `src/bodyLandmarks.ts` | Body landmarks from horizontal sections (leg split, skeleton root, hip pivots) for Find the joints |
+| `src/deformationMap.ts` | Difference map between rig treatments (final skinned positions) |
 | `src/jointOverlay.ts` | Joint handles drawn over the view (posing, rigging) |
 | `src/project.ts` | `.babalon` save/open and browser autosave (IndexedDB) |
 | `src/presets.ts` | Shared data: lighting presets, photo filters, pose presets, animation library |

@@ -50,7 +50,7 @@ import { findLightPreset, presetIntensity } from './presets';
 import { Animator } from './animation';
 import { Poser, captureJoints, restoreJoints } from './pose';
 import { Motion } from './motion';
-import { Rigger, updateShoulderHelpers } from './rigging';
+import { Rigger, updateHelperBones } from './rigging';
 import type { RigState } from './rigging';
 import type { MotionSettings } from './motion';
 import type { ClipState } from './animation';
@@ -584,6 +584,7 @@ export class Editor {
   }
 
   private emit(kind: ChangeKind) {
+    if (kind === 'pose' || kind === 'animation' || kind === 'transform' || kind === 'entities' || kind === 'history') this.rigger.difference.clear();
     this.changed.notifyObservers(kind);
   }
 
@@ -1480,7 +1481,7 @@ export class Editor {
   materialsOf(entity: Entity): Material[] {
     const set = new Set<Material>();
     for (const m of entity.meshes) {
-      const mat = m.material;
+      const mat = this.rigger.difference.materialOf(m);
       if (!mat) continue;
       if (mat instanceof MultiMaterial) mat.subMaterials.forEach((s) => s && set.add(s));
       else set.add(mat);
@@ -1712,7 +1713,8 @@ export class Editor {
   }
 
   async exportGLB() {
-    for (const e of this.entities) if (e.rig) updateShoulderHelpers(e.rig);
+    this.rigger.difference.clear();
+    for (const e of this.entities) if (e.rig) updateHelperBones(e.rig);
     const exclude = new Set<Node>([this.ground, this.grid, ...this.helpers, ...this.overlays]);
     for (const e of this.entities) if (!e.visible) {
       exclude.add(e.root);

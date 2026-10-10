@@ -10,8 +10,10 @@ import type { JointState } from './pose';
 import { INFLUENCES, computeSkinWeights, envelopeWeights, strongest, weld } from './weights';
 import type { WeightJob, SkinInput, SkinWeights } from './weights';
 import { tr } from './i18n';
-import { SHOULDER_STRATEGIES, shoulderWeights } from './shoulderWeights';
-import type { ShoulderStrategy } from './shoulderWeights';
+import { SKIN_TREATMENTS, applySkinTreatment } from './skinTreatments';
+import type { SkinTreatment } from './skinTreatments';
+import { findLegJunction } from './bodyLandmarks';
+import { DeformationMap } from './deformationMap';
 
 /**
  * Manual rigging (E1/E2): the standard skeleton (humanoidTemplate.ts) appears fitted to a static
@@ -32,7 +34,10 @@ export interface RigData {
   /** Which way the model faces, as a turn around the vertical axis (0 = +Z). */
   yaw?: number;
   method: WeightMethod;
-  shoulderStrategy?: ShoulderStrategy;
+  /** How limbs blend into the trunk (see skinTreatments.ts). */
+  treatment?: SkinTreatment;
+  /** Older projects saved the treatment under this name. */
+  shoulderStrategy?: SkinTreatment;
   /** Comparisons share ready poses, including after reloading the project. */
   comparison?: string;
 }
@@ -76,6 +81,7 @@ const TEST_POSE: Partial<Record<HumanBone, [number, number, number]>> = {
 };
 
 export class Rigger {
+  readonly difference: DeformationMap;
   private readonly editor: Editor;
   entity: Entity | null = null;
   step: RigStep = 'place';
@@ -83,7 +89,7 @@ export class Rigger {
   /** Which way the model faces (radians around Y in its own space; 0 = +Z, π/2 = +X). */
   yaw = 0;
   method: WeightMethod = 'envelope';
-  shoulderStrategy: ShoulderStrategy = 'current';
+  treatment: SkinTreatment = 'current';
   comparing = false;
   /** Heat weights progress (0–1) while computing. */
   progress: number | null = null;
@@ -105,11 +111,13 @@ export class Rigger {
 
   constructor(editor: Editor) {
     this.editor = editor;
+    this.difference = new DeformationMap(editor, () => this.updateHelpers());
   }
 
   updateHelpers() {
-    for (const e of this.editor.entities) if (e.rig && e.root.isEnabled()) updateShoulderHelpers(e.rig);
-    if (this.pending) updateShoulderHelpers(this.pending);
+    this.difference.checkPose();
+    for (const e of this.editor.entities) if (e.rig && e.root.isEnabled()) updateHelperBones(e.rig);
+    if (this.pending) updateHelperBones(this.pending);
   }
 
   get active() {
@@ -212,7 +220,7 @@ export class Rigger {
 
   /**
    * Finds the joints from the shape of the mesh (standing model, arms open in a T or A pose):
-   * where the legs split (crotch), the narrowest part above the shoulders (neck), the arm and
+   * where the legs split, the narrowest part above the shoulders (neck), the arm and
    * leg ends; elbows, knees and wrists by the template's proportions along each limb.
    */
   findPose() {
@@ -270,14 +278,8 @@ export class Rigger {
       return best;
     };
     const mean = (ids: number[], arr: number[]) => (ids.length ? ids.reduce((t, i) => t + arr[i], 0) / ids.length : 0);
-    // Crotch: the lowest height where something covers the middle line
-    let crotch = H * 0.45;
-    for (let v = H * 0.2; v < H * 0.65; v += band) {
-      if (slice(v, (i) => Math.abs(U[i]) < H * 0.012).length) {
-        crotch = v;
-        break;
-      }
-    }
+    const legs = findLegJunction(U, V, W, H);
+    const split = legs.split;
     // Neck: the narrowest middle piece between the shoulders and the head
     let neckV = H * 0.84;
     let narrow = Infinity;
@@ -293,7 +295,7 @@ export class Rigger {
     const at = (u: number, v: number, w = 0) => c.add(r.scale(u)).addInPlace(f.scale(w)).addInPlace(new Vector3(0, min.y + v, 0));
     const J = (id: RigJoint) => this.joints.get(id)!;
     const s = this.scale;
-    J('hips').copyFrom(at(0, crotch + H * 0.05));
+    J('hips').copyFrom(at(legs.hips.u, legs.hips.v, legs.hips.w));
     J('neck').copyFrom(at(0, neckV - H * 0.025));
     J('head').copyFrom(at(0, neckV + H * 0.02));
     for (const sideSign of [-1, 1]) {
@@ -301,15 +303,15 @@ export class Rigger {
       const j = (k: string) => J(`${name}${k}` as RigJoint);
       const mine = (i: number) => U[i] * sideSign > H * 0.01;
       // Legs
-      const thigh = slice(crotch - H * 0.04, mine);
-      const hipU = thigh.length ? mean(thigh, U) : sideSign * H * 0.05;
+      const hip = sideSign < 0 ? legs.left : legs.right;
+      const hipU = hip.u;
       const feet: number[] = [];
       for (let i = 0; i < n; i++) if (V[i] < H * 0.1 && mine(i)) feet.push(i);
       const footU = feet.length ? mean(feet, U) : hipU;
       const ankleV = H * 0.055;
-      j('UpperLeg').copyFrom(at(hipU, crotch + H * 0.06));
+      j('UpperLeg').copyFrom(at(hipU, hip.v, hip.w));
       j('Foot').copyFrom(at(footU, ankleV));
-      const kneeV = (crotch + H * 0.06 + ankleV) / 2;
+      const kneeV = (hip.v + ankleV) / 2;
       const knee = slice(kneeV, mine);
       j('LowerLeg').copyFrom(at(knee.length ? mean(knee, U) : (hipU + footU) / 2, kneeV));
       let front = -Infinity;
@@ -317,7 +319,7 @@ export class Rigger {
       j('Toes').copyFrom(at(footU, H * 0.008, (Number.isFinite(front) ? front : H * 0.1) - 0.092 * s));
       // Arms: from the shoulder to the furthest point on this side (the finger tips)
       let tip = -1;
-      for (let i = 0; i < n; i++) if (V[i] > crotch && (tip < 0 || U[i] * sideSign > U[tip] * sideSign)) tip = i;
+      for (let i = 0; i < n; i++) if (V[i] > split && (tip < 0 || U[i] * sideSign > U[tip] * sideSign)) tip = i;
       const shoulder = at(sideSign * torsoHalf * 0.85, H * 0.787);
       const tipP = tip >= 0 ? at(U[tip], V[tip]) : shoulder;
       j('UpperArm').copyFrom(shoulder);
@@ -645,7 +647,7 @@ export class Rigger {
       const direction = Vector3.TransformNormal(this.right, worldMatrix(source.root)).normalize();
       const size = this.box.max.subtract(this.box.min);
       const spacing = (Math.abs(this.right.x)*size.x + Math.abs(this.right.z)*size.z) * Math.max(source.root.scaling.x, source.root.scaling.z) * 1.15;
-      for (const [i, strategy] of SHOULDER_STRATEGIES.entries()) {
+      for (const [i, strategy] of SKIN_TREATMENTS.entries()) {
         const copy = this.editor.createModelCopy(source);
         copies.push(copy);
         copy.name = `${source.name} — ${tr(strategy.label)}`;
@@ -660,7 +662,7 @@ export class Rigger {
       if (!weights.variants) throw new Error(tr('Could not create the rig comparison.'));
       states.forEach((st, i) => {
         st.data.method = states[0].data.method;
-        this.applyWeights(st, weights.variants![SHOULDER_STRATEGIES[i].value]);
+        this.applyWeights(st, weights.variants![SKIN_TREATMENTS[i].value]);
         copies[i].rig = st;
         forgetHumanoid(copies[i]);
       });
@@ -731,7 +733,7 @@ export class Rigger {
       }
       applyBoneDirections(map, frame, dirs);
     }
-    updateShoulderHelpers(st);
+    updateHelperBones(st);
     this.editor.invalidate();
   }
 
@@ -763,8 +765,8 @@ export class Rigger {
   }
 
   /** Skeleton + joint nodes in the model's fitting space; meshes moved into that space. */
-  private build(e: Entity, positions: Map<RigJoint, Vector3>, data?: RigData, strategy = this.shoulderStrategy): RigState {
-    const shoulderStrategy = data ? data.shoulderStrategy ?? 'current' : strategy;
+  private build(e: Entity, positions: Map<RigJoint, Vector3>, data?: RigData, strategy = this.treatment): RigState {
+    const treatment = data ? data.treatment ?? 'current' : strategy;
     const scene = this.editor.scene;
     const fit = fitNodeOf(e);
     const node = new TransformNode('rig', scene);
@@ -799,7 +801,7 @@ export class Rigger {
       joints.set(id, t);
     }
     const helpers: RigState['helpers'] = [];
-    if (shoulderStrategy === 'helper') {
+    if (treatment === 'helper') {
       for (const id of ['leftUpperArm', 'rightUpperArm'] as const) {
         const driver = joints.get(id)!;
         const name = `deform_support.${id.startsWith('left') ? 'L' : 'R'}`;
@@ -838,7 +840,7 @@ export class Rigger {
       geometries.push(m.geometry);
     }
     const out: RigJoint[] = [...joints.keys()];
-    const saved: RigData = data ?? { joints: {}, facing: Math.cos(this.yaw) >= 0 ? 1 : -1, yaw: this.yaw, method: this.method, shoulderStrategy };
+    const saved: RigData = data ?? { joints: {}, facing: Math.cos(this.yaw) >= 0 ? 1 : -1, yaw: this.yaw, method: this.method, treatment };
     if (!data) for (const id of out) saved.joints[id] = rigPos.get(id)!.asArray().map((v) => +v.toFixed(5));
     return { data: saved, node, skeleton, joints, backups, geometries, helpers };
   }
@@ -890,10 +892,10 @@ export class Rigger {
       axis.normalize();
       limbAxes.set(axis.asArray(), i * 3);
     });
-    const armRoots = new Uint32Array(['leftUpperArm', 'rightUpperArm'].map(id => BONES.findIndex(j => j.id === id)));
-    const torsoUp = new Float32Array(rigPosition(st, 'neck').subtract(rigPosition(st, 'hips')).normalize().asArray());
-    const torsoBones = new Uint32Array(['spine', 'chest', 'upperChest'].map(id => BONES.findIndex(j => j.id === id)));
-    return { points, triangles, bones, limbRoots, limbRootOf, limbAxes, armRoots, torsoUp, torsoBones, shoulderStrategy: st.data.shoulderStrategy ?? 'current' };
+    const treatedRoots = new Uint32Array(['leftUpperArm', 'rightUpperArm'].map(id => BONES.findIndex(j => j.id === id)));
+    const trunkUp = new Float32Array(rigPosition(st, 'neck').subtract(rigPosition(st, 'hips')).normalize().asArray());
+    const trunkBones = new Uint32Array(['spine', 'chest', 'upperChest'].map(id => BONES.findIndex(j => j.id === id)));
+    return { points, triangles, bones, limbRoots, limbRootOf, limbAxes, treatedRoots, trunkUp, trunkBones, treatment: st.data.treatment ?? 'current' };
   }
 
   private async computeWeights(st: RigState, comparison = false): Promise<SkinWeights> {
@@ -1005,6 +1007,8 @@ export class Rigger {
   /** Rebuilds a saved rig on a freshly loaded model (or on a copy). */
   restore(e: Entity, data: RigData, weights: Uint8Array | null) {
     if (!this.canRig(e)) return;
+    if (!data.treatment && data.shoulderStrategy) data = { ...data, treatment: data.shoulderStrategy };
+    delete data.shoulderStrategy;
     const positions = new Map<RigJoint, Vector3>();
     for (const [id, p] of Object.entries(data.joints) as [RigJoint, number[]][]) positions.set(id, Vector3.FromArray(p));
     if (RIG_TEMPLATE.some((j) => !positions.has(j.id))) throw new Error(tr('The saved rig is incomplete.'));
@@ -1027,7 +1031,7 @@ export class Rigger {
       const input = this.skinInput(st);
       const { dense, map } = envelopeWeights(input);
       const weldedPoints = weld(input.points).points;
-      const treated = shoulderWeights(dense, { ...input, points: weldedPoints }, input.shoulderStrategy!);
+      const treated = applySkinTreatment(dense, { ...input, points: weldedPoints }, input.treatment!);
       w = strongest(treated, map, treated.length / (weldedPoints.length / 3));
     }
     this.applyWeights(st, w);
@@ -1090,7 +1094,7 @@ function humanoidMap(st: RigState): HumanoidMap {
 const HELPER_REST = Quaternion.Identity();
 
 /** No geometry work: each support joint follows half of the upper arm's local rotation. */
-export function updateShoulderHelpers(st: RigState) {
+export function updateHelperBones(st: RigState) {
   for (const { node, driver } of st.helpers) {
     Quaternion.SlerpToRef(HELPER_REST, driver.rotationQuaternion ?? HELPER_REST, .5, node.rotationQuaternion!);
     node.position.copyFrom(driver.position);
@@ -1098,7 +1102,7 @@ export function updateShoulderHelpers(st: RigState) {
 }
 
 /** Bake support rotations into added clips too, so exported GLB animations need no app callbacks. */
-export function addShoulderHelperTracks(entity: Entity, group: AnimationGroup) {
+export function addHelperBoneTracks(entity: Entity, group: AnimationGroup) {
   for (const { node, driver } of entity.rig?.helpers ?? []) {
     const source = group.targetedAnimations.find(t => t.target === driver && t.animation.targetProperty === 'rotationQuaternion')?.animation;
     if (source) {

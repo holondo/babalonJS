@@ -84,8 +84,8 @@ import type { PoseJoint } from './pose';
 import { RIG_TEMPLATE } from './humanoidTemplate';
 import type { RigJoint } from './humanoidTemplate';
 import type { WeightMethod } from './rigging';
-import { SHOULDER_STRATEGIES } from './shoulderWeights';
-import type { ShoulderStrategy } from './shoulderWeights';
+import { SKIN_TREATMENTS } from './skinTreatments';
+import type { SkinTreatment } from './skinTreatments';
 import { ANIMATION_LIBRARY, ANIMATION_SOURCE, POSE_PRESETS } from './presets';
 import type { ARMode } from './ar';
 import type { GyroControl } from './gyro';
@@ -1622,16 +1622,16 @@ export class UI {
 
   private rigDeformationOptions(): Node[] {
     const r = this.editor.rigger;
-    const descriptions: Record<ShoulderStrategy, string> = {
+    const descriptions: Record<SkinTreatment, string> = {
       current: 'Uses the calculated skin weights without an additional treatment.',
       protected: 'Transfers arm influence on the trunk to nearby spine bones.',
       helper: 'Uses auxiliary bones to distribute rotation where the arms meet the trunk.',
     };
     return [
       hint(tr('Deformation treatment (experimental)')),
-      chips(SHOULDER_STRATEGIES.map(s => ({ value: s.value, label: tr(s.label) })), r.shoulderStrategy,
-        v => { if (r.progress === null && !r.comparing) { r.shoulderStrategy = v as ShoulderStrategy; this.renderPanel(); } }),
-      hint(tr(descriptions[r.shoulderStrategy])),
+      chips(SKIN_TREATMENTS.map(s => ({ value: s.value, label: tr(s.label) })), r.treatment,
+        v => { if (r.progress === null && !r.comparing) { r.treatment = v as SkinTreatment; this.renderPanel(); } }),
+      hint(tr(descriptions[r.treatment])),
     ];
   }
 
