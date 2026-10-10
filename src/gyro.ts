@@ -66,8 +66,9 @@ export class GyroControl {
     // Ignore sensor jumps (e.g. passing straight up/down)
     if (Math.abs(dYaw) > 0.5 || Math.abs(dPitch) > 0.5) return;
     const cam = this.editor.camera;
-    // Turning right walks the camera around the model to the right; tilting up looks up at it
-    cam.alpha += dYaw;
+    // Horizontal direction confirmed on a real phone (the first version felt reversed);
+    // tilting up looks up at the model
+    cam.alpha -= dYaw;
     const lower = cam.lowerBetaLimit ?? 0.01;
     const upper = cam.upperBetaLimit ?? Math.PI - 0.01;
     cam.beta = Math.min(upper, Math.max(lower, cam.beta + dPitch));

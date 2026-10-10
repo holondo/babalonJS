@@ -238,11 +238,13 @@ export class ARHud {
       if (pointers.size === 2 && pinch) {
         const now = pair();
         if (pinch.dist > 0) this.ar.scaleBy(now.dist / pinch.dist);
-        this.ar.rotateBy(-(now.angle - pinch.angle));
+        // Twisting two fingers turns the scene the same way (clockwise on screen = clockwise from above)
+        this.ar.rotateBy(now.angle - pinch.angle);
         pinch = now;
       } else if (pointers.size === 1) {
         if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > 8) moved = true;
-        if (moved) this.ar.rotateBy(dx * 0.01);
+        // The front of the scene follows the finger (dragging right turns it counterclockwise from above)
+        if (moved) this.ar.rotateBy(-dx * 0.01);
       }
     });
     const end = (ev: PointerEvent) => {
