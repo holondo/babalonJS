@@ -82,20 +82,17 @@ Camera: drag to orbit, pinch or scroll to zoom, two fingers (or right mouse butt
 
 ## Project structure
 
-- `src/core/editor.ts`: the core, with no UI. Scene, camera, loading, selection, gizmos, lights, shadows, environment, post-processing, capture, export and history.
-- `src/tools/tools.ts`: measurements (including the along-the-surface path), guides, smart guides and alignment.
-- `src/animation/animation.ts`, `src/animation/motion.ts`: clip playback; spin/float/pulse/sway.
-- `src/rigging/humanoid.ts`, `src/animation/pose.ts`, `src/animation/retarget.ts`: humanoid bone detection, posing (FK, IK, mirror, presets), playing clips made for other skeletons.
-- `src/rigging/humanoidTemplate.ts`, `src/rigging/rigging.ts`, `src/rigging/weights.ts`, `src/rigging/weights.worker.ts`: the standard skeleton, manual rigging, skin weights (heat diffusion in a Web Worker).
-- `public/animations`, `public/models`: the free animation library and Mannequin samples (CC0, see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)), made by `scripts/build-animation-library.mjs`.
-- `src/ar/ar.ts`, `src/ar/arHud.ts`: augmented reality with WebXR and its on-camera controls.
-- `src/core/project.ts`: saving/opening `.babalon` projects and autosave.
-- `src/ui/ui.ts`: panels and toolbars, plain DOM.
-- `src/ui/dom.ts`: UI helpers (slider, toggle, color, chips…).
-- `src/core/i18n.ts`: translations. Keys are the English text; add a language by adding a dictionary.
-- `src/ui/style.css`: dark glass theme, phone layout below 760px.
-- `vite.config.ts`: PWA manifest, offline cache and file handlers.
-- `public/icons`, `public/brand`: app icons and lettering, generated from the full-size artwork in `design/`.
+`src/` is grouped by domain:
+
+- `core/`: the editor core with no UI (scene, camera, loading, selection, gizmos, lights, shadows, environment, post-processing, capture, export, history), projects and autosave, shared presets, files and translations.
+- `ui/`: the interface in plain DOM. `ui.ts` is the shell (bars, dock, menus); each panel is in `ui/panels/`; `photo.ts` is photo mode; `dom.ts` has the reusable components; `style.css` is the dark glass theme with the phone layout below 760px.
+- `animation/`: clip playback, simple motion, posing (FK, IK, mirror, presets) and playing clips made for other skeletons.
+- `rigging/`: humanoid bone detection, the standard skeleton, manual rigging, joint finding and skin weights (heat diffusion in a Web Worker).
+- `ar/`: augmented reality with WebXR and its on-camera controls.
+- `tools/`: measurements (including the along-the-surface path), guides, smart guides and alignment.
+- `device/`: gyro mode and the system bar colors.
+
+Also: `vite.config.ts` (PWA manifest, offline cache and file handlers); `public/animations`, `public/models` (the free animation library and Mannequin samples, CC0, see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md), made by `scripts/build-animation-library.mjs`); `public/icons`, `public/brand` (app icons and lettering, generated from the full-size artwork in `design/`).
 
 The `editor` object is exposed on `window` for debugging from the browser console.
 

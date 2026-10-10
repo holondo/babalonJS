@@ -17,36 +17,42 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 
 ## Code map
 
-| File | Responsibility |
-| --- | --- |
-| `src/core/editor.ts` | Core with no UI: scene, camera, loading, entities, selection, gizmos, lights, shadows, environment, post-processing, capture, export, undo history, render-on-demand, AR scene state |
-| `src/tools/tools.ts` | Measurements (incl. along-the-surface path), guides, smart guides, alignment |
-| `src/animation/animation.ts` | Clip playback per object: play, pause, scrub/freeze, loop, speed, crossfade (with undo) |
-| `src/animation/motion.ts` | Simple motion for any object (spin, float, pulse, sway) on a child pivot |
-| `src/rigging/humanoid.ts` | Canonical humanoid bones (VRM names), detection from any naming convention, manual mapping, up-to-date world matrices (`worldMatrix`) |
-| `src/animation/pose.ts` | Joint math (world-space rotations, aim, two-bone IK, mirror, character frame) and pose mode (`Poser`) |
-| `src/animation/retarget.ts` | Playing clips made for another humanoid (`AnimatorAvatar` + rest-pose alignment) and clips added to objects (`ClipManager`) |
-| `src/rigging/humanoidTemplate.ts`, `src/rigging/rigging.ts` | The standard skeleton (CC0 rig) and manual rigging (`Rigger`) |
-| `src/rigging/weights.ts`, `src/rigging/weights.worker.ts`, `src/rigging/skinMath.ts` | Skin weights: envelope and heat diffusion (both in a Web Worker) |
-| `src/rigging/skinTreatments.ts` | Optional treatments where limbs meet the trunk (direct, trunk protection, helper bones) |
-| `src/rigging/bodyLandmarks.ts` | Body landmarks from horizontal sections (leg split, skeleton root, hip pivots) for Find the joints |
-| `src/rigging/deformationMap.ts` | Difference map between rig treatments (final skinned positions) |
-| `src/ui/jointOverlay.ts` | Joint handles drawn over the view (posing, rigging) |
-| `src/core/project.ts` | `.babalon` save/open and browser autosave (IndexedDB) |
-| `src/core/presets.ts` | Shared data: lighting presets, photo filters, pose presets, animation library |
-| `src/ar/ar.ts` / `src/ar/arHud.ts` | WebXR AR session / its on-camera overlay |
-| `src/device/gyro.ts` | Gyro mode (device orientation turns the camera) |
-| `src/device/systemBars.ts` | Status bar / title bar color, desktop title-bar overlay |
-| `src/core/files.ts` | Saving, sharing and receiving files (share target) |
-| `src/ui/ui.ts` | Panels, bars, menus (plain DOM) |
-| `src/ui/dom.ts` | Reusable UI components (slider, toggle, chips, segmented, menu item, buttons…) |
-| `src/core/i18n.ts` | Translations |
-| `src/ui/style.css` | Theme and layout |
-| `vite.config.ts`, `public/share-target.js` | PWA manifest, offline cache, file handlers, share target |
-| `design/` | Full-size source artwork (not shipped); `public/icons` and `public/brand` are generated from it |
-| `public/animations`, `public/models`, `scripts/build-animation-library.mjs` | Bundled CC0 clips and Mannequins, and the script that makes them (`docs/animation_sources.md`, `THIRD_PARTY_LICENSES.md`) |
+`src/` is grouped by domain. `main.ts` (startup wiring) stays at the root.
 
-Keep this split: `editor.ts` must not touch the DOM UI; `ui.ts` talks to the editor through its methods and the `changed` observable.
+| Folder | Files | Responsibility |
+| --- | --- | --- |
+| `core/` | `editor.ts` | Core with no UI: scene, camera, loading, entities, selection, gizmos, lights, shadows, environment, post-processing, capture, export, undo history, render-on-demand, AR scene state |
+| | `project.ts` | `.babalon` save/open and browser autosave (IndexedDB) |
+| | `presets.ts` | Shared data: lighting presets, photo filters, pose presets, animation library |
+| | `files.ts` | Saving, sharing and receiving files (share target) |
+| | `i18n.ts` | Translations |
+| `ui/` | `ui.ts` | The shell: top bar, dock, selection bar, menus, view controls, panel frame, project actions, autosave, keys |
+| | `panels/*.ts` | One class per panel: `add`, `objects`, `material`, `animate`, `pose`, `rig`, `tools`, `light` |
+| | `photo.ts` | Photo mode: its panel, on-screen controls, aspect frame and capture |
+| | `measureLabels.ts` | Measurement and guide labels over the 3D view |
+| | `jointOverlay.ts` | Joint handles over the 3D view (posing, rigging) |
+| | `dom.ts` | Reusable UI components (slider, toggle, chips, segmented, stepper, progress bar, menu item, buttons…) |
+| | `shared.ts` | Small helpers and types shared by the UI modules |
+| | `style.css` | Theme and layout |
+| `animation/` | `animation.ts` | Clip playback per object: play, pause, scrub/freeze, loop, speed, crossfade (with undo) |
+| | `motion.ts` | Simple motion for any object (spin, float, pulse, sway) on a child pivot |
+| | `pose.ts` | Joint math (world-space rotations, aim, two-bone IK, mirror, character frame) and pose mode (`Poser`) |
+| | `retarget.ts` | Playing clips made for another humanoid (`AnimatorAvatar` + rest-pose alignment) and clips added to objects (`ClipManager`) |
+| `rigging/` | `humanoid.ts` | Canonical humanoid bones (VRM names), detection from any naming convention, manual mapping, up-to-date world matrices (`worldMatrix`) |
+| | `humanoidTemplate.ts`, `rigging.ts` | The standard skeleton (CC0 rig) and manual rigging (`Rigger`) |
+| | `bodyLandmarks.ts` | Body landmarks from horizontal sections (leg split, skeleton root, hip pivots) for Find the joints |
+| | `weights.ts`, `weights.worker.ts`, `skinMath.ts`, `skinVisibility.ts` | Skin weights: envelope and heat diffusion (in a Web Worker) |
+| | `skinTreatments.ts` | Optional treatments where limbs meet the trunk (direct, trunk protection, helper bones) |
+| | `deformationMap.ts` | Difference map between rig treatments (final skinned positions) |
+| `ar/` | `ar.ts`, `arHud.ts` | WebXR AR session / its on-camera overlay |
+| `tools/` | `tools.ts` | Measurements (incl. along-the-surface path), guides, smart guides, alignment |
+| `device/` | `gyro.ts`, `systemBars.ts` | Gyro mode; status bar / title bar color, desktop title-bar overlay |
+
+Outside `src/`: `vite.config.ts` and `public/share-target.js` (PWA manifest, offline cache, file handlers, share target); `design/` (full-size source artwork, not shipped; `public/icons` and `public/brand` are generated from it); `public/animations`, `public/models` and `scripts/build-animation-library.mjs` (bundled CC0 clips and Mannequins, see `docs/animation_sources.md` and `THIRD_PARTY_LICENSES.md`); `scripts/check-*.mjs` (focused rigging checks).
+
+Keep these splits:
+- `core/editor.ts` must not touch the DOM UI; the UI talks to the editor through its methods and the `changed` observable. Domain modules (`animation/`, `rigging/`, `tools/`, `ar/ar.ts`) follow the same rule.
+- A panel is a class in `ui/panels/` that receives the `UI` shell and returns its content; shared state of the shell (current tab, selection bar, toasts, `quiet`, `run`) stays in `ui.ts`. New panels go there too, instead of growing `ui.ts`.
 
 ## Principles
 

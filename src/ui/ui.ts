@@ -1,27 +1,13 @@
 import {
-  ArrowDownToLine,
-  Box,
   Camera,
   ChevronDown,
   Copy,
   Ellipsis,
-  Crosshair,
-  AlignCenterHorizontal,
-  AlignCenterVertical,
-  AlignEndHorizontal,
-  AlignEndVertical,
-  AlignHorizontalDistributeCenter,
-  AlignStartHorizontal,
-  AlignStartVertical,
-  AlignVerticalDistributeCenter,
   Download,
   Group,
   Orbit,
   MonitorDown,
-  MoveHorizontal,
-  MoveVertical,
   Ruler,
-  Spline,
   FilePlus,
   FolderOpen,
   Save,
@@ -35,28 +21,15 @@ import {
   Move3d,
   Pause,
   Play,
-  Repeat,
-  ArrowRightToLine,
-  ArrowLeftRight,
-  Bone,
-  Check,
-  FileUp,
   PersonStanding,
   Plus,
   Redo2,
   Rotate3d,
   RotateCcw,
-  RotateCw,
-  Wand,
-  RefreshCw,
-  ArrowRight,
-  ArrowLeft,
   Scale3d,
   Shrink,
   Smartphone,
   Scan,
-  SlidersHorizontal,
-  Sun,
   Trash2,
   Undo2,
   Upload,
@@ -64,43 +37,30 @@ import {
   X,
 } from 'lucide';
 import type { IconNode } from 'lucide';
-import { Color3, Material, PBRMaterial, Quaternion, StandardMaterial, Vector3 } from '@babylonjs/core';
-import type { SpotLight, PointLight } from '@babylonjs/core';
-import {
-  ASPECTS,
-  DEFAULT_PHOTO,
-  ENV_PRESETS,
-  MODEL_EXTENSIONS,
-  SAMPLE_MODELS,
-  aspectRect,
-} from '../core/editor';
-import type { Editor, Entity, GroundMode, LightType, PhotoSettings, PrimitiveType, Tool } from '../core/editor';
+import { MODEL_EXTENSIONS } from '../core/editor';
+import type { Editor, Tool } from '../core/editor';
 import { PROJECT_EXT, fromZip, loadAutosave, restore, saveAutosave, snapshot, toZip } from '../core/project';
 import type { ProjectSnapshot } from '../core/project';
-import type { ClipState } from '../animation/animation';
-import type { MotionSettings, MotionType } from '../animation/motion';
 import { JointOverlay } from './jointOverlay';
-import { REQUIRED_BONES, boneLabel, humanoidOf, jointNodes, setBoneMapping, skeletonsOf } from '../rigging/humanoid';
-import type { HumanBone } from '../rigging/humanoid';
-import { mappedParent, rotationOf } from '../animation/pose';
-import type { PoseJoint } from '../animation/pose';
-import { RIG_TEMPLATE } from '../rigging/humanoidTemplate';
-import type { RigJoint } from '../rigging/humanoidTemplate';
-import type { WeightMethod } from '../rigging/rigging';
-import { SKIN_TREATMENTS } from '../rigging/skinTreatments';
-import type { SkinTreatment } from '../rigging/skinTreatments';
-import { ANIMATION_LIBRARY, ANIMATION_SOURCE, POSE_PRESETS } from '../core/presets';
+import { skeletonsOf } from '../rigging/humanoid';
 import type { ARMode } from '../ar/ar';
 import type { GyroControl } from '../device/gyro';
-import { saveAndOfferShare, timestampedName } from '../core/files';
-import { LIGHT_PRESETS, PHOTO_FILTERS } from '../core/presets';
+import { saveAndOfferShare } from '../core/files';
 import { LANGS, getLang, locale, setLang, tr } from '../core/i18n';
 import type { Lang } from '../core/i18n';
-import { button, chips, progressBar, stepper, colorInput, flashScreen, h, hint, icon, iconButton, menuItem, numberInput, row, section, segmented, select, shutterButton, slider, toggle } from './dom';
-import { UNITS } from '../tools/tools';
-import type { Axis, Edge, Guide, Measurement, Unit } from '../tools/tools';
-
-type Tab = 'add' | 'objects' | 'light' | 'tools' | 'photo';
+import { button, chips, h, icon, iconButton, menuItem, segmented } from './dom';
+import { AddPanel } from './panels/add';
+import { ObjectsPanel } from './panels/objects';
+import { MaterialPanel } from './panels/material';
+import { AnimatePanel } from './panels/animate';
+import { PosePanel } from './panels/pose';
+import { RigPanel } from './panels/rig';
+import { ToolsPanel } from './panels/tools';
+import { LightPanel } from './panels/light';
+import { PhotoMode } from './photo';
+import { MeasureLabels } from './measureLabels';
+import { KIND_ICON, fileSafe, toggleFullscreen, errorMessage } from './shared';
+import type { Tab } from './shared';
 
 /** Dock tabs. Photo isn't a tab: it's a mode, with its own panel inside photo mode. */
 const TABS: { id: Exclude<Tab, 'photo'>; label: string; icon: IconNode }[] = [
@@ -112,32 +72,24 @@ const TABS: { id: Exclude<Tab, 'photo'>; label: string; icon: IconNode }[] = [
 
 const PANEL_TITLES: Record<Tab, string> = { add: 'Add', objects: 'Objects', light: 'Light', tools: 'Tools', photo: 'Photo' };
 
-const KIND_ICON: Record<Entity['kind'], IconNode> = { model: Box, primitive: Box, light: Lightbulb };
-/** Name of a joint for lists and the selection bar. */
-function jointLabel(j: PoseJoint) {
-  return j.bone ? tr(boneLabel(j.bone)) : j.node.name;
-}
-
-/** Readable clip name: "Walk_Loop" → "Walk loop". */
-function clipLabel(name: string, i: number) {
-  const clean = name.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
-  return clean ? clean[0].toUpperCase() + clean.slice(1).toLowerCase() : tr('Animation {n}', { n: i + 1 });
-}
-const deg = (r: number) => (r * 180) / Math.PI;
-const rad = (d: number) => (d * Math.PI) / 180;
-
 export class UI {
-  private tab: Tab | null = null;
+  // Panels and modes, each in its own module
+  readonly addUI = new AddPanel(this);
+  readonly objectsUI = new ObjectsPanel(this);
+  readonly materialUI = new MaterialPanel(this);
+  readonly animateUI = new AnimatePanel(this);
+  readonly poseUI = new PosePanel(this);
+  readonly rigUI = new RigPanel(this);
+  readonly toolsUI = new ToolsPanel(this);
+  readonly lightUI = new LightPanel(this);
+  readonly photoUI = new PhotoMode(this);
+  readonly labelsUI = new MeasureLabels(this);
+
+  tab: Tab | null = null;
   private busy = false;
-  private materialIndex = 0;
-  private photoPanel = false;
-  /** Rigging, before binding: placing the joints or choosing how the skin follows them. */
-  private rigStage: 'joints' | 'skin' = 'joints';
-  /** Bind one rig, or make one copy per treatment to compare them. */
-  private rigOutput: 'single' | 'comparison' = 'single';
-  private differenceScale = .5;
+  photoPanel = false;
   /** Selected part of each panel (e.g. Object | Material), remembered per tab. */
-  private segment: Partial<Record<Tab, string>> = {};
+  segment: Partial<Record<Tab, string>> = {};
   private projectName = tr('my-scene');
   private menuOpen = false;
   /** Autosaved session found when the app opens (offered to continue). */
@@ -157,33 +109,28 @@ export class UI {
 
   private readonly topbar = h('header', { class: 'topbar' });
   private readonly dock = h('nav', { class: 'dock' });
-  private readonly panel = h('aside', { class: 'panel' });
-  private readonly selbar = h('div', { class: 'selbar' });
-  private readonly photoHud = h('div', { class: 'photo-hud' });
-  private readonly frame = h('div', { class: 'frame' });
+  readonly panel = h('aside', { class: 'panel' });
+  readonly selbar = h('div', { class: 'selbar' });
+  readonly photoHud = h('div', { class: 'photo-hud' });
+  readonly frame = h('div', { class: 'frame' });
   private readonly empty = h('div', { class: 'empty' });
   private readonly loader = h('div', { class: 'loader' });
   private readonly toasts = h('div', { class: 'toasts' });
-  private readonly labels = h('div', { class: 'mlabels' });
+  readonly labels = h('div', { class: 'mlabels' });
   /** Joint handles while posing (and rigging). */
-  private readonly jointOverlay: JointOverlay;
+  readonly jointOverlay: JointOverlay;
   /** Animation files to apply to the selected character. */
-  private readonly clipInput = h('input', { type: 'file', accept: '.glb,.gltf,.fbx,.bin', multiple: true, hidden: true });
-  /** Show the manual bone mapping even when nothing is missing. */
-  private mapBones = false;
-  private labelEls = new Map<Measurement, HTMLElement>();
-  private guideEls = new Map<Guide, HTMLElement>();
-  private draggingGuide: Guide | null = null;
+  readonly clipInput = h('input', { type: 'file', accept: '.glb,.gltf,.fbx,.bin', multiple: true, hidden: true });
   private readonly dropzone = h('div', { class: 'dropzone' }, icon(Upload, 40), h('p', {}, tr('Drop your 3D files here')));
-  private readonly fileInput = h('input', {
+  readonly fileInput = h('input', {
     type: 'file',
     multiple: true,
     accept: MODEL_EXTENSIONS.map((e) => '.' + e).join(',') + ',.bin,.png,.jpg,.jpeg,.webp,.ktx2,.mtl',
     hidden: true,
   });
 
-  private readonly editor: Editor;
-  private readonly root: HTMLElement;
+  readonly editor: Editor;
+  readonly root: HTMLElement;
 
   constructor(editor: Editor, root: HTMLElement) {
     this.editor = editor;
@@ -192,7 +139,7 @@ export class UI {
     this.clipInput.addEventListener('change', () => {
       const files = [...(this.clipInput.files ?? [])];
       this.clipInput.value = '';
-      if (files.length) this.importClips(files);
+      if (files.length) this.animateUI.importClips(files);
     });
     root.append(h('div', { class: 'titlebar-drag' }), this.menu, this.selMenu, this.projectInput);
     this.uiRestore.append(icon(Eye));
@@ -221,7 +168,7 @@ export class UI {
     editor.changed.add((kind) => {
       if (kind === 'history') return this.renderTopbar();
       if (kind === 'photo') {
-        this.buildLabels();
+        this.labelsUI.buildLabels();
         return this.renderAll();
       }
       if (kind === 'tool') return this.renderSelbar();
@@ -231,41 +178,41 @@ export class UI {
           this.toast(tr('Heat diffusion failed on this mesh: envelope weights were used.'), 'error');
         }
         this.renderSelbar();
-        this.renderPoseOverlay();
+        this.poseUI.renderPoseOverlay();
         if (kind === 'rig') this.renderTopbar();
         if (!this.busy && this.tab === 'objects') this.renderPanel();
         return;
       }
       if (kind === 'env' && editor.photoMode) {
-        this.renderPhotoHud();
-        this.renderFrame();
+        this.photoUI.renderPhotoHud();
+        this.photoUI.renderFrame();
       }
       if (this.busy) return;
       if (kind === 'env' && this.tab !== 'light') return;
-      if (kind === 'entities') this.buildLabels();
+      if (kind === 'entities') this.labelsUI.buildLabels();
       this.renderAll();
     });
     editor.tools.changed.add(() => {
-      this.buildLabels();
+      this.labelsUI.buildLabels();
       this.renderSelbar();
       this.scheduleAutosave();
       if (!this.busy && (this.tab === 'tools' || this.tab === 'objects')) this.renderPanel();
     });
     editor.scene.onAfterRenderObservable.add(() => {
-      this.updateLabels();
-      this.updateScrubber();
+      this.labelsUI.updateLabels();
+      this.animateUI.updateScrubber();
       this.jointOverlay.update();
     });
     editor.loading.add((l) => {
       this.loader.classList.toggle('show', !!l);
       if (l) this.loader.replaceChildren(h('div', { class: 'spinner' }), h('span', {}, tr('Loading {name}… {pct}%', { name: l.name, pct: Math.round(l.progress * 100) })));
     });
-    new ResizeObserver(() => this.renderFrame()).observe(root);
+    new ResizeObserver(() => this.photoUI.renderFrame()).observe(root);
     this.renderAll();
   }
 
   /** Runs a UI action without triggering a re-render (avoids losing the slider being dragged). */
-  private quiet(fn: () => void) {
+  quiet(fn: () => void) {
     this.busy = true;
     try {
       fn();
@@ -301,12 +248,12 @@ export class UI {
     this.gyro = gyro;
     gyro.changed.add(() => {
       this.renderViewStack();
-      this.renderPhotoHud();
+      this.photoUI.renderPhotoHud();
     });
     this.renderViewStack();
   }
 
-  private gyroButton(round = false) {
+  gyroButton(round = false) {
     const g = this.gyro;
     if (!g?.available) return null;
     return iconButton(Smartphone, tr('Gyro mode: move the phone to look around'), () => this.toggleGyro(), { active: g.active, cls: round ? 'round' : '' });
@@ -423,11 +370,11 @@ export class UI {
     this.renderTopbar();
     this.renderDock();
     this.renderSelbar();
-    this.renderPoseOverlay();
+    this.poseUI.renderPoseOverlay();
     this.renderViewStack();
     this.renderPanel();
-    this.renderPhotoHud();
-    this.renderFrame();
+    this.photoUI.renderPhotoHud();
+    this.photoUI.renderFrame();
     this.uiRestore.title = this.uiRestore.ariaLabel = tr('Show interface');
     const hasObjects = this.editor.entities.some((e) => e.kind !== 'light');
     this.empty.classList.toggle('show', !hasObjects && !this.editor.photoMode);
@@ -597,7 +544,7 @@ export class UI {
 
   /** Hands a file to the user: share sheet on phones (when possible) or download. */
   /** Saves the file to the device right away, and offers sharing it for a few seconds. */
-  private deliver(blob: Blob, name: string, message: string) {
+  deliver(blob: Blob, name: string, message: string) {
     const share = saveAndOfferShare(blob, name);
     this.toast(message, 'info', share ? { label: tr('Share'), run: share } : undefined, 7000);
   }
@@ -615,7 +562,7 @@ export class UI {
     this.tab = this.tab === tab ? null : tab;
     this.renderDock();
     this.renderPanel();
-    this.buildLabels();
+    this.labelsUI.buildLabels();
   }
 
   private renderDock() {
@@ -631,7 +578,7 @@ export class UI {
     );
   }
 
-  private renderSelbar() {
+  renderSelbar() {
     const ed = this.editor;
     const e = ed.selected;
     if (ed.tools.measureMode && !ed.photoMode) {
@@ -641,8 +588,8 @@ export class UI {
         h('div', { class: 'sel-tools' }, button(tr('Done'), () => ed.tools.setMeasureMode(false), { cls: 'small primary' })),
       );
     }
-    if (ed.rigger.active && !ed.photoMode) return this.renderRigBar();
-    if (ed.pose.active && !ed.photoMode) return this.renderPoseBar();
+    if (ed.rigger.active && !ed.photoMode) return this.rigUI.renderRigBar();
+    if (ed.pose.active && !ed.photoMode) return this.poseUI.renderPoseBar();
     const multi = iconButton(Group, tr('Multi-select (or Shift+click)'), () => ed.setMultiSelect(!ed.multiSelect), { active: ed.multiSelect });
     this.selbar.classList.toggle('show', (!!e || ed.multiSelect) && !ed.photoMode);
     if (!e) return this.selbar.replaceChildren(h('div', { class: 'sel-name wide' }, h('span', {}, tr('Tap objects to select'))), h('div', { class: 'sel-tools' }, multi));
@@ -672,154 +619,6 @@ export class UI {
     if (this.selMenuOpen) this.toggleSelMenu(true);
   }
 
-  /** Selection bar while posing: the joint, how to move it, and Done. */
-  private renderPoseBar() {
-    const p = this.editor.pose;
-    const j = p.joint;
-    this.selbar.classList.add('show');
-    const tool = (t: 'rotate' | 'move', node: IconNode, label: string, title = label) => iconButton(node, title, () => p.setTool(t), { active: p.tool === t, label, cls: 'tool' });
-    this.selbar.replaceChildren(
-      h('div', { class: 'sel-name always' }, icon(Bone, 16), h('span', {}, j ? jointLabel(j) : tr('Tap a joint'))),
-      h(
-        'div',
-        { class: 'sel-tools' },
-        j ? tool('rotate', Rotate3d, tr('Turn')) : null,
-        j && p.canMove() ? tool('move', Move3d, tr('Drag'), tr('Drag the hand or foot: the arm or leg follows')) : null,
-        p.human ? iconButton(ArrowLeftRight, tr('Mirror pose'), () => p.mirror()) : null,
-        h('span', { class: 'sep' }),
-        button(tr('Done'), () => p.stop(), { icon: Check, cls: 'small primary' }),
-      ),
-    );
-  }
-
-  /** Selection bar while rigging: the step, its main action and cancel. */
-  /** Rigging step: 1 joints, 2 skin, 3 check. */
-  private get rigStep() {
-    const r = this.editor.rigger;
-    return r.step === 'check' ? 3 : this.rigStage === 'skin' ? 2 : 1;
-  }
-
-  /** The Rig part is on screen (then the steps and actions live in the panel, not the bar). */
-  private get rigPanelShown() {
-    const ed = this.editor;
-    return !ed.photoMode && this.tab === 'objects' && this.segment.objects === 'rig' && ed.rigger.entity === ed.selected;
-  }
-
-  /** Actions of the current rigging step (shared by the panel footer and the floating bar). */
-  private rigActions(): HTMLElement[] {
-    const r = this.editor.rigger;
-    if (r.progress !== null || r.comparing) return [button(tr('Stop'), () => r.stopComputing(), { icon: X, cls: 'small' })];
-    const comparison = this.rigOutput === 'comparison' && !!r.entity?.source;
-    const back = (run: () => void) => button(tr('Back'), run, { icon: ArrowLeft, cls: 'small ghost' });
-    switch (this.rigStep) {
-      case 1:
-        return [button(tr('Next'), () => this.setRigStage('skin'), { icon: ArrowRight, cls: 'small primary' })];
-      case 2:
-        return [back(() => this.setRigStage('joints')), button(tr(comparison ? 'Compare' : 'Apply rig'), () => this.applyRig(), { icon: comparison ? Copy : Check, cls: 'small primary' })];
-      default:
-        return [back(() => (r.adjust(), this.setRigStage('joints'))), button(tr('Done'), () => this.confirmRig(), { icon: Check, cls: 'small primary' })];
-    }
-  }
-
-  /** Floating bar while rigging, only when the Rig panel is closed (e.g. on a phone). */
-  private renderRigBar() {
-    const r = this.editor.rigger;
-    if (this.rigPanelShown) {
-      this.selbar.classList.remove('show');
-      return this.selbar.replaceChildren();
-    }
-    this.selbar.classList.add('show');
-    const titles = ['', tr('Joints'), tr('Skin'), tr('Check')];
-    const computing = r.progress !== null || r.comparing;
-    this.selbar.replaceChildren(
-      h(
-        'div',
-        { class: 'sel-name always' },
-        h('b', { class: 'step-count' }, `${this.rigStep}/3`),
-        h('span', {}, computing ? tr('Computing weights… {pct}%', { pct: Math.round((r.progress ?? 0) * 100) }) : titles[this.rigStep]),
-      ),
-      h('div', { class: 'sel-tools' }, ...this.rigActions(), iconButton(X, tr('Cancel rigging'), () => r.cancel())),
-    );
-  }
-
-  /** Steps at the top of the Rig panel; finished steps can be revisited. */
-  private rigStepper() {
-    const r = this.editor.rigger;
-    const busy = r.progress !== null || r.comparing;
-    const go = (to: number) => {
-      if (busy || to === this.rigStep) return;
-      if (this.rigStep === 3) r.adjust();
-      if (to === 1) this.setRigStage('joints');
-      else if (to === 2) this.setRigStage('skin');
-    };
-    return stepper([tr('Joints'), tr('Skin'), tr('Check')], this.rigStep - 1, (i) => go(i + 1), busy ? -1 : Math.max(1, this.rigStep - 1));
-  }
-
-  /** Bottom of the Rig panel: cancel on the left, the step's actions on the right. */
-  private rigFooter() {
-    const r = this.editor.rigger;
-    return h('div', { class: 'panel-foot' }, button(tr('Cancel'), () => r.cancel(), { cls: 'small ghost' }), h('span', { class: 'grow' }), ...this.rigActions());
-  }
-
-  private setRigStage(stage: 'joints' | 'skin') {
-    this.rigStage = stage;
-    this.renderRigBar();
-    this.renderPoseOverlay();
-    if (this.tab === 'objects') this.renderPanel();
-  }
-
-  /** Joint handles over the posed object (or the skeleton being placed while rigging). */
-  private renderPoseOverlay() {
-    const ed = this.editor;
-    const p = ed.pose;
-    const r = ed.rigger;
-    if (r.active && r.step === 'place' && !ed.cleanView) return this.renderRigOverlay();
-    if (!p.active || ed.cleanView) return this.jointOverlay.clear();
-    const joints = p.joints();
-    const map = p.human;
-    const id = (j: PoseJoint) => String(joints.indexOf(j));
-    const byNode = new Map(joints.map((j) => [j.node, j]));
-    this.jointOverlay.set(
-      joints.map((j) => {
-        let parent: PoseJoint | undefined;
-        if (map && j.bone) {
-          const pb = mappedParent(map, j.bone);
-          parent = pb ? joints.find((x) => x.bone === pb) : undefined;
-        } else {
-          parent = byNode.get(j.node.parent as never);
-        }
-        return {
-          id: id(j),
-          position: () => j.node.getAbsolutePosition(),
-          parent: parent ? id(parent) : undefined,
-          label: jointLabel(j),
-          cls: `${p.joint?.node === j.node ? 'active' : ''} ${p.canMove(j) ? 'ik' : ''}`,
-        };
-      }),
-      { onPick: (i) => p.selectJoint(p.joint?.node === joints[+i].node ? null : joints[+i]) },
-    );
-  }
-
-  /** Template joints to drag onto the model; the joints that follow them are shown smaller. */
-  private renderRigOverlay() {
-    const r = this.editor.rigger;
-    this.jointOverlay.set(
-      RIG_TEMPLATE.map((j) => ({
-        id: j.id,
-        position: () => r.jointWorld(j.id),
-        parent: j.parent ?? undefined,
-        label: tr(boneLabel(j.id as HumanBone)),
-        cls: `${j.handle ? '' : 'auto'} ${j.id.startsWith('left') ? 'side' : ''} ${r.selected === j.id ? 'active' : ''}`,
-      })),
-      {
-        onPick: (id) => r.selectJoint(id as RigJoint),
-        onDragStart: () => r.remember(),
-        onDrag: (id, x, y) => r.dragJoint(id as RigJoint, x, y),
-        onDragEnd: (id) => r.endDrag(id as RigJoint),
-      },
-    );
-  }
-
   /** Secondary selection actions, one level deep. */
   private toggleSelMenu(open = !this.selMenuOpen) {
     const ed = this.editor;
@@ -840,7 +639,7 @@ export class UI {
       ...(e.animationGroups.length && ed.selection.length === 1
         ? [ed.anim.isPlaying(e) ? item(Pause, tr('Pause animation'), () => ed.anim.pause(e)) : item(Play, tr('Play animation'), () => ed.anim.play(e))]
         : []),
-      ...(skeletonsOf(e).length ? [item(PersonStanding, tr('Pose joints'), () => this.startPosing(e))] : []),
+      ...(skeletonsOf(e).length ? [item(PersonStanding, tr('Pose joints'), () => this.poseUI.startPosing(e))] : []),
       item(Group, tr('Multi-select'), () => (ed.setMultiSelect(!ed.multiSelect), this.toggleSelMenu(true)), { on: ed.multiSelect, keep: true }),
       item(Magnet, tr('Snap to grid'), () => (ed.setSnap(!ed.snap), this.toggleSelMenu(true)), { on: ed.snap, keep: true }),
     );
@@ -863,7 +662,7 @@ export class UI {
   }
 
   /** Hides every control (any screen); a faint button brings them back. Gestures keep working. */
-  private setUiHidden(on: boolean) {
+  setUiHidden(on: boolean) {
     this.uiHidden = on;
     document.body.classList.toggle('ui-hidden', on);
     if (on) {
@@ -872,7 +671,7 @@ export class UI {
     }
   }
 
-  private renderPanel() {
+  renderPanel() {
     const ed = this.editor;
     const tab: Tab | null = ed.photoMode ? (this.photoPanel ? 'photo' : null) : this.tab;
     this.panel.classList.toggle('show', !!tab);
@@ -901,13 +700,13 @@ export class UI {
               this.segment[tab] = id;
               this.panel.querySelector('.panel-body')!.scrollTop = 0;
               this.renderPanel();
-              this.buildLabels();
+              this.labelsUI.buildLabels();
             }),
           ]
         : []),
-      ...(rigging ? [this.rigStepper()] : []),
+      ...(rigging ? [this.rigUI.rigStepper()] : []),
       body,
-      ...(rigging ? [this.rigFooter()] : []),
+      ...(rigging ? [this.rigUI.rigFooter()] : []),
     );
     body.scrollTop = scroll;
     if (ed.rigger.active) this.renderSelbar();
@@ -951,1199 +750,33 @@ export class UI {
   private panelContent(tab: Tab, part: string): (Node | null)[] {
     switch (tab) {
       case 'add':
-        return this.addPanel();
+        return this.addUI.addPanel();
       case 'objects':
-        if (part === 'material') return this.materialPanel();
-        if (part === 'animate') return this.animatePanel();
-        if (part === 'pose') return this.posePanel();
-        if (part === 'rig') return this.rigPanel();
-        return this.scenePanel();
+        if (part === 'material') return this.materialUI.materialPanel();
+        if (part === 'animate') return this.animateUI.animatePanel();
+        if (part === 'pose') return this.poseUI.posePanel();
+        if (part === 'rig') return this.rigUI.rigPanel();
+        return this.objectsUI.scenePanel();
       case 'light':
-        return part === 'environment' ? this.envPanel() : this.lightsPanel();
+        return part === 'environment' ? this.lightUI.envPanel() : this.lightUI.lightsPanel();
       case 'photo': {
         // [enter, filters, camera, light & color, effects, depth of field, reset]
-        const all = this.photoPanelContent();
+        const all = this.photoUI.photoPanelContent();
         return part === 'camera' ? [all[2], all[5]] : [all[0], all[1], all[3], all[4], all[6]];
       }
       case 'tools': {
-        const [measure, guides, align] = this.toolsPanel();
+        const [measure, guides, align] = this.toolsUI.toolsPanel();
         return [part === 'guides' ? guides : part === 'align' ? align : measure];
       }
     }
   }
 
-  // ---------- Add ----------
-
-  private addPanel() {
-    const ed = this.editor;
-    const prims: { id: PrimitiveType; label: string }[] = [
-      { id: 'box', label: tr('Cube') },
-      { id: 'sphere', label: tr('Sphere') },
-      { id: 'cylinder', label: tr('Cylinder') },
-      { id: 'cone', label: tr('Cone') },
-      { id: 'torus', label: tr('Torus') },
-      { id: 'plane', label: tr('Plane') },
-    ];
-    const lights: { id: LightType; label: string }[] = [
-      { id: 'point', label: tr('Point') },
-      { id: 'spot', label: tr('Spotlight') },
-      { id: 'directional', label: tr('Sun') },
-    ];
-    return [
-      section(
-        tr('Your files'),
-        h(
-          'button',
-          { class: 'upload', onClick: () => this.fileInput.click() },
-          icon(Upload, 28),
-          h('b', {}, tr('Choose files')),
-          h('small', {}, MODEL_EXTENSIONS.map((e) => e.toUpperCase()).join(' · ')),
-        ),
-        hint(tr('For .gltf with separate textures, select the .gltf together with its .bin and images.')),
-      ),
-      section(
-        tr('Sample models'),
-        h(
-          'div',
-          { class: 'grid' },
-          ...SAMPLE_MODELS.map((m) =>
-            h('button', {
-              class: 'card',
-              onClick: async () => {
-                try {
-                  await ed.addFromUrl(m.url, tr(m.label));
-                } catch (e) {
-                  this.toast(errorMessage(e), 'error');
-                }
-              },
-            }, tr(m.label)),
-          ),
-        ),
-      ),
-      section(tr('Shapes'), h('div', { class: 'grid' }, ...prims.map((p) => h('button', { class: 'card', onClick: () => ed.addPrimitive(p.id) }, p.label)))),
-      section(tr('Lights'), h('div', { class: 'grid' }, ...lights.map((l) => h('button', { class: 'card', onClick: () => ed.addLight(l.id) }, l.label)))),
-    ];
-  }
-
-  // ---------- Scene ----------
-
-  private scenePanel() {
-    const ed = this.editor;
-    const list = h(
-      'ul',
-      { class: 'outliner' },
-      ...ed.entities.map((e) =>
-        h(
-          'li',
-          { class: e === ed.selected ? 'active' : '', onClick: () => ed.select(e) },
-          icon(KIND_ICON[e.kind], 16),
-          h('span', {}, e.name),
-          iconButton(e.visible ? Eye : EyeOff, e.visible ? tr('Hide') : tr('Show'), () => ed.setVisible(e, !e.visible), { cls: 'mini' }),
-        ),
-      ),
-    );
-    list.querySelectorAll('.mini').forEach((b) => b.addEventListener('click', (ev) => ev.stopPropagation()));
-    const out: (Node | null)[] = [
-      section(tr('Objects in scene'), ed.entities.length ? list : hint(tr('The scene is empty.')), row(button(tr('Clear scene'), () => confirm(tr('Remove everything from the scene?')) && ed.clearScene(), { icon: Trash2, cls: 'ghost' }))),
-    ];
-    const e = ed.selected;
-    if (!e) {
-      out.push(hint(tr('Tap an object in the scene to select it. Double-tap to focus.')));
-      return out;
-    }
-    out.push(this.transformSection(e));
-    if (e.kind === 'light') out.push(this.lightControls(e));
-    else out.push(this.objectSection(e));
-    return out;
-  }
-
-  private transformSection(e: Entity) {
-    const ed = this.editor;
-    const commit = () => this.quiet(() => ed.endTransform());
-    const nameInput = h('input', { type: 'text', value: e.name, class: 'name' });
-    nameInput.addEventListener('change', () => ed.rename(e, nameInput.value.trim()));
-    const euler = ed.getEuler(e);
-    const rot = { x: deg(euler.x), y: deg(euler.y), z: deg(euler.z) };
-    const setRot = () => ed.editTransform((r) => r.rotationQuaternion!.copyFrom(Quaternion.FromEulerAngles(rad(rot.x), rad(rot.y), rad(rot.z))));
-    const angle = { min: -180, max: 180, step: 1, format: (v: number) => `${Math.round(v)}°`, onCommit: commit };
-    const turn = (axis: 'x' | 'y' | 'z') => () =>
-      ed.editTransform((r) => {
-        const axes = { x: Vector3.Right(), y: Vector3.Up(), z: Vector3.Forward() };
-        r.rotationQuaternion = Quaternion.RotationAxis(axes[axis], Math.PI / 2).multiply(r.rotationQuaternion!);
-      }, true);
-    const p = e.root.position;
-    return section(
-      tr('Transform'),
-      nameInput,
-      slider(tr('Position X'), p.x, { min: -20, max: 20, step: 0.01, onCommit: commit }, (v) => ed.editTransform((r) => (r.position.x = v))),
-      slider(tr('Height'), p.y, { min: -5, max: 20, step: 0.01, onCommit: commit }, (v) => ed.editTransform((r) => (r.position.y = v))),
-      slider(tr('Position Z'), p.z, { min: -20, max: 20, step: 0.01, onCommit: commit }, (v) => ed.editTransform((r) => (r.position.z = v))),
-      slider(tr('Turn (Y)'), rot.y, angle, (v) => ((rot.y = v), setRot())),
-      slider(tr('Tilt (X)'), rot.x, angle, (v) => ((rot.x = v), setRot())),
-      slider(tr('Roll (Z)'), rot.z, angle, (v) => ((rot.z = v), setRot())),
-      e.kind !== 'light'
-        ? slider(
-            tr('Scale'),
-            e.root.scaling.x,
-            {
-              min: -2,
-              max: 1.3,
-              step: 0.005,
-              toSlider: (v) => Math.log10(Math.max(v, 0.01)),
-              fromSlider: (v) => Math.pow(10, v),
-              format: (v) => `${v.toFixed(2)}×`,
-              onCommit: commit,
-            },
-            (v) => ed.editTransform((r) => r.scaling.scaleInPlace(v / (r.scaling.x || 1))),
-          )
-        : null,
-      row(
-        button('90° X', turn('x'), { cls: 'small' }),
-        button('90° Y', turn('y'), { cls: 'small' }),
-        button('90° Z', turn('z'), { cls: 'small' }),
-      ),
-      row(
-        e.kind !== 'light' ? button(tr('Drop to floor'), () => ed.dropToGround(), { icon: ArrowDownToLine, cls: 'small' }) : null,
-        button(tr('Reset'), () => ed.resetTransform(), { icon: RotateCcw, cls: 'small' }),
-      ),
-      e.kind !== 'light' ? this.sizeFields(e) : null,
-    );
-  }
-
-  /** Width/height/depth in the chosen unit; editing one scales the object uniformly. */
-  private sizeFields(e: Entity) {
-    const ed = this.editor;
-    const tools = ed.tools;
-    const size = ed.boundsOf(e).size;
-    const field = (axis: Axis, label: string) =>
-      numberInput(label, tools.toUnit(size[axis]), { suffix: tools.unit }, (v) => ed.setDimension(e, axis, tools.fromUnit(v)));
-    return h('div', { class: 'dims' }, field('x', tr('Width')), field('y', tr('Height')), field('z', tr('Depth')));
-  }
-
-  // ---------- Tools: measure, guides, align ----------
-
-  private toolsPanel() {
-    const ed = this.editor;
-    const tools = ed.tools;
-    const q = (fn: () => void) => this.quiet(fn);
-    const units = (Object.keys(UNITS) as Unit[]).map((u) => ({ value: u, label: u }));
-    const out: (Node | null)[] = [
-      section(
-        tr('Measure'),
-        button(tools.measureMode ? tr('Stop measuring') : tr('Measure distance'), () => tools.setMeasureMode(!tools.measureMode), {
-          icon: Ruler,
-          cls: `wide ${tools.measureMode ? 'primary' : ''}`,
-        }),
-        hint(tr('Tap two points: on a model they stick to its surface, elsewhere they land on the floor. Drag the points to adjust.')),
-        toggle(tr('Follow the surface'), tools.surfaceDefault, (v) => (tools.surfaceDefault = v)),
-        toggle(tr('Snap to vertices'), tools.snapVertices, (v) => (tools.snapVertices = v)),
-        chips(units, tools.unit, (v) => tools.setUnit(v)),
-        tools.measurements.length
-          ? h('ul', { class: 'outliner' }, ...tools.measurements.map((m, i) => this.measurementRow(m, i)))
-          : null,
-        tools.measurements.length ? row(button(tr('Clear measurements'), () => tools.clearMeasurements(), { icon: Trash2, cls: 'small ghost' })) : null,
-      ),
-      section(
-        tr('Guides'),
-        toggle(tr('Smart guides (snap while moving)'), tools.smartGuides, (v) => q(() => tools.setSmartGuides(v))),
-        row(
-          button(tr('Height'), () => tools.addGuide('y'), { icon: AlignVerticalDistributeCenter, cls: 'small' }),
-          button('X', () => tools.addGuide('x'), { icon: AlignHorizontalDistributeCenter, cls: 'small' }),
-          button('Z', () => tools.addGuide('z'), { icon: AlignHorizontalDistributeCenter, cls: 'small' }),
-        ),
-        tools.guides.length ? null : hint(tr('Guides are planes you can align objects to. With an object selected, a new guide starts at its top (height) or center (X/Z).')),
-        ...tools.guides.map((g) => this.guideRow(g)),
-      ),
-      this.alignSection(),
-    ];
-    return out;
-  }
-
-  private measurementRow(m: Measurement, i: number) {
-    const tools = this.editor.tools;
-    const row = h(
-      'li',
-      { class: m === tools.active ? 'active' : '', onClick: () => tools.setActive(m) },
-      icon(m.path ? Spline : Ruler, 16),
-      h('span', {}, `${i + 1}. ${tools.format(m.length)}${m.surfaceFailed ? ' · ' + tr('straight') : ''}`),
-      iconButton(Spline, tr('Follow the surface'), () => tools.setSurface(m, !m.surface), { cls: 'mini', active: m.surface }),
-      iconButton(Trash2, tr('Delete'), () => tools.removeMeasurement(m), { cls: 'mini' }),
-    );
-    row.querySelectorAll('.mini').forEach((b) => b.addEventListener('click', (ev) => ev.stopPropagation()));
-    return row;
-  }
-
-  private guideRow(g: Guide) {
-    const ed = this.editor;
-    const tools = ed.tools;
-    const name = g.axis === 'y' ? tr('Height') : g.axis.toUpperCase();
-    const sel = ed.selected && ed.selected.kind !== 'light';
-    const edge = (label: string, e: Edge) => button(label, () => tools.guideToSelection(g, e), { cls: 'small' });
-    return h(
-      'div',
-      { class: 'guide' },
-      h(
-        'div',
-        { class: 'guide-head' },
-        numberInput(tr('Guide {name}', { name }), tools.toUnit(g.value), { suffix: tools.unit }, (v) => {
-          tools.setGuideValue(g, tools.fromUnit(v));
-          tools.changed.notifyObservers();
-        }),
-        iconButton(Trash2, tr('Delete'), () => tools.removeGuide(g), { cls: 'mini' }),
-      ),
-      sel
-        ? row(
-            edge(g.axis === 'y' ? tr('Bottom') : tr('Min'), 'min'),
-            edge(tr('Center'), 'center'),
-            edge(g.axis === 'y' ? tr('Top') : tr('Max'), 'max'),
-          )
-        : null,
-    );
-  }
-
-  private alignSection() {
-    const ed = this.editor;
-    const tools = ed.tools;
-    const items = ed.selection.filter((e) => e.kind !== 'light');
-    if (items.length < 2) {
-      return section(
-        tr('Align & match'),
-        hint(tr('Select 2 or more objects (multi-select button or Shift+click). The first one selected is the reference.')),
-        row(button(tr('Multi-select'), () => ed.setMultiSelect(!ed.multiSelect), { icon: Group, cls: `small ${ed.multiSelect ? 'primary' : ''}` })),
-      );
-    }
-    const a = (node: IconNode, label: string, axis: Axis, edge: Edge) => iconButton(node, label, () => tools.align(axis, edge), { cls: 'boxed' });
-    return section(
-      tr('Align & match'),
-      h('p', { class: 'stats' }, tr('Reference: {name}', { name: items[0].name })),
-      h('div', { class: 'align-grid' },
-        h('span', {}, 'X'),
-        a(AlignStartVertical, tr('Align left'), 'x', 'min'),
-        a(AlignCenterVertical, tr('Align centers'), 'x', 'center'),
-        a(AlignEndVertical, tr('Align right'), 'x', 'max'),
-        h('span', {}, tr('Height')),
-        a(AlignEndHorizontal, tr('Align bottoms'), 'y', 'min'),
-        a(AlignCenterHorizontal, tr('Align middles'), 'y', 'center'),
-        a(AlignStartHorizontal, tr('Align tops'), 'y', 'max'),
-        h('span', {}, 'Z'),
-        a(AlignStartVertical, tr('Align backs'), 'z', 'min'),
-        a(AlignCenterVertical, tr('Align centers'), 'z', 'center'),
-        a(AlignEndVertical, tr('Align fronts'), 'z', 'max'),
-      ),
-      h('h4', {}, tr('Match the reference')),
-      row(
-        button(tr('Height'), () => tools.matchSize('y'), { cls: 'small' }),
-        button(tr('Width'), () => tools.matchSize('x'), { cls: 'small' }),
-        button(tr('Depth'), () => tools.matchSize('z'), { cls: 'small' }),
-        button(tr('Scale'), () => tools.matchScale(), { cls: 'small' }),
-      ),
-      row(
-        button(tr('Stack on top'), () => tools.stackOnTop(), { icon: AlignEndHorizontal, cls: 'small' }),
-        button(tr('Drop to floor'), () => tools.dropToFloor(), { icon: ArrowDownToLine, cls: 'small' }),
-      ),
-      items.length >= 3
-        ? row(
-            button(tr('Distribute X'), () => tools.distribute('x'), { icon: AlignHorizontalDistributeCenter, cls: 'small' }),
-            button(tr('Distribute Z'), () => tools.distribute('z'), { icon: AlignHorizontalDistributeCenter, cls: 'small' }),
-          )
-        : null,
-    );
-  }
-
-  // ---------- Measurement labels ----------
-
-  /** Recreates the floating labels (one per measurement); positions are updated every frame. */
-  private buildLabels() {
-    const tools = this.editor.tools;
-    // Don't rebuild under the finger while a guide is being dragged
-    if (this.draggingGuide) return;
-    this.labels.replaceChildren();
-    this.labelEls.clear();
-    this.guideEls.clear();
-    if (this.editor.photoMode) return;
-    // Guide handles only matter while editing guides: show them with the Tools tab open
-    const guides = this.tab === 'tools' ? tools.guides : [];
-    for (const g of guides) {
-      const active = g === tools.activeGuide;
-      const el = h(
-        'div',
-        { class: `glabel ${active ? 'active' : ''}`, title: tr('Drag to move the guide') },
-        icon(g.axis === 'y' ? MoveVertical : MoveHorizontal, 14),
-        h('span', { class: 'gtext' }),
-        active ? iconButton(X, tr('Delete'), () => tools.removeGuide(g), { cls: 'mini' }) : null,
-      );
-      el.querySelectorAll('.mini').forEach((b) => b.addEventListener('pointerdown', (ev) => ev.stopPropagation()));
-      this.makeGuideDraggable(g, el);
-      this.labels.append(el);
-      this.guideEls.set(g, el);
-    }
-    for (const m of tools.measurements) {
-      const active = m === tools.active;
-      const el = h(
-        'div',
-        { class: `mlabel ${active ? 'active' : ''}`, onClick: () => tools.setActive(active ? null : m) },
-        h('span', { class: 'mtext' }),
-        active ? iconButton(Spline, tr('Follow the surface'), () => tools.setSurface(m, !m.surface), { cls: 'mini', active: m.surface }) : null,
-        active ? iconButton(X, tr('Delete'), () => tools.removeMeasurement(m), { cls: 'mini' }) : null,
-      );
-      el.querySelectorAll('.mini').forEach((b) => b.addEventListener('click', (ev) => ev.stopPropagation()));
-      this.labels.append(el);
-      this.labelEls.set(m, el);
-    }
-  }
-
-  /** Dragging the chip moves the guide along its axis (works with mouse and touch). */
-  private makeGuideDraggable(g: Guide, el: HTMLElement) {
-    const tools = this.editor.tools;
-    let offset = { x: 0, y: 0 };
-    let start = { x: 0, y: 0 };
-    let moved = false;
-    el.addEventListener('pointerdown', (ev) => {
-      start = { x: ev.clientX, y: ev.clientY };
-      moved = false;
-      ev.preventDefault();
-      ev.stopPropagation();
-      el.setPointerCapture(ev.pointerId);
-      const rect = this.editor.engine.getRenderingCanvas()!.getBoundingClientRect();
-      const handle = this.editor.toScreen(tools.guideHandle(g));
-      offset = { x: ev.clientX - rect.left - handle.x, y: ev.clientY - rect.top - handle.y };
-      this.draggingGuide = g;
-      el.classList.add('dragging');
-    });
-    el.addEventListener('pointermove', (ev) => {
-      if (this.draggingGuide !== g) return;
-      if (!moved && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 4) return;
-      moved = true;
-      const rect = this.editor.engine.getRenderingCanvas()!.getBoundingClientRect();
-      tools.dragGuide(g, ev.clientX - rect.left - offset.x, ev.clientY - rect.top - offset.y);
-    });
-    const end = () => {
-      if (this.draggingGuide !== g) return;
-      this.draggingGuide = null;
-      el.classList.remove('dragging');
-      // A tap (no drag) expands/collapses the chip
-      if (!moved) tools.setActiveGuide(tools.activeGuide === g ? null : g);
-      else tools.changed.notifyObservers();
-    };
-    el.addEventListener('pointerup', end);
-    el.addEventListener('pointercancel', end);
-  }
-
-  private updateLabels() {
-    const ed = this.editor;
-    const tools = ed.tools;
-    // Keep guide chips inside the free area of the screen (not under bars or the panel)
-    const canvas = ed.engine.getRenderingCanvas()!;
-    const panelOpen = this.panel.classList.contains('show') && canvas.clientWidth > 760;
-    const minX = 80;
-    const maxX = canvas.clientWidth - (panelOpen ? 360 + 80 : 80);
-    const minY = 130;
-    const maxY = canvas.clientHeight - (canvas.clientWidth > 760 ? 110 : this.panel.classList.contains('show') ? canvas.clientHeight * 0.55 : 110);
-    for (const [g, el] of this.guideEls) {
-      const s = ed.toScreen(tools.guideHandle(g));
-      const x = Math.min(Math.max(s.x, minX), Math.max(minX, maxX));
-      const y = Math.min(Math.max(s.y, minY), Math.max(minY, maxY));
-      el.style.display = s.visible || this.draggingGuide === g ? '' : 'none';
-      el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
-      const text = `${g.axis === 'y' ? tr('Height') : g.axis.toUpperCase()} ${tools.format(g.value)}`;
-      const span = el.querySelector('.gtext') as HTMLElement;
-      if (span.textContent !== text) span.textContent = text;
-    }
-    for (const [m, el] of this.labelEls) {
-      const alive = (!m.a.entity || ed.entities.includes(m.a.entity)) && (!m.b.entity || ed.entities.includes(m.b.entity));
-      const s = ed.toScreen(tools.labelPoint(m));
-      el.style.display = alive && s.visible ? '' : 'none';
-      el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -150%)`;
-      const text = tools.format(m.length) + (m.surfaceFailed ? ` · ${tr('straight')}` : m.path ? ` · ${tr('surface')}` : '');
-      const span = el.firstElementChild as HTMLElement;
-      if (span.textContent !== text) span.textContent = text;
-    }
-  }
-
-  private objectSection(e: Entity) {
-    const ed = this.editor;
-    const s = ed.stats(e);
-    const nodes: (Node | null)[] = [
-      toggle(tr('Casts shadow'), e.castShadows, (v) => ed.setCastShadows(e, v)),
-      toggle(tr('Wireframe'), ed.materialsOf(e).some((m) => m.wireframe), (v) => ed.setWireframe(e, v)),
-      h('p', { class: 'stats' }, tr('{vertices} vertices · {faces} faces · {materials} materials', { vertices: s.vertices.toLocaleString(locale()), faces: s.faces.toLocaleString(locale()), materials: s.materials })),
-    ];
-    return section(tr('Object'), ...nodes);
-  }
-
-  // ---------- Animate ----------
-
-  /** Live scrubber of the selected object's clip (moves while the clip plays). */
-  private scrubber: { entity: Entity; input: HTMLInputElement; out: HTMLOutputElement; fps: number } | null = null;
-
-  private animatePanel(): (Node | null)[] {
-    const ed = this.editor;
-    const e = ed.selected;
-    this.scrubber = null;
-    if (!e) return [];
-    const out: (Node | null)[] = [];
-    const a = ed.anim;
-    const clips = a.clips(e);
-    const g = a.current(e);
-    if (clips.length && g) {
-      const st = a.state(e);
-      const fps = g.targetedAnimations[0]?.animation.framePerSecond || 60;
-      const seconds = (f: number) => `${((f - g.from) / fps).toFixed(2)} s`;
-      let before: ClipState | null = null;
-      const scrub = slider(
-        tr('Frame'),
-        st.frame,
-        {
-          min: g.from,
-          max: g.to,
-          step: 0.5,
-          format: seconds,
-          onCommit: () => {
-            if (before) this.quiet(() => a.seek(e, a.frame(e), before!));
-            before = null;
-            this.renderSelbar();
-            this.renderPanel();
-          },
-        },
-        (v) => {
-          before ??= a.state(e);
-          this.quiet(() => a.seek(e, v));
-        },
-      );
-      this.scrubber = { entity: e, input: scrub.querySelector('input')!, out: scrub.querySelector('output')!, fps };
-      let speedBefore: ClipState | null = null;
-      out.push(
-        section(
-          tr('Clips'),
-          chips(
-            clips.map((c, i) => {
-              // Library clips show their friendly name
-              const from = e.addedClips?.find((x) => x.group === c)?.from;
-              const lib = from && 'library' in from ? ANIMATION_LIBRARY.find((l) => l.id === from.library) : undefined;
-              return { value: String(i), label: lib ? tr(lib.label) : clipLabel(c.name, i) };
-            }),
-            String(st.index),
-            (v) => a.select(e, +v),
-          ),
-          row(
-            button(st.playing ? tr('Pause') : tr('Play'), () => a.toggle(e), { icon: st.playing ? Pause : Play, cls: 'small primary' }),
-            button(st.loop ? tr('Loop') : tr('Once'), () => a.setLoop(e, !st.loop), { icon: st.loop ? Repeat : ArrowRightToLine, cls: 'small' }),
-          ),
-          scrub,
-          slider(
-            tr('Speed'),
-            st.speed,
-            {
-              min: 0,
-              max: 3,
-              step: 0.05,
-              format: (v) => `${v.toFixed(2)}×`,
-              onCommit: () => {
-                if (speedBefore) this.quiet(() => a.setSpeed(e, a.state(e).speed, speedBefore!));
-                speedBefore = null;
-              },
-            },
-            (v) => {
-              speedBefore ??= a.state(e);
-              this.quiet(() => a.setSpeed(e, v));
-            },
-          ),
-          ed.anim.current(e) && e.addedClips?.some((c) => c.group === ed.anim.current(e))
-            ? row(button(tr('Remove this clip'), () => ed.clips.remove(e, ed.anim.current(e)!), { icon: Trash2, cls: 'small ghost' }))
-            : null,
-          hint(tr('Pause or drag the frame to keep a pose: photos, AR and saved projects keep it.')),
-        ),
-      );
-    }
-    out.push(...this.librarySections(e), this.motionSection(e));
-    return out;
-  }
-
-  /** Spin, float, pulse or sway: for any object, no keyframes. */
-  private motionSection(e: Entity) {
-    const mo = this.editor.motions;
-    const m = mo.get(e);
-    const types: { value: MotionType; label: string }[] = [
-      { value: 'none', label: tr('None') },
-      { value: 'spin', label: tr('Spin') },
-      { value: 'float', label: tr('Float') },
-      { value: 'pulse', label: tr('Pulse') },
-      { value: 'sway', label: tr('Sway') },
-    ];
-    let before: MotionSettings | undefined | null = null;
-    const live = (patch: Partial<MotionSettings>) => {
-      if (before === null) before = e.motion ? { ...e.motion } : undefined;
-      this.quiet(() => mo.set(e, { ...mo.get(e), ...patch }, false));
-    };
-    const commit = () => {
-      if (before !== null) mo.commit(e, before);
-      before = null;
-    };
-    const amount =
-      m.type === 'float'
-        ? { min: 0.02, max: 1, step: 0.01, format: (v: number) => `${Math.round(v * 100)}%` }
-        : m.type === 'pulse'
-          ? { min: 0.01, max: 0.5, step: 0.01, format: (v: number) => `${Math.round(v * 100)}%` }
-          : { min: 1, max: 45, step: 1, format: (v: number) => `${Math.round(v)}°` };
-    return section(
-      tr('Motion'),
-      chips(types, m.type, (v) => mo.choose(e, v)),
-      ...(m.type === 'none'
-        ? [hint(tr('Simple motion for any object. You can still move it while it plays.'))]
-        : [
-            row(
-              button(m.playing ? tr('Pause') : tr('Play'), () => mo.set(e, { ...m, playing: !m.playing }), { icon: m.playing ? Pause : Play, cls: 'small' }),
-            ),
-            slider(
-              m.type === 'spin' ? tr('Turns per second') : tr('Speed'),
-              m.speed,
-              { min: 0.05, max: 3, step: 0.05, format: (v) => (m.type === 'spin' ? v.toFixed(2) : `${v.toFixed(2)}×`), onCommit: commit },
-              (v) => live({ speed: v }),
-            ),
-            m.type !== 'spin' ? slider(m.type === 'sway' ? tr('Angle') : tr('Amount'), m.amount, { ...amount, onCommit: commit }, (v) => live({ amount: v })) : null,
-          ]),
-    );
-  }
-
-  /** Built-in clips and imported animation files, for humanoids. */
-  private librarySections(e: Entity): (Node | null)[] {
-    const ed = this.editor;
-    const d = e.kind === 'model' ? humanoidOf(e) : null;
-    if (!d) {
-      return e.kind === 'model' && !e.animationGroups.length
-        ? [section(tr('Add animation'), hint(tr('Clips from the library work on characters with a skeleton. Give this model one in Objects → Rig.')))]
-        : [];
-    }
-    if (!d.humanoid) return [section(tr('Add animation'), hint(tr('Clips from the library work on humanoid characters. Map its bones in Objects → Pose.')))];
-    if (!d.complete) return [section(tr('Add animation'), hint(tr('Some bones of this skeleton were not recognized. Map them in Objects → Pose.')))];
-    const add = (id: string) => this.run(() => ed.clips.add(e, { library: id }, { inPlace: this.inPlace }));
-    const groups = [...new Set(ANIMATION_LIBRARY.map((c) => c.group))];
-    return [
-      section(
-        tr('Add animation'),
-        toggle(tr('Keep in place'), this.inPlace, (v) => (this.inPlace = v)),
-        ...groups.flatMap((g) => [
-          h('h4', { class: 'sub' }, tr(g)),
-          h(
-            'div',
-            { class: 'chips' },
-            ...ANIMATION_LIBRARY.filter((c) => c.group === g).map((c) => h('button', { class: 'chip', onClick: () => add(c.id) }, tr(c.label))),
-          ),
-        ]),
-        hint(tr('Free animations: {name} by {author} ({license}).', { name: ANIMATION_SOURCE.name, author: ANIMATION_SOURCE.author, license: ANIMATION_SOURCE.license })),
-        row(button(tr('Import animation file'), () => this.clipInput.click(), { icon: FileUp, cls: 'small' })),
-        hint(tr('GLB, glTF or FBX with clips for a humanoid skeleton (any common bone naming).')),
-      ),
-    ];
-  }
-
-  /** Keep retargeted clips in place (no walking away). */
-  private inPlace = true;
-
-  private async importClips(files: File[]) {
-    const ed = this.editor;
-    const e = ed.selected;
-    if (!e) return;
-    const main = files.find((f) => /\.(glb|gltf|fbx)$/i.test(f.name));
-    if (!main) return this.toast(tr('Choose a GLB, glTF or FBX file.'), 'error');
-    const asset = { id: ed.nextAssetId++, name: main.name.replace(/\.[^.]+$/, ''), main, deps: files.filter((f) => f !== main) };
-    await this.run(async () => {
-      const added = await ed.clips.add(e, { asset }, { inPlace: this.inPlace });
-      this.toast(tr('{n} animations added to {name}', { n: added.length, name: e.name }));
-    });
-  }
-
   /** Runs an action that may fail with a message for the user. */
-  private async run(fn: () => unknown) {
+  async run(fn: () => unknown) {
     try {
       await fn();
     } catch (err) {
       this.toast(err instanceof Error ? err.message : String(err), 'error');
     }
   }
-
-  // ---------- Pose ----------
-
-  private startPosing(e: Entity) {
-    this.editor.pose.start(e);
-    this.segment.objects = 'pose';
-    if (this.tab === 'objects') this.renderPanel();
-  }
-
-  private posePanel(): (Node | null)[] {
-    const ed = this.editor;
-    const e = ed.selected;
-    if (!e) return [];
-    const p = ed.pose;
-    const d = humanoidOf(e);
-    const active = p.active && p.entity === e;
-    const out: (Node | null)[] = [];
-    if (!active) {
-      out.push(
-        section(
-          tr('Pose'),
-          hint(tr('Turn the joints of this character to pose it for scenes and photos.')),
-          row(button(tr('Pose joints'), () => this.startPosing(e), { icon: PersonStanding, cls: 'primary' })),
-        ),
-      );
-    } else {
-      const joints = p.joints();
-      const j = p.joint;
-      const turn = (axis: 'x' | 'y' | 'z', label: string) => {
-        let from: ReturnType<typeof rotationOf> | null = null;
-        return slider(
-          label,
-          0,
-          { min: -180, max: 180, step: 1, format: (v) => `${Math.round(v)}°`, onCommit: () => ((from = null), p.end()) },
-          (v) => {
-            if (!j) return;
-            from ??= rotationOf(j.node).clone();
-            this.quiet(() => p.turnJoint(axis, v, from!));
-          },
-        );
-      };
-      out.push(
-        section(
-          tr('Joint'),
-          select(
-            tr('Joint'),
-            [{ value: '', label: tr('Tap a joint or pick one') }, ...joints.map((x, i) => ({ value: String(i), label: jointLabel(x) }))],
-            j ? String(joints.findIndex((x) => x.node === j.node)) : '',
-            (v) => p.selectJoint(v === '' ? null : joints[+v]),
-          ),
-          ...(j
-            ? [
-                turn('x', tr('Bend')),
-                turn('y', tr('Twist')),
-                turn('z', tr('Tilt')),
-                row(button(tr('Reset joint'), () => p.reset(j.node), { icon: RotateCcw, cls: 'small ghost' })),
-              ]
-            : [hint(tr('Drag the rings to turn the joint. Hands and feet can also be dragged: the arm or leg follows.'))]),
-        ),
-      );
-      out.push(
-        section(
-          tr('Whole pose'),
-          p.human
-            ? row(
-                button(tr('Mirror'), () => p.mirror(), { icon: ArrowLeftRight, cls: 'small' }),
-                button(tr('Left → right'), () => p.copySide('left'), { cls: 'small' }),
-                button(tr('Right → left'), () => p.copySide('right'), { cls: 'small' }),
-              )
-            : null,
-          row(
-            button(tr('Reset pose'), () => p.reset(), { icon: RotateCcw, cls: 'small ghost' }),
-            e.animationGroups.length ? button(tr('Back to animation'), () => p.backToAnimation(), { icon: Play, cls: 'small ghost' }) : null,
-          ),
-        ),
-      );
-    }
-    if (d?.humanoid && d.complete) {
-      out.push(
-        section(
-          tr('Ready poses'),
-          e.rig?.data.comparison ? hint(tr('Ready poses apply to all models in this comparison.')) : null,
-          h(
-            'div',
-            { class: 'chips' },
-            ...POSE_PRESETS.map((preset) =>
-              h(
-                'button',
-                {
-                  class: 'chip',
-                  onClick: () => this.run(() => {
-                    const targets = [...ed.rigger.comparisonMembers(e).filter(other => other !== e), e];
-                    if (!preset.dirs) return ed.clips.poseManyFromClip(targets, preset.clip!, preset.time ?? 0);
-                    const dirs = Object.fromEntries(Object.entries(preset.dirs).map(([b, v]) => [b, Vector3.FromArray(v).normalize()]));
-                    ed.group(() => targets.forEach(target => p.applyDirections(target, dirs)));
-                  }),
-                },
-                tr(preset.label),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-    if (e.rig?.data.comparison) {
-      const difference = ed.rigger.difference;
-      const shown = difference.group === e.rig.data.comparison;
-      const show = () =>
-        this.run(() => {
-          const css = getComputedStyle(document.documentElement);
-          const palette = ['--purple', '--gold', '--terra'].map((key) => Color3.FromHexString(css.getPropertyValue(key).trim())) as [Color3, Color3, Color3];
-          difference.show(ed.rigger.comparisonMembers(e), this.differenceScale, palette);
-          this.renderPanel();
-        });
-      out.push(
-        section(
-          tr('Compare treatments'),
-          toggle(tr('Difference map'), shown, (v) => (v ? show() : (difference.clear(), ed.invalidate(), this.renderPanel()))),
-          ...(shown
-            ? [
-                hint(tr('Purple: same as Direct weights. Gold to red: more displacement.')),
-                slider(tr('Red at'), this.differenceScale, { min: 0.05, max: 5, step: 0.05, format: (v) => tr('{n}% of height', { n: v.toFixed(2) }) }, (v) => {
-                  this.differenceScale = v;
-                  difference.setScale(v);
-                }),
-                h(
-                  'ul',
-                  { class: 'readout' },
-                  ...difference.summaries.map((s) =>
-                    h('li', {}, h('span', {}, s.entity.name), h('b', {}, tr('max {max}% · mean {mean}%', { max: s.maximum.toFixed(2), mean: s.mean.toFixed(2) }))),
-                  ),
-                ),
-                row(button(tr('Update for this pose'), show, { icon: RotateCw, cls: 'small' })),
-              ]
-            : [hint(tr('Colors each copy by how far it moves from Direct weights in the current pose.'))]),
-        ),
-      );
-    }
-    out.push(this.skeletonSection(e));
-    return out;
-  }
-
-  // ---------- Rig ----------
-
-  private async applyRig() {
-    const r = this.editor.rigger;
-    const e = r.entity;
-    if (!e) return;
-    if (this.rigOutput === 'comparison' && e.source) {
-      await this.run(() => r.createComparison());
-      if (!r.active) this.toast(tr('Three copies were created side by side, one per treatment. Ready poses move all of them.'));
-    } else {
-      await this.run(() => r.bind());
-    }
-  }
-
-  private confirmRig() {
-    this.editor.rigger.confirm();
-    this.toast(tr('Rig applied. Pose it in Pose, or add an animation in Animate.'));
-  }
-
-  private rigPanel(): (Node | null)[] {
-    const ed = this.editor;
-    const e = ed.selected;
-    const r = ed.rigger;
-    if (!e) return [];
-    if (!r.active || r.entity !== e) {
-      return [
-        section(
-          tr('Give it a skeleton'),
-          hint(tr('For a standing character without a skeleton, ideally facing forward with open arms (T or A pose). Afterwards it can be posed and animated.')),
-          row(button(tr('Start rigging'), () => ((this.rigOutput = 'single'), (this.rigStage = 'joints'), r.start(e)), { icon: Bone, cls: 'primary' })),
-        ),
-      ];
-    }
-    const busy = r.progress !== null || r.comparing;
-    if (r.step === 'check') {
-      const bones = RIG_TEMPLATE.filter((j) => j.id !== 'headTop' && !j.id.endsWith('Tip'));
-      return [
-        section(
-          tr('Test'),
-          hint(tr('Bend the test pose and watch shoulders, elbows, hips and knees.')),
-          slider(tr('Test pose'), r.testPose, { min: 0, max: 1, step: 0.01, format: (v) => `${Math.round(v * 100)}%` }, (v) => this.quiet(() => r.setTestPose(v))),
-          select(
-            tr('Show weights of'),
-            [{ value: '', label: tr('None') }, ...bones.map((j) => ({ value: j.id, label: tr(boneLabel(j.id as HumanBone)) }))],
-            r.heatBone ?? '',
-            (v) => r.setHeatBone((v || null) as HumanBone | null),
-          ),
-          r.heatBone ? hint(tr('Red: moves fully with that bone. Yellow, green, blue: less. Black: not at all.')) : null,
-        ),
-      ];
-    }
-    if (this.rigStage === 'skin') {
-      const treatments = [
-        ...SKIN_TREATMENTS.map((t) => ({ value: t.value as string, label: tr(t.label) })),
-        ...(e.source ? [{ value: 'compare', label: tr('Compare all three') }] : []),
-      ];
-      const current = this.rigOutput === 'comparison' && e.source ? 'compare' : r.treatment;
-      const description = current === 'compare' ? 'Makes one copy per treatment side by side, with the same joints. The original is kept hidden.' : SKIN_TREATMENTS.find((t) => t.value === current)!.description;
-      return [
-        section(
-          tr('Calculation'),
-          hint(tr('How the mesh follows the skeleton.')),
-          select(
-            tr('Weights'),
-            [
-              { value: 'envelope', label: tr('Envelope (fast)') },
-              { value: 'heat', label: tr('Heat diffusion (smoother)') },
-            ],
-            r.method,
-            (v) => !busy && ((r.method = v as WeightMethod), this.renderPanel()),
-          ),
-          select(tr('Treatment'), treatments, current, (v) => {
-            if (busy) return;
-            this.rigOutput = v === 'compare' ? 'comparison' : 'single';
-            if (v !== 'compare') r.treatment = v as SkinTreatment;
-            this.renderPanel();
-            this.renderRigBar();
-          }),
-          hint(tr(description)),
-          busy ? progressBar(r.progress ?? 0, tr('Computing weights… {pct}%', { pct: Math.round((r.progress ?? 0) * 100) })) : null,
-        ),
-      ];
-    }
-    return [
-      section(
-        tr('Placement'),
-        hint(tr('Drag the dots onto the body. Tap a dot to move it along one axis.')),
-        row(
-          button(tr('Find the joints'), () => this.findJoints(), { icon: Wand, cls: 'small' }),
-          button(tr('Reset joints'), () => (r.remember(), r.fit(), ed.notify('rig')), { icon: RotateCcw, cls: 'small ghost' }),
-        ),
-        toggle(tr('Symmetry (left = right)'), r.symmetric, (v) => r.setSymmetric(v)),
-      ),
-      section(
-        tr('Facing'),
-        hint(tr('The dots should face you. If the model faces another way, turn the skeleton.')),
-        row(
-          button(tr('Turn 90°'), () => r.turn(true), { icon: RotateCw, cls: 'small' }),
-          button(tr('Turn 180°'), () => r.turn(), { icon: RefreshCw, cls: 'small' }),
-        ),
-        row(button(tr('Front view'), () => r.frontView(), { icon: Scan, cls: 'small ghost' })),
-      ),
-    ];
-  }
-
-  private findJoints() {
-    const r = this.editor.rigger;
-    r.remember();
-    if (r.findPose()) this.toast(tr('Joints placed from the body shape. Check elbows and knees.'));
-    else this.toast(tr('Could not read the shape of this model. Place the joints by hand.'), 'error');
-  }
-
-  /** Which joint is which (humanoid detection), with manual mapping when something is missing. */
-  private skeletonSection(e: Entity) {
-    const ed = this.editor;
-    const d = humanoidOf(e);
-    if (!d) return null;
-    const joints = jointNodes(e);
-    const status = d.complete
-      ? tr('Humanoid skeleton: all main bones were recognized ({n} joints).', { n: joints.length })
-      : d.humanoid
-        ? tr('Some bones were not recognized. Pick them below to use ready poses and animations.')
-        : tr('This skeleton was not recognized as a person. You can still turn its joints, or map its bones by hand.');
-    const showMap = this.mapBones || (d.humanoid && !d.complete);
-    const options = [{ value: '', label: '—' }, ...joints.map((n) => ({ value: n.name, label: n.name }))];
-    const remap = (bone: HumanBone, v: string) => {
-      setBoneMapping(e, bone, v || null);
-      if (ed.pose.entity === e) ed.pose.selectJoint(null);
-      ed.notify('pose');
-    };
-    return section(
-      tr('Skeleton'),
-      hint(status),
-      ...(showMap ? REQUIRED_BONES.map((b) => select(tr(boneLabel(b)), options, d.map[b]?.name ?? '', (v) => remap(b, v))) : []),
-      !showMap ? row(button(tr('Map bones by hand'), () => ((this.mapBones = true), this.renderPanel()), { icon: Bone, cls: 'small ghost' })) : null,
-    );
-  }
-
-  /** Keeps the frame slider in step with a playing clip (runs only while the scene renders). */
-  private updateScrubber() {
-    const s = this.scrubber;
-    if (!s || !s.input.isConnected) return;
-    const a = this.editor.anim;
-    if (!a.isPlaying(s.entity) || s.input.closest('.dragging')) return;
-    const f = a.frame(s.entity);
-    const g = a.current(s.entity)!;
-    s.input.value = String(f);
-    s.out.textContent = `${((f - g.from) / s.fps).toFixed(2)} s`;
-  }
-
-  // ---------- Material ----------
-
-  private materialPanel() {
-    const ed = this.editor;
-    const e = ed.selected;
-    if (!e || e.kind === 'light') return [hint(tr('Select a model or shape to edit its materials.'))];
-    const mats = ed.materialsOf(e);
-    if (!mats.length) return [hint(tr('This object has no editable materials.'))];
-    if (this.materialIndex >= mats.length) this.materialIndex = 0;
-    const mat = mats[this.materialIndex];
-    const out: (Node | null)[] = [];
-    if (mats.length > 1) {
-      out.push(
-        select(tr('Material'), mats.map((m, i) => ({ value: String(i), label: m.name || tr('Material {n}', { n: i + 1 }) })), String(this.materialIndex), (v) => {
-          this.materialIndex = +v;
-          this.renderPanel();
-        }),
-      );
-    }
-    out.push(...this.materialControls(mat));
-    return out;
-  }
-
-  private materialControls(mat: Material): (Node | null)[] {
-    const q = (fn: () => void) => this.quiet(fn);
-    const common = [
-      slider(tr('Opacity'), mat.alpha, { min: 0, max: 1, step: 0.01 }, (v) => {
-        mat.alpha = v;
-        if (v < 1) mat.transparencyMode = Material.MATERIAL_ALPHABLEND;
-      }),
-      toggle(tr('Double-sided'), !mat.backFaceCulling, (v) => (mat.backFaceCulling = !v)),
-      toggle(tr('Wireframe'), mat.wireframe, (v) => (mat.wireframe = v)),
-    ];
-    if (mat instanceof PBRMaterial) {
-      const meta = (mat.metadata ??= {});
-      const hasTex = !!(mat.albedoTexture || meta.stashedAlbedo);
-      return [
-        section(
-          tr('Color'),
-          colorInput(hasTex ? tr('Tint (multiplies texture)') : tr('Base color'), mat.albedoColor.toHexString(), (v) => q(() => (mat.albedoColor = Color3.FromHexString(v)))),
-          hasTex
-            ? toggle(tr('Show texture'), !!mat.albedoTexture, (v) => {
-                if (v && meta.stashedAlbedo) {
-                  mat.albedoTexture = meta.stashedAlbedo;
-                  meta.stashedAlbedo = null;
-                } else if (!v && mat.albedoTexture) {
-                  meta.stashedAlbedo = mat.albedoTexture;
-                  mat.albedoTexture = null;
-                }
-              })
-            : null,
-        ),
-        section(
-          tr('Surface'),
-          slider(tr('Metallic'), mat.metallic ?? 1, { min: 0, max: 1, step: 0.01 }, (v) => (mat.metallic = v)),
-          slider(tr('Roughness'), mat.roughness ?? 1, { min: 0, max: 1, step: 0.01 }, (v) => (mat.roughness = v)),
-          toggle(tr('Clear coat'), mat.clearCoat.isEnabled, (v) => (mat.clearCoat.isEnabled = v)),
-          slider(tr('Clear coat intensity'), mat.clearCoat.intensity, { min: 0, max: 1, step: 0.01 }, (v) => (mat.clearCoat.intensity = v)),
-          toggle(tr('Unlit'), mat.unlit, (v) => (mat.unlit = v)),
-        ),
-        section(
-          tr('Emission'),
-          colorInput(tr('Emissive color'), mat.emissiveColor.toHexString(), (v) => (mat.emissiveColor = Color3.FromHexString(v))),
-          slider(tr('Intensity'), mat.emissiveIntensity, { min: 0, max: 10, step: 0.05 }, (v) => (mat.emissiveIntensity = v)),
-        ),
-        section(tr('General'), ...common),
-      ];
-    }
-    if (mat instanceof StandardMaterial) {
-      return [
-        section(
-          tr('Color'),
-          colorInput(tr('Diffuse color'), mat.diffuseColor.toHexString(), (v) => (mat.diffuseColor = Color3.FromHexString(v))),
-          colorInput(tr('Specular color'), mat.specularColor.toHexString(), (v) => (mat.specularColor = Color3.FromHexString(v))),
-          slider(tr('Glossiness'), mat.specularPower, { min: 1, max: 256, step: 1 }, (v) => (mat.specularPower = v)),
-          colorInput(tr('Emissive'), mat.emissiveColor.toHexString(), (v) => (mat.emissiveColor = Color3.FromHexString(v))),
-        ),
-        section(tr('General'), ...common),
-      ];
-    }
-    return [section(tr('General'), ...common)];
-  }
-
-  // ---------- Lights ----------
-
-  private lightsPanel() {
-    const ed = this.editor;
-    const lights = ed.entities.filter((e) => e.kind === 'light');
-    const out: (Node | null)[] = [
-      section(
-        tr('Lighting presets'),
-        h('div', { class: 'chips' }, ...LIGHT_PRESETS.map((p) => h('button', { class: 'chip', onClick: () => ed.applyLightPreset(p.id) }, tr(p.label)))),
-        hint(tr('Replaces the current lights. Everything can be tweaked afterwards.')),
-      ),
-      section(
-        tr('Add light'),
-        row(
-          button(tr('Point'), () => ed.addLight('point'), { icon: Lightbulb, cls: 'small' }),
-          button(tr('Spotlight'), () => ed.addLight('spot'), { icon: Crosshair, cls: 'small' }),
-          button(tr('Sun'), () => ed.addLight('directional'), { icon: Sun, cls: 'small' }),
-        ),
-      ),
-      section(
-        tr('Lights in scene'),
-        lights.length
-          ? h(
-              'ul',
-              { class: 'outliner' },
-              ...lights.map((l) =>
-                h('li', { class: l === ed.selected ? 'active' : '', onClick: () => ed.select(l) }, icon(Lightbulb, 16), h('span', {}, l.name), h('i', { class: 'swatch', style: `background:${l.light!.diffuse.toHexString()}` })),
-              ),
-            )
-          : hint(tr('No lights — only the environment lights the scene.')),
-      ),
-    ];
-    const sel = ed.selected;
-    if (sel?.kind === 'light') out.push(this.lightControls(sel));
-    else if (lights.length) out.push(hint(tr('Tap a light (in the list or in the scene) to adjust it. Drag it or use the gizmos to place it.')));
-    return out;
-  }
-
-  private lightControls(e: Entity) {
-    const ed = this.editor;
-    const light = e.light!;
-    const max = e.lightType === 'directional' ? 10 : 300;
-    const targets = ed.entities.filter((x) => x.kind !== 'light');
-    let aimId = '';
-    return section(
-      tr('Selected light'),
-      colorInput(tr('Color'), light.diffuse.toHexString(), (v) => {
-        const c = Color3.FromHexString(v);
-        light.diffuse = c;
-        light.specular = c;
-        e.root.getChildMeshes().forEach((m) => ((m.material as StandardMaterial).emissiveColor = c));
-        if (this.tab === 'light') this.root.querySelector<HTMLElement>('.outliner li.active .swatch')?.style.setProperty('background', v);
-      }),
-      slider(tr('Intensity'), light.intensity, { min: 0, max, step: max / 300 }, (v) => (light.intensity = v)),
-      e.lightType === 'spot'
-        ? slider(tr('Cone angle'), deg((light as SpotLight).angle), { min: 5, max: 160, step: 1, format: (v) => `${Math.round(v)}°` }, (v) => ((light as SpotLight).angle = rad(v)))
-        : null,
-      e.lightType === 'spot'
-        ? slider(tr('Edge softness'), (light as SpotLight).exponent, { min: 0, max: 50, step: 0.5 }, (v) => ((light as SpotLight).exponent = v))
-        : null,
-      e.lightType !== 'directional'
-        ? slider(tr('Range'), Math.min((light as PointLight).range, 100), { min: 0.5, max: 100, step: 0.5 }, (v) => ((light as PointLight).range = v))
-        : null,
-      toggle(tr('Casts shadows'), !!e.shadowGen, (v) => ed.setLightShadows(e, v)),
-      select(tr('Aim at'), [{ value: '', label: tr('Camera center') }, ...targets.map((t) => ({ value: String(t.id), label: t.name }))], '', (v) => (aimId = v)),
-      row(
-        button(tr('Aim'), () => ed.aimLightAtSelection(e, targets.find((t) => String(t.id) === aimId) ?? null), { icon: Crosshair, cls: 'small' }),
-        button(tr('Delete light'), () => ed.remove(e), { icon: Trash2, cls: 'small danger' }),
-      ),
-    );
-  }
-
-  // ---------- Environment ----------
-
-  private envPanel() {
-    const ed = this.editor;
-    const env = ed.env;
-    const set = (p: Partial<typeof env>) => this.quiet(() => ed.applyEnv(p));
-    return [
-      section(
-        tr('Environment lighting (HDR)'),
-        chips(Object.entries(ENV_PRESETS).map(([value, p]) => ({ value, label: tr(p.label) })), env.preset, (v) => ed.applyEnv({ preset: v })),
-        slider(tr('Intensity'), env.intensity, { min: 0, max: 3, step: 0.01 }, (v) => set({ intensity: v })),
-        slider(tr('Rotation'), deg(env.rotation), { min: 0, max: 360, step: 1, format: (v) => `${Math.round(v)}°` }, (v) => set({ rotation: rad(v) })),
-        slider(tr('Extra ambient light'), env.ambient, { min: 0, max: 2, step: 0.01 }, (v) => set({ ambient: v })),
-      ),
-      section(
-        tr('Background'),
-        toggle(tr('Show environment as background'), env.skybox, (v) => set({ skybox: v })),
-        slider(tr('Background blur'), env.skyboxBlur, { min: 0, max: 1, step: 0.01 }, (v) => set({ skyboxBlur: v })),
-        colorInput(tr('Solid color (no environment)'), env.background, (v) => set({ background: v })),
-      ),
-      section(
-        tr('Floor'),
-        chips<GroundMode>(
-          [
-            { value: 'shadow', label: tr('Shadow only') },
-            { value: 'solid', label: tr('Solid') },
-            { value: 'none', label: tr('None') },
-          ],
-          env.ground,
-          (v) => ed.applyEnv({ ground: v }),
-        ),
-        env.ground === 'solid' ? colorInput(tr('Floor color'), env.groundColor, (v) => set({ groundColor: v })) : null,
-        toggle(tr('Reference grid'), env.grid, (v) => set({ grid: v })),
-      ),
-    ];
-  }
-
-  // ---------- Photo ----------
-
-  private photoPanelContent() {
-    const ed = this.editor;
-    const p = ed.photo;
-    const set = (v: Partial<PhotoSettings>) => this.quiet(() => ed.setPhoto(v));
-    const pct = (v: number) => `${Math.round(v)}`;
-    return [
-      ed.photoMode ? null : row(button(tr('Enter photo mode'), () => ed.setPhotoMode(true), { icon: Camera, cls: 'primary wide' })),
-      section(tr('Filters'), chips(PHOTO_FILTERS.map((f) => ({ value: f.id, label: tr(f.label) })), '', (id) => ed.setPhoto({ ...DEFAULT_PHOTO, fov: p.fov, focusDistance: p.focusDistance, ...PHOTO_FILTERS.find((f) => f.id === id)!.values }))),
-      section(
-        tr('Camera'),
-        slider(tr('Field of view'), p.fov, { min: 10, max: 110, step: 1, format: (v) => `${Math.round(v)}°` }, (v) => set({ fov: v })),
-        chips(Object.entries(ASPECTS).map(([value, a]) => ({ value, label: tr(a.label) })), p.aspect, (v) => ed.setPhoto({ aspect: v })),
-      ),
-      section(
-        tr('Light & color'),
-        slider(tr('Exposure'), p.exposure, { min: 0.1, max: 3, step: 0.01 }, (v) => set({ exposure: v })),
-        slider(tr('Contrast'), p.contrast, { min: 0.5, max: 2, step: 0.01 }, (v) => set({ contrast: v })),
-        slider(tr('Saturation'), p.saturation, { min: -100, max: 100, step: 1, format: pct }, (v) => set({ saturation: v })),
-        slider(tr('Temperature'), p.temperature, { min: -100, max: 100, step: 1, format: pct }, (v) => set({ temperature: v })),
-        slider(tr('Vignette'), p.vignette, { min: 0, max: 2, step: 0.01 }, (v) => set({ vignette: v })),
-      ),
-      section(
-        tr('Effects'),
-        slider(tr('Bloom'), p.bloom, { min: 0, max: 2, step: 0.01 }, (v) => set({ bloom: v })),
-        slider(tr('Bloom threshold'), p.bloomThreshold, { min: 0, max: 1.5, step: 0.01 }, (v) => set({ bloomThreshold: v })),
-        slider(tr('Grain'), p.grain, { min: 0, max: 50, step: 0.5, format: pct }, (v) => set({ grain: v })),
-        slider(tr('Chromatic aberration'), p.chromatic, { min: 0, max: 100, step: 1, format: pct }, (v) => set({ chromatic: v })),
-        slider(tr('Sharpen'), p.sharpen, { min: 0, max: 1, step: 0.01 }, (v) => set({ sharpen: v })),
-      ),
-      section(
-        tr('Depth of field'),
-        toggle(tr('Blur background'), p.dof, (v) => ed.setPhoto({ dof: v })),
-        p.dof ? slider(tr('Aperture (f)'), p.fStop, { min: 0.8, max: 16, step: 0.1, format: (v) => `f/${v.toFixed(1)}` }, (v) => set({ fStop: v })) : null,
-        p.dof ? slider(tr('Focus distance'), p.focusDistance, { min: 0.2, max: 50, step: 0.05, format: (v) => `${v.toFixed(2)} m` }, (v) => set({ focusDistance: v })) : null,
-        p.dof ? hint(tr('In photo mode, tap an object to focus on it.')) : null,
-      ),
-      row(button(tr('Reset to defaults'), () => ed.setPhoto({ ...DEFAULT_PHOTO }), { icon: RotateCcw, cls: 'ghost' })),
-    ];
-  }
-
-  private renderPhotoHud() {
-    const ed = this.editor;
-    if (!ed.photoMode) return this.photoHud.replaceChildren();
-    this.photoHud.replaceChildren(
-      iconButton(X, tr('Exit photo mode'), () => ed.setPhotoMode(false), { cls: 'round hud-exit' }),
-      iconButton(EyeOff, tr('Hide interface (H)'), () => this.setUiHidden(true), { cls: 'round hud-hide' }),
-      h(
-        'div',
-        { class: 'hud-bottom' },
-        chips(Object.entries(ASPECTS).map(([value, a]) => ({ value, label: tr(a.label) })), ed.photo.aspect, (v) => ed.setPhoto({ aspect: v })),
-        h(
-          'div',
-          { class: 'hud-row' },
-          iconButton(SlidersHorizontal, tr('Adjustments'), () => {
-            this.photoPanel = !this.photoPanel;
-            this.renderPanel();
-          }, { active: this.photoPanel, cls: 'round' }),
-          shutterButton(tr('Take photo'), () => this.capture()),
-          this.gyroButton(true) ?? iconButton(Scan, tr('Frame all'), () => ed.frameAll(), { cls: 'round' }),
-        ),
-      ),
-    );
-  }
-
-  private async capture() {
-    flashScreen(this.root);
-    try {
-      const blob = await this.editor.capture(2);
-      this.deliver(blob, timestampedName('babalon', 'png'), tr('Photo saved!'));
-    } catch (e) {
-      this.toast(errorMessage(e), 'error');
-    }
-  }
-
-  /** Photo aspect frame (dark bars + rule of thirds). */
-  private renderFrame() {
-    const ed = this.editor;
-    const show = ed.photoMode;
-    this.frame.classList.toggle('show', show);
-    if (!show) return;
-    const w = this.root.clientWidth;
-    const hgt = this.root.clientHeight;
-    const r = aspectRect(w, hgt, ed.photo.aspect);
-    this.frame.style.cssText = `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px`;
-  }
-}
-
-function fileSafe(name: string) {
-  return name.replace(/[\\/:*?"<>|]+/g, '-').trim() || tr('my-scene');
-}
-
-function toggleFullscreen() {
-  if (document.fullscreenElement) document.exitFullscreen();
-  else document.documentElement.requestFullscreen?.().catch(() => {});
-}
-
-function errorMessage(e: unknown) {
-  if (e instanceof Error) return e.message;
-  return String(e);
 }
