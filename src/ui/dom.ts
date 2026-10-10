@@ -1,6 +1,6 @@
 import { createElement } from 'lucide';
 import type { IconNode } from 'lucide';
-import { tr } from './i18n';
+import { tr } from '../core/i18n';
 
 type Child = Node | string | null | undefined | false;
 type Props = Record<string, unknown> & { class?: string; style?: string };

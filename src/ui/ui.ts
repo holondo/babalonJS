@@ -73,32 +73,32 @@ import {
   MODEL_EXTENSIONS,
   SAMPLE_MODELS,
   aspectRect,
-} from './editor';
-import type { Editor, Entity, GroundMode, LightType, PhotoSettings, PrimitiveType, Tool } from './editor';
-import { PROJECT_EXT, fromZip, loadAutosave, restore, saveAutosave, snapshot, toZip } from './project';
-import type { ProjectSnapshot } from './project';
-import type { ClipState } from './animation';
-import type { MotionSettings, MotionType } from './motion';
+} from '../core/editor';
+import type { Editor, Entity, GroundMode, LightType, PhotoSettings, PrimitiveType, Tool } from '../core/editor';
+import { PROJECT_EXT, fromZip, loadAutosave, restore, saveAutosave, snapshot, toZip } from '../core/project';
+import type { ProjectSnapshot } from '../core/project';
+import type { ClipState } from '../animation/animation';
+import type { MotionSettings, MotionType } from '../animation/motion';
 import { JointOverlay } from './jointOverlay';
-import { REQUIRED_BONES, boneLabel, humanoidOf, jointNodes, setBoneMapping, skeletonsOf } from './humanoid';
-import type { HumanBone } from './humanoid';
-import { mappedParent, rotationOf } from './pose';
-import type { PoseJoint } from './pose';
-import { RIG_TEMPLATE } from './humanoidTemplate';
-import type { RigJoint } from './humanoidTemplate';
-import type { WeightMethod } from './rigging';
-import { SKIN_TREATMENTS } from './skinTreatments';
-import type { SkinTreatment } from './skinTreatments';
-import { ANIMATION_LIBRARY, ANIMATION_SOURCE, POSE_PRESETS } from './presets';
-import type { ARMode } from './ar';
-import type { GyroControl } from './gyro';
-import { saveAndOfferShare, timestampedName } from './files';
-import { LIGHT_PRESETS, PHOTO_FILTERS } from './presets';
-import { LANGS, getLang, locale, setLang, tr } from './i18n';
-import type { Lang } from './i18n';
+import { REQUIRED_BONES, boneLabel, humanoidOf, jointNodes, setBoneMapping, skeletonsOf } from '../rigging/humanoid';
+import type { HumanBone } from '../rigging/humanoid';
+import { mappedParent, rotationOf } from '../animation/pose';
+import type { PoseJoint } from '../animation/pose';
+import { RIG_TEMPLATE } from '../rigging/humanoidTemplate';
+import type { RigJoint } from '../rigging/humanoidTemplate';
+import type { WeightMethod } from '../rigging/rigging';
+import { SKIN_TREATMENTS } from '../rigging/skinTreatments';
+import type { SkinTreatment } from '../rigging/skinTreatments';
+import { ANIMATION_LIBRARY, ANIMATION_SOURCE, POSE_PRESETS } from '../core/presets';
+import type { ARMode } from '../ar/ar';
+import type { GyroControl } from '../device/gyro';
+import { saveAndOfferShare, timestampedName } from '../core/files';
+import { LIGHT_PRESETS, PHOTO_FILTERS } from '../core/presets';
+import { LANGS, getLang, locale, setLang, tr } from '../core/i18n';
+import type { Lang } from '../core/i18n';
 import { button, chips, progressBar, stepper, colorInput, flashScreen, h, hint, icon, iconButton, menuItem, numberInput, row, section, segmented, select, shutterButton, slider, toggle } from './dom';
-import { UNITS } from './tools';
-import type { Axis, Edge, Guide, Measurement, Unit } from './tools';
+import { UNITS } from '../tools/tools';
+import type { Axis, Edge, Guide, Measurement, Unit } from '../tools/tools';
 
 type Tab = 'add' | 'objects' | 'light' | 'tools' | 'photo';
 

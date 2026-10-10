@@ -14,7 +14,7 @@ import {
   VertexBuffer,
 } from '@babylonjs/core';
 import type { AbstractMesh, GreasedLineBaseMesh, PointerInfo } from '@babylonjs/core';
-import type { Editor, Entity } from './editor';
+import type { Editor, Entity } from '../core/editor';
 
 export type Unit = 'm' | 'cm' | 'mm' | 'in' | 'ft';
 export type Axis = 'x' | 'y' | 'z';

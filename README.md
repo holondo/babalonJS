@@ -82,18 +82,18 @@ Camera: drag to orbit, pinch or scroll to zoom, two fingers (or right mouse butt
 
 ## Project structure
 
-- `src/editor.ts`: the core, with no UI. Scene, camera, loading, selection, gizmos, lights, shadows, environment, post-processing, capture, export and history.
-- `src/tools.ts`: measurements (including the along-the-surface path), guides, smart guides and alignment.
-- `src/animation.ts`, `src/motion.ts`: clip playback; spin/float/pulse/sway.
-- `src/humanoid.ts`, `src/pose.ts`, `src/retarget.ts`: humanoid bone detection, posing (FK, IK, mirror, presets), playing clips made for other skeletons.
-- `src/humanoidTemplate.ts`, `src/rigging.ts`, `src/weights.ts`, `src/weights.worker.ts`: the standard skeleton, manual rigging, skin weights (heat diffusion in a Web Worker).
+- `src/core/editor.ts`: the core, with no UI. Scene, camera, loading, selection, gizmos, lights, shadows, environment, post-processing, capture, export and history.
+- `src/tools/tools.ts`: measurements (including the along-the-surface path), guides, smart guides and alignment.
+- `src/animation/animation.ts`, `src/animation/motion.ts`: clip playback; spin/float/pulse/sway.
+- `src/rigging/humanoid.ts`, `src/animation/pose.ts`, `src/animation/retarget.ts`: humanoid bone detection, posing (FK, IK, mirror, presets), playing clips made for other skeletons.
+- `src/rigging/humanoidTemplate.ts`, `src/rigging/rigging.ts`, `src/rigging/weights.ts`, `src/rigging/weights.worker.ts`: the standard skeleton, manual rigging, skin weights (heat diffusion in a Web Worker).
 - `public/animations`, `public/models`: the free animation library and Mannequin samples (CC0, see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)), made by `scripts/build-animation-library.mjs`.
-- `src/ar.ts`, `src/arHud.ts`: augmented reality with WebXR and its on-camera controls.
-- `src/project.ts`: saving/opening `.babalon` projects and autosave.
-- `src/ui.ts`: panels and toolbars, plain DOM.
-- `src/dom.ts`: UI helpers (slider, toggle, color, chips…).
-- `src/i18n.ts`: translations. Keys are the English text; add a language by adding a dictionary.
-- `src/style.css`: dark glass theme, phone layout below 760px.
+- `src/ar/ar.ts`, `src/ar/arHud.ts`: augmented reality with WebXR and its on-camera controls.
+- `src/core/project.ts`: saving/opening `.babalon` projects and autosave.
+- `src/ui/ui.ts`: panels and toolbars, plain DOM.
+- `src/ui/dom.ts`: UI helpers (slider, toggle, color, chips…).
+- `src/core/i18n.ts`: translations. Keys are the English text; add a language by adding a dictionary.
+- `src/ui/style.css`: dark glass theme, phone layout below 760px.
 - `vite.config.ts`: PWA manifest, offline cache and file handlers.
 - `public/icons`, `public/brand`: app icons and lettering, generated from the full-size artwork in `design/`.
 

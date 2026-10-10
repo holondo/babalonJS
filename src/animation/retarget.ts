@@ -1,12 +1,12 @@
 import { AnimationGroup, AnimatorAvatar, Matrix, Quaternion, Vector3 } from '@babylonjs/core';
 import type { AssetContainer, TransformNode } from '@babylonjs/core';
-import { BONE_TIP, detectHumanoid, humanoidOf, jointNodes, jointPosition, skeletonsOf, worldMatrix } from './humanoid';
-import type { Detection, HumanBone, HumanoidMap } from './humanoid';
+import { BONE_TIP, detectHumanoid, humanoidOf, jointNodes, jointPosition, skeletonsOf, worldMatrix } from '../rigging/humanoid';
+import type { Detection, HumanBone, HumanoidMap } from '../rigging/humanoid';
 import { aimBone, bonesTopDown, captureJoints, characterFrame, restoreJoints, rotateJointWorld } from './pose';
-import { tr } from './i18n';
-import { libraryClipUrl } from './presets';
-import type { AssetRef, Editor, Entity } from './editor';
-import { addHelperBoneTracks, updateHelperBones } from './rigging';
+import { tr } from '../core/i18n';
+import { libraryClipUrl } from '../core/presets';
+import type { AssetRef, Editor, Entity } from '../core/editor';
+import { addHelperBoneTracks, updateHelperBones } from '../rigging/rigging';
 
 /**
  * Plays animations made for one humanoid on another (imported clips and the built-in library).

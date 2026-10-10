@@ -1,9 +1,9 @@
 import { Eye, EyeOff, Move, Ruler, SlidersHorizontal, X } from 'lucide';
 import type { ARMode } from './ar';
-import { chips, flashScreen, h, iconButton, shutterButton, slider, toggle } from './dom';
-import { saveAndOfferShare, timestampedName } from './files';
-import { tr } from './i18n';
-import { LIGHT_PRESETS, PHOTO_FILTERS } from './presets';
+import { chips, flashScreen, h, iconButton, shutterButton, slider, toggle } from '../ui/dom';
+import { saveAndOfferShare, timestampedName } from '../core/files';
+import { tr } from '../core/i18n';
+import { LIGHT_PRESETS, PHOTO_FILTERS } from '../core/presets';
 
 /**
  * Interface shown over the camera during AR (WebXR "DOM overlay": only this element is visible).

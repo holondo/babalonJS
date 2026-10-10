@@ -1,4 +1,4 @@
-import type { HumanBone } from './humanoid';
+import type { HumanBone } from '../rigging/humanoid';
 import type { EnvSettings, LightType, PhotoSettings } from './editor';
 
 /**

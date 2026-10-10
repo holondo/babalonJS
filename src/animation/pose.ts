@@ -1,7 +1,7 @@
 import { Matrix, Quaternion, TransformNode, Vector3 } from '@babylonjs/core';
-import { BONE_PARENT, HUMAN_BONES, boneDirection, humanoidOf, jointNodes, jointPosition, mirrorBone, skeletonsOf, worldMatrix } from './humanoid';
-import type { HumanBone, HumanoidMap } from './humanoid';
-import type { Editor, Entity } from './editor';
+import { BONE_PARENT, HUMAN_BONES, boneDirection, humanoidOf, jointNodes, jointPosition, mirrorBone, skeletonsOf, worldMatrix } from '../rigging/humanoid';
+import type { HumanBone, HumanoidMap } from '../rigging/humanoid';
+import type { Editor, Entity } from '../core/editor';
 
 /**
  * Joint math shared by posing, IK, presets, retargeting and rigging. Works on joint nodes

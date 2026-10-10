@@ -1,8 +1,8 @@
 import { Color3, Mesh, ShaderMaterial, Vector3, VertexBuffer } from '@babylonjs/core';
 import type { AbstractMesh, Material } from '@babylonjs/core';
-import type { Editor, Entity } from './editor';
+import type { Editor, Entity } from '../core/editor';
 import { worldMatrix } from './humanoid';
-import { tr } from './i18n';
+import { tr } from '../core/i18n';
 
 const ATTRIBUTE = 'rigDifference';
 export interface DifferenceSummary { entity: Entity; maximum: number; mean: number }

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
-const source = ts.transpileModule(fs.readFileSync(new URL('../src/skinTreatments.ts', import.meta.url), 'utf8'), {
+const source = ts.transpileModule(fs.readFileSync(new URL('../src/rigging/skinTreatments.ts', import.meta.url), 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext },
 }).outputText;
 const { applySkinTreatment } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);

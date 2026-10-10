@@ -3,12 +3,12 @@ import type { Zippable } from 'fflate';
 import { Color3, PBRMaterial, Quaternion, StandardMaterial, Vector3 } from '@babylonjs/core';
 import type { AssetContainer, Material, PointLight, SpotLight } from '@babylonjs/core';
 import { tr } from './i18n';
-import type { ToolsJSON } from './tools';
-import { forgetHumanoid, jointNodes } from './humanoid';
-import type { HumanBone } from './humanoid';
-import type { MotionSettings } from './motion';
-import type { RigData } from './rigging';
-import { captureJoints } from './pose';
+import type { ToolsJSON } from '../tools/tools';
+import { forgetHumanoid, jointNodes } from '../rigging/humanoid';
+import type { HumanBone } from '../rigging/humanoid';
+import type { MotionSettings } from '../animation/motion';
+import type { RigData } from '../rigging/rigging';
+import { captureJoints } from '../animation/pose';
 import { ANIMATION_SOURCE } from './presets';
 import type { AssetRef, Editor, Entity, EnvSettings, LightType, ModelSource, PhotoSettings, PrimitiveType } from './editor';
 

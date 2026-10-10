@@ -1,6 +1,6 @@
 import { Animation, TransformNode } from '@babylonjs/core';
 import type { Animatable } from '@babylonjs/core';
-import type { Editor, Entity } from './editor';
+import type { Editor, Entity } from '../core/editor';
 
 /**
  * Simple motion for any object, no keyframes: spin, float, pulse or sway. It runs on a child

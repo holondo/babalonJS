@@ -1,5 +1,5 @@
 import type { Vector3 } from '@babylonjs/core';
-import type { Editor } from './editor';
+import type { Editor } from '../core/editor';
 import { h } from './dom';
 
 /**

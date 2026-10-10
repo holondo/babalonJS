@@ -1,5 +1,5 @@
 import { Observable } from '@babylonjs/core';
-import type { Editor } from './editor';
+import type { Editor } from '../core/editor';
 
 /**
  * Gyro mode: turning and tilting the phone orbits the editor camera around its center.

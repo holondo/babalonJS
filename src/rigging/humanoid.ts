@@ -1,6 +1,6 @@
 import { Quaternion, TransformNode, Vector3 } from '@babylonjs/core';
 import type { Bone, Skeleton } from '@babylonjs/core';
-import type { Entity } from './editor';
+import type { Entity } from '../core/editor';
 
 /**
  * Humanoid skeletons: canonical bone names (VRM humanoid names) and detection of which

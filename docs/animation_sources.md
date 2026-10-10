@@ -40,19 +40,19 @@ Tested in the dev server with the UAL `Walk_Loop` clip on the UAL Mannequin, the
 
 - `detectHumanoid()` maps all 22 canonical bones on the three rigs (Rigify and Mixamo naming).
 - **Plain `retargetAnimationGroup`** transfers each bone's rotation relative to the two rest poses. It is correct only when both rest poses match. It also retargets every translation and scale channel, which stretches bones when proportions differ.
-- **What `src/retarget.ts` does on top:**
+- **What `src/animation/retarget.ts` does on top:**
   - keeps rotations for all bones and translation only for the hips;
   - bends the source skeleton into the target's rest pose bone by bone (same directions) before retargeting, so T-pose clips play on A-pose characters too;
   - resets the character's own transform while retargeting (otherwise a turned character gets the motion in the wrong axes);
   - `fixRootPosition` and `fixGroundReference` (+ dynamic reference node) with the source hips and left foot keep feet on the ground at any scale;
   - optional "in place" drops horizontal hips travel.
 - **Result:** at the same frame, bone directions, hip and shoulder axes of the three characters, expressed in each character's own space, match to two decimals. The walk plays without broken limbs on all three.
-- **Pitfall found:** Babylon caches world matrices and a child reads its parent's cached matrix. After turning a joint, world positions of deeper joints must be computed from the root down (`worldMatrix()` in `src/humanoid.ts`), otherwise bones point the wrong way.
+- **Pitfall found:** Babylon caches world matrices and a child reads its parent's cached matrix. After turning a joint, world positions of deeper joints must be computed from the root down (`worldMatrix()` in `src/rigging/humanoid.ts`), otherwise bones point the wrong way.
 - **Loader setting:** model and clip files are loaded with `animationStartMode: NONE`, so the hidden template's joints stay in their rest pose (needed as the retargeting reference).
 
 ## Decisions
 
-- **D1 — template rig:** the UAL rig. It is CC0, a clean T-pose, has standard Rigify deform names and comes with the clips, so rigs made in the app (R08) use exactly the bone names and proportions of the built-in clips. Canonical names in code are the VRM humanoid names (`src/humanoid.ts`). We only use VRM's naming convention, not any VRM file or text.
+- **D1 — template rig:** the UAL rig. It is CC0, a clean T-pose, has standard Rigify deform names and comes with the clips, so rigs made in the app (R08) use exactly the bone names and proportions of the built-in clips. Canonical names in code are the VRM humanoid names (`src/rigging/humanoid.ts`). We only use VRM's naming convention, not any VRM file or text.
 - **D2 — bundled clips:** all 43 clips except `A_TPose` and the two `_RM` duplicates. Each clip is a separate file in `public/animations/` (skeleton nodes + one optimized animation, 31–107 KB, ≈2 MB in total). They are downloaded only when used and cached for offline use, not precached. A Mannequin sample (`public/models/mannequin.glb`, 632 KB, with `Idle_Loop`) gives every user a free humanoid to try posing and the library. Files are generated reproducibly by `scripts/build-animation-library.mjs`.
 
 ## Other sources checked

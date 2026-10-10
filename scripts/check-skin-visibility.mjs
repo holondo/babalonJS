@@ -9,15 +9,15 @@ const moduleUrl = (file, imports = {}) => {
   for (const [name, url] of Object.entries(imports)) source = source.replaceAll(`'${name}'`, JSON.stringify(url));
   return `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext } }).outputText).toString('base64')}`;
 };
-const math = moduleUrl('../src/skinMath.ts');
-const visibility = moduleUrl('../src/skinVisibility.ts', { './skinMath': math });
+const math = moduleUrl('../src/rigging/skinMath.ts');
+const visibility = moduleUrl('../src/rigging/skinVisibility.ts', { './skinMath': math });
 const { visibleBoneDistances } = await import(visibility);
-const imports = { './skinMath': math, './skinVisibility': visibility, './skinTreatments': moduleUrl('../src/skinTreatments.ts') };
-const weightsModule = moduleUrl('../src/weights.ts', imports);
+const imports = { './skinMath': math, './skinVisibility': visibility, './skinTreatments': moduleUrl('../src/rigging/skinTreatments.ts') };
+const weightsModule = moduleUrl('../src/rigging/weights.ts', imports);
 const { envelopeWeights, strongest } = await import(weightsModule);
 let heatResult;
 globalThis.self = { postMessage: (m) => { if (m.type !== 'progress') heatResult = m; } };
-await import(moduleUrl('../src/weights.worker.ts', { ...imports, './weights': weightsModule }));
+await import(moduleUrl('../src/rigging/weights.worker.ts', { ...imports, './weights': weightsModule }));
 
 const vertices = [], triangles = [];
 function box(min, max, steps = 10) {

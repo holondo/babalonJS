@@ -1,4 +1,4 @@
-import type { Editor } from './editor';
+import type { Editor } from '../core/editor';
 
 /**
  * Integration with the system bars around the app:

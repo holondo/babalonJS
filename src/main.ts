@@ -1,13 +1,13 @@
-import './style.css';
-import { Editor } from './editor';
-import { UI } from './ui';
-import { locale, tr } from './i18n';
+import './ui/style.css';
+import { Editor } from './core/editor';
+import { UI } from './ui/ui';
+import { locale, tr } from './core/i18n';
 import { registerSW } from 'virtual:pwa-register';
-import { setupSystemBars } from './systemBars';
-import { ARMode } from './ar';
-import { ARHud } from './arHud';
-import { takeSharedFiles } from './files';
-import { GyroControl } from './gyro';
+import { setupSystemBars } from './device/systemBars';
+import { ARMode } from './ar/ar';
+import { ARHud } from './ar/arHud';
+import { takeSharedFiles } from './core/files';
+import { GyroControl } from './device/gyro';
 
 document.documentElement.lang = locale();
 

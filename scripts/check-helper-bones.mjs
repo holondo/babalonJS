@@ -13,8 +13,8 @@ function moduleUrl(url) {
   const encoded=`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
   modules.set(url.href,encoded); return encoded;
 }
-const {Rigger,updateHelperBones,addHelperBoneTracks}=await import(moduleUrl(new URL('../src/rigging.ts',import.meta.url)));
-const {RIG_TEMPLATE,TIP_JOINTS}=await import(moduleUrl(new URL('../src/humanoidTemplate.ts',import.meta.url)));
+const {Rigger,updateHelperBones,addHelperBoneTracks}=await import(moduleUrl(new URL('../src/rigging/rigging.ts',import.meta.url)));
+const {RIG_TEMPLATE,TIP_JOINTS}=await import(moduleUrl(new URL('../src/rigging/humanoidTemplate.ts',import.meta.url)));
 const engine=new NullEngine(), scene=new Scene(engine);
 function entity(id) {
   const root=new Mesh(`root${id}`,scene),fit=new TransformNode(`fit${id}`,scene),mesh=new Mesh(`mesh${id}`,scene);
@@ -71,7 +71,7 @@ assert.ok(helpers.length>=2);
 assert.ok(json.skins.some(s=>helpers.some(index=>s.joints.includes(index))),'GLB skin must include support bones');
 assert.ok(json.animations.some(a=>a.channels.some(c=>helpers.includes(c.target.node)&&c.target.path==='rotation')),'GLB animation must include support rotations');
 globalThis.matchMedia=()=>({matches:false});
-const {Editor}=await import(moduleUrl(new URL('../src/editor.ts',import.meta.url)));
+const {Editor}=await import(moduleUrl(new URL('../src/core/editor.ts',import.meta.url)));
 const actualExport=GLTF2Export.GLBAsync;
 let filteredFile;
 GLTF2Export.GLBAsync=async (...args)=>{

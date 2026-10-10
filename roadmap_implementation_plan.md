@@ -25,17 +25,17 @@
 Facts checked in the repository at commit `023885a` (clean tree):
 
 - **Stack:** Babylon.js 9.30 (`@babylonjs/core`, `loaders`, `materials`, `serializers`), TypeScript, Vite 8, `vite-plugin-pwa`, `fflate`, `lucide`. Deployed to GitHub Pages by `.github/workflows/deploy.yml` with `BASE_PATH`.
-- **Undo** (`src/editor.ts`): `Command { undo, redo, entities? }`, private `push()` (line ~559) and `group()` (~543), public `undo()`/`redo()`, transform history via `beginTransform()`/`endTransform()`/`transformMany()` (~606–626). Only transforms, add/remove, light presets and alignment are undoable. Material edits (`src/ui.ts` `materialControls()` ~1178), light properties (`lightControls()` ~1276), environment (`envPanel()` ~1312 → `editor.applyEnv()`), and photo settings (`photoPanelContent()` ~1349 → `editor.setPhoto()`) mutate state directly with no history.
-- **Projects** (`src/project.ts`): `snapshot()` / `restore()` / `toZip()` / `fromZip()`; `ProjectJSON` (~60) with `MaterialJSON` (~20); IndexedDB database `babalon-js`, store `projects`, single key `autosave` (`saveAutosave`/`loadAutosave`, ~320–360). `src/ui.ts` `setupAutosave()` (~496) offers "Continue where you left off" in the empty state (`renderAll()` ~353). Model source files are stored in the snapshot (`files`), sample models as URLs.
+- **Undo** (`src/core/editor.ts`): `Command { undo, redo, entities? }`, private `push()` (line ~559) and `group()` (~543), public `undo()`/`redo()`, transform history via `beginTransform()`/`endTransform()`/`transformMany()` (~606–626). Only transforms, add/remove, light presets and alignment are undoable. Material edits (`src/ui/ui.ts` `materialControls()` ~1178), light properties (`lightControls()` ~1276), environment (`envPanel()` ~1312 → `editor.applyEnv()`), and photo settings (`photoPanelContent()` ~1349 → `editor.setPhoto()`) mutate state directly with no history.
+- **Projects** (`src/core/project.ts`): `snapshot()` / `restore()` / `toZip()` / `fromZip()`; `ProjectJSON` (~60) with `MaterialJSON` (~20); IndexedDB database `babalon-js`, store `projects`, single key `autosave` (`saveAutosave`/`loadAutosave`, ~320–360). `src/ui/ui.ts` `setupAutosave()` (~496) offers "Continue where you left off" in the empty state (`renderAll()` ~353). Model source files are stored in the snapshot (`files`), sample models as URLs.
 - **Materials:** PBR edits limited to color/tint, texture show/hide, metallic, roughness, clear coat, unlit, emission, opacity, double-sided, wireframe. Babylon 9 exposes `subSurface` (refraction/translucency), `sheen`, `iridescence`, `anisotropy` on `PBRMaterial` (`node_modules/@babylonjs/core/Materials/PBR/pbrBaseMaterial.pure.d.ts`).
-- **Environments:** fixed list `ENV_PRESETS` (`src/editor.ts` ~111) of prefiltered `.env` URLs loaded with `CubeTexture.CreateFromPrefilteredData` (~1348). Babylon 9 also ships `HDRCubeTexture`, `EquiRectangularCubeTexture`, `EXRCubeTexture`.
-- **Presets:** lighting presets and photo filters live in `src/presets.ts` (shared by editor and AR).
+- **Environments:** fixed list `ENV_PRESETS` (`src/core/editor.ts` ~111) of prefiltered `.env` URLs loaded with `CubeTexture.CreateFromPrefilteredData` (~1348). Babylon 9 also ships `HDRCubeTexture`, `EquiRectangularCubeTexture`, `EXRCubeTexture`.
+- **Presets:** lighting presets and photo filters live in `src/core/presets.ts` (shared by editor and AR).
 - **Model import:** `loadAsset()` (~755) → `instantiate()` (~791) with size normalization; no checks on triangle count, texture size or memory. Babylon 9 includes `Mesh.simplify` / `SimplificationQueue` (`Meshes/meshSimplification.d.ts`).
-- **Capture:** `editor.capture()` (~1529) renders at up to 2× and crops to the photo aspect; `src/files.ts` has `saveAndOfferShare()` and `timestampedName()`. No video.
+- **Capture:** `editor.capture()` (~1529) renders at up to 2× and crops to the photo aspect; `src/core/files.ts` has `saveAndOfferShare()` and `timestampedName()`. No video.
 - **Bundle:** `import … from '@babylonjs/core'` everywhere; main chunk ≈ 5.4 MB (≈ 1.15 MB gzip); PWA precache ≈ 9.7 MB. Loaders are already lazy (`registerBuiltInLoaders`).
-- **Accessibility:** icon buttons get `aria-label` (`src/dom.ts` `iconButton()`); no focus-visible styling, no keyboard navigation inside menus, no reduced-motion handling, toasts aren't announced.
-- **AR** (`src/ar.ts`, `src/arHud.ts`): WebXR `immersive-ar`, hit test, DOM overlay, optional light estimation and raw camera access, virtual AR, place-in-front, scene grouped under a temporary anchor node (not an XR anchor). Babylon 9 has `WebXRFeatureName.ANCHOR_SYSTEM` and `DEPTH_SENSING`; `@babylonjs/serializers` has `USDZExportAsync` (option `fflateUrl`).
-- **Tools** (`src/tools.ts`): measurement with anchors on entities or floor, unit formatting — reusable for AR measuring.
+- **Accessibility:** icon buttons get `aria-label` (`src/ui/dom.ts` `iconButton()`); no focus-visible styling, no keyboard navigation inside menus, no reduced-motion handling, toasts aren't announced.
+- **AR** (`src/ar/ar.ts`, `src/ar/arHud.ts`): WebXR `immersive-ar`, hit test, DOM overlay, optional light estimation and raw camera access, virtual AR, place-in-front, scene grouped under a temporary anchor node (not an XR anchor). Babylon 9 has `WebXRFeatureName.ANCHOR_SYSTEM` and `DEPTH_SENSING`; `@babylonjs/serializers` has `USDZExportAsync` (option `fflateUrl`).
+- **Tools** (`src/tools/tools.ts`): measurement with anchors on entities or floor, unit formatting — reusable for AR measuring.
 - **Camera image outside XR:** none (no `getUserMedia` usage).
 - **Distribution:** PWA with manifest, file handlers and share target in `vite.config.ts`; no Android wrapper; site is a project page (`https://holondo.github.io/babalonJS/`).
 
@@ -43,19 +43,19 @@ Facts checked in the repository at commit `023885a` (clean tree):
 
 | Responsibility | Where | Notes |
 | --- | --- | --- |
-| Generic undoable edits | `src/editor.ts` (public `beginEdit`/`endEdit` around the existing `push`) | UI never builds commands itself |
-| Serializing materials / lights / env (shared by undo and projects) | new `src/state.ts` (moved from `src/project.ts`) | One implementation (DRY) |
-| Project library (many projects, thumbnails, migration) | `src/project.ts` (storage) + `src/ui.ts` (gallery) | Same `ProjectSnapshot` format |
-| Material presets, PBR extensions | `src/presets.ts` (data) + `src/ui.ts` `materialControls()` | Presets are data, not code |
-| User textures / HDRs as project files | `src/editor.ts` (apply) + `src/project.ts` (store under `textures/`, `environments/`) | Restore from files like model assets |
+| Generic undoable edits | `src/core/editor.ts` (public `beginEdit`/`endEdit` around the existing `push`) | UI never builds commands itself |
+| Serializing materials / lights / env (shared by undo and projects) | new `src/state.ts` (moved from `src/core/project.ts`) | One implementation (DRY) |
+| Project library (many projects, thumbnails, migration) | `src/core/project.ts` (storage) + `src/ui/ui.ts` (gallery) | Same `ProjectSnapshot` format |
+| Material presets, PBR extensions | `src/core/presets.ts` (data) + `src/ui/ui.ts` `materialControls()` | Presets are data, not code |
+| User textures / HDRs as project files | `src/core/editor.ts` (apply) + `src/core/project.ts` (store under `textures/`, `environments/`) | Restore from files like model assets |
 | Import analysis and optimization | new `src/optimize.ts`, called from `editor.loadAsset()` flow | No UI inside it |
 | Video recording | new `src/video.ts` (camera path + recorder) + photo panel | Reuses capture crop and `files.ts` |
 | Lazy features / smaller bundle | `vite.config.ts`, deep imports across `src/*.ts`, dynamic `import()` | Behavior unchanged |
-| Accessibility | `src/dom.ts` components + `src/style.css` | Fix in components, not per screen |
+| Accessibility | `src/ui/dom.ts` components + `src/ui/style.css` | Fix in components, not per screen |
 | Asset library | new `src/library.ts` (Poly Haven client) + Add panel / Environment part | Read-only remote fetches |
-| XR anchors, AR measuring, occlusion | `src/ar.ts`, `src/arHud.ts`, reuse `src/tools.ts` | Optional features, off by default |
+| XR anchors, AR measuring, occlusion | `src/ar/ar.ts`, `src/ar/arHud.ts`, reuse `src/tools/tools.ts` | Optional features, off by default |
 | Camera mode with lens choice | new `src/cameraMode.ts` + mode switch | Non-tracked; independent of WebXR |
-| iPhone AR | `src/ar.ts` or new `src/quicklook.ts` using `USDZExportAsync` | iOS only |
+| iPhone AR | `src/ar/ar.ts` or new `src/quicklook.ts` using `USDZExportAsync` | iOS only |
 | Android app | `twa/` (Bubblewrap project) + Digital Asset Links | Outside `src/` |
 
 Boundaries: `editor.ts` stays UI-free; new data goes in `presets.ts`; new UI uses `dom.ts` components; nothing new adds a top-level button outside the structure in `AGENTS.md` without a decision.
@@ -99,7 +99,7 @@ Have reference numbers to judge later steps: startup time, bundle and precache s
 - `AGENTS.md`;
 - `vite.config.ts`;
 - `package.json`;
-- `src/editor.ts` (`needsRender()`, `loadAsset()`).
+- `src/core/editor.ts` (`needsRender()`, `loadAsset()`).
 
 **Target files**
 
@@ -136,18 +136,18 @@ Material, light, environment and photo-setting changes can be undone and redone 
 
 **Required reading**
 
-- `src/editor.ts` — `Command`, `push()`, `group()`, `undo()`, `redo()`, `beginTransform()`/`endTransform()`, `applyEnv()`, `setPhoto()`, `setLightShadows()`;
-- `src/project.ts` — `materialToJSON()`, `applyMaterial()`, `entityToJSON()` light part (to reuse, not duplicate);
-- `src/ui.ts` — `materialControls()`, `lightControls()`, `envPanel()`, `photoPanelContent()`, `quiet()`;
-- `src/dom.ts` — `slider()` (`onCommit`), `colorInput()`, `toggle()`, `chips()`.
+- `src/core/editor.ts` — `Command`, `push()`, `group()`, `undo()`, `redo()`, `beginTransform()`/`endTransform()`, `applyEnv()`, `setPhoto()`, `setLightShadows()`;
+- `src/core/project.ts` — `materialToJSON()`, `applyMaterial()`, `entityToJSON()` light part (to reuse, not duplicate);
+- `src/ui/ui.ts` — `materialControls()`, `lightControls()`, `envPanel()`, `photoPanelContent()`, `quiet()`;
+- `src/ui/dom.ts` — `slider()` (`onCommit`), `colorInput()`, `toggle()`, `chips()`.
 
 **Target files**
 
-- `src/state.ts` (new: material/light/env/photo state capture and apply, moved out of `src/project.ts`);
-- `src/editor.ts` (public `beginEdit(key, capture, apply)` / `endEdit(key)`);
-- `src/project.ts` (use `src/state.ts`);
-- `src/ui.ts` (controls call begin/end);
-- `src/dom.ts` (`colorInput` gains an optional `onCommit` on `change`).
+- `src/state.ts` (new: material/light/env/photo state capture and apply, moved out of `src/core/project.ts`);
+- `src/core/editor.ts` (public `beginEdit(key, capture, apply)` / `endEdit(key)`);
+- `src/core/project.ts` (use `src/state.ts`);
+- `src/ui/ui.ts` (controls call begin/end);
+- `src/ui/dom.ts` (`colorInput` gains an optional `onCommit` on `change`).
 
 **Scope**
 
@@ -170,7 +170,7 @@ In the dev server: change roughness, color, a light's intensity, HDR rotation an
 - [ ] Each covered change is reverted by one Ctrl+Z / undo button press and restored by redo.
 - [ ] A slider drag produces exactly one undo step.
 - [ ] Projects saved before this step open with identical materials and lights.
-- [ ] No duplicated serialization code remains in `src/project.ts`.
+- [ ] No duplicated serialization code remains in `src/core/project.ts`.
 
 ---
 
@@ -184,18 +184,18 @@ A project gallery with thumbnails: create, open, rename, duplicate and delete pr
 
 **Required reading**
 
-- `src/project.ts` — IndexedDB helpers, `snapshot()`, `restore()`, `saveAutosave()`, `loadAutosave()`;
-- `src/ui.ts` — `setupAutosave()`, `scheduleAutosave()`, `loadSnapshot()`, `newProject()`, `toggleMenu()` (project menu), `renderAll()` (empty state);
-- `src/editor.ts` — `capture()` (thumbnail source), `newScene()`;
-- `src/files.ts`;
+- `src/core/project.ts` — IndexedDB helpers, `snapshot()`, `restore()`, `saveAutosave()`, `loadAutosave()`;
+- `src/ui/ui.ts` — `setupAutosave()`, `scheduleAutosave()`, `loadSnapshot()`, `newProject()`, `toggleMenu()` (project menu), `renderAll()` (empty state);
+- `src/core/editor.ts` — `capture()` (thumbnail source), `newScene()`;
+- `src/core/files.ts`;
 - decision D5.
 
 **Target files**
 
-- `src/project.ts` (library API: `listProjects`, `saveProject(id, snap, thumb)`, `loadProject(id)`, `deleteProject(id)`, `duplicateProject(id)`; migration of key `autosave`);
-- `src/editor.ts` (small thumbnail capture without side effects, e.g. `captureThumbnail(size)`);
-- `src/ui.ts` (gallery view opened from the logo menu and shown at start when projects exist);
-- `src/style.css`, `src/i18n.ts`.
+- `src/core/project.ts` (library API: `listProjects`, `saveProject(id, snap, thumb)`, `loadProject(id)`, `deleteProject(id)`, `duplicateProject(id)`; migration of key `autosave`);
+- `src/core/editor.ts` (small thumbnail capture without side effects, e.g. `captureThumbnail(size)`);
+- `src/ui/ui.ts` (gallery view opened from the logo menu and shown at start when projects exist);
+- `src/ui/style.css`, `src/core/i18n.ts`.
 
 **Scope**
 
@@ -251,17 +251,17 @@ Apply ready-made looks (glass, brushed metal, chrome, glossy/matte plastic, rubb
 
 **Required reading**
 
-- `src/presets.ts` (format of shared data);
-- `src/ui.ts` — `materialControls()`, `panelParts()`;
+- `src/core/presets.ts` (format of shared data);
+- `src/ui/ui.ts` — `materialControls()`, `panelParts()`;
 - `src/state.ts` from P01 (material capture/apply);
 - Babylon `PBRSubSurfaceConfiguration`, `PBRSheenConfiguration`, `PBRIridescenceConfiguration`, `PBRAnisotropicConfiguration` in `node_modules/@babylonjs/core/Materials/PBR/`.
 
 **Target files**
 
-- `src/presets.ts` (`MATERIAL_PRESETS`);
-- `src/ui.ts` (preset chips at the top of the Material part; "Advanced" section with the new effects);
-- `src/state.ts` and `src/project.ts` (persist the new fields);
-- `src/i18n.ts`.
+- `src/core/presets.ts` (`MATERIAL_PRESETS`);
+- `src/ui/ui.ts` (preset chips at the top of the Material part; "Advanced" section with the new effects);
+- `src/state.ts` and `src/core/project.ts` (persist the new fields);
+- `src/core/i18n.ts`.
 
 **Scope**
 
@@ -296,16 +296,16 @@ Replace or add a material's textures (base color, normal, roughness/metal, emiss
 
 **Required reading**
 
-- `src/ui.ts` — `materialControls()` (texture show/hide logic, `metadata.stashedAlbedo`);
-- `src/project.ts` — how model files are stored in `ProjectSnapshot.files` and restored;
+- `src/ui/ui.ts` — `materialControls()` (texture show/hide logic, `metadata.stashedAlbedo`);
+- `src/core/project.ts` — how model files are stored in `ProjectSnapshot.files` and restored;
 - `src/state.ts` (P01);
-- `src/files.ts`.
+- `src/core/files.ts`.
 
 **Target files**
 
-- `src/editor.ts` (`setMaterialTexture(material, slot, file)` keeping the `File` as the source of truth);
-- `src/state.ts`, `src/project.ts` (texture slots in `MaterialJSON`, files under `textures/`);
-- `src/ui.ts` (texture slots with thumbnail, replace, remove, tiling U/V, rotation), `src/i18n.ts`.
+- `src/core/editor.ts` (`setMaterialTexture(material, slot, file)` keeping the `File` as the source of truth);
+- `src/state.ts`, `src/core/project.ts` (texture slots in `MaterialJSON`, files under `textures/`);
+- `src/ui/ui.ts` (texture slots with thumbnail, replace, remove, tiling U/V, rotation), `src/core/i18n.ts`.
 
 **Scope**
 
@@ -340,16 +340,16 @@ Load an `.hdr`, `.exr` or `.env` file as the environment lighting and background
 
 **Required reading**
 
-- `src/editor.ts` — `ENV_PRESETS`, `applyEnv()`, environment/skybox creation, `restoreEnvironmentTexture()` (AR);
-- `src/ui.ts` — `envPanel()`;
+- `src/core/editor.ts` — `ENV_PRESETS`, `applyEnv()`, environment/skybox creation, `restoreEnvironmentTexture()` (AR);
+- `src/ui/ui.ts` — `envPanel()`;
 - Babylon `HDRCubeTexture`, `EXRCubeTexture`, `CubeTexture.CreateFromPrefilteredData` in `node_modules/@babylonjs/core/Materials/Textures/`;
-- `src/project.ts` (files storage).
+- `src/core/project.ts` (files storage).
 
 **Target files**
 
-- `src/editor.ts` (environment source = preset id or project file path);
-- `src/project.ts`, `src/state.ts` (`env.custom` path, file under `environments/`);
-- `src/ui.ts` (custom environment card next to the presets), `src/i18n.ts`.
+- `src/core/editor.ts` (environment source = preset id or project file path);
+- `src/core/project.ts`, `src/state.ts` (`env.custom` path, file under `environments/`);
+- `src/ui/ui.ts` (custom environment card next to the presets), `src/core/i18n.ts`.
 
 **Scope**
 
@@ -398,15 +398,15 @@ Before a heavy model can crash or freeze a phone, the app knows its cost (triang
 
 **Required reading**
 
-- `src/editor.ts` — `loadAsset()`, `loadModel()`, `instantiate()`, `stats()`;
+- `src/core/editor.ts` — `loadAsset()`, `loadModel()`, `instantiate()`, `stats()`;
 - `docs/baseline.md` (P00);
-- `src/ui.ts` — `loadFiles()`, toasts, `objectSection()` stats.
+- `src/ui/ui.ts` — `loadFiles()`, toasts, `objectSection()` stats.
 
 **Target files**
 
 - `src/optimize.ts` (new: `analyzeContainer(container)` and device budget from `navigator.deviceMemory`, max texture size and pointer type);
-- `src/editor.ts` (call analysis before instantiating; expose the report);
-- `src/ui.ts` (warning dialog: load anyway / optimize (P07) / cancel), `src/i18n.ts`.
+- `src/core/editor.ts` (call analysis before instantiating; expose the report);
+- `src/ui/ui.ts` (warning dialog: load anyway / optimize (P07) / cancel), `src/core/i18n.ts`.
 
 **Scope**
 
@@ -443,12 +443,12 @@ Import a heavy glTF (≥1 M triangles or 8K textures) on desktop and the S24 and
 - `src/optimize.ts` (P06);
 - Babylon `Meshes/meshSimplification.d.ts` (`simplify`, `SimplificationQueue`);
 - decision D2;
-- `src/project.ts` (what is stored: originals vs optimized).
+- `src/core/project.ts` (what is stored: originals vs optimized).
 
 **Target files**
 
 - `src/optimize.ts` (texture downscale via canvas/GPU, decimation per D2);
-- `src/editor.ts`, `src/ui.ts`, `src/i18n.ts`;
+- `src/core/editor.ts`, `src/ui/ui.ts`, `src/core/i18n.ts`;
 - `package.json` only if D2 chooses a dependency.
 
 **Scope**
@@ -491,7 +491,7 @@ The app shows its first frame noticeably faster on phones by shipping less JavaS
 
 **Target files**
 
-- `src/*.ts` (deep imports of the Babylon modules actually used; dynamic `import()` for `src/ar.ts`, `src/arHud.ts`, GLB/USDZ serializers, `src/tools.ts` visuals if separable, `src/video.ts`, `src/library.ts`);
+- `src/*.ts` (deep imports of the Babylon modules actually used; dynamic `import()` for `src/ar/ar.ts`, `src/ar/arHud.ts`, GLB/USDZ serializers, `src/tools/tools.ts` visuals if separable, `src/video.ts`, `src/library.ts`);
 - `vite.config.ts` (chunking, precache list).
 
 **Scope**
@@ -526,16 +526,16 @@ Record short videos with the photo look: turntable (camera circles the pivot), t
 
 **Required reading**
 
-- `src/editor.ts` — `capture()` (crop, helpers hidden), `photoMode`, camera tween, `needsRender()`, `invalidate()`;
-- `src/ui.ts` — photo HUD (`renderPhotoHud()`), `deliver()`;
-- `src/files.ts` — `saveAndOfferShare()`, `timestampedName()`;
+- `src/core/editor.ts` — `capture()` (crop, helpers hidden), `photoMode`, camera tween, `needsRender()`, `invalidate()`;
+- `src/ui/ui.ts` — photo HUD (`renderPhotoHud()`), `deliver()`;
+- `src/core/files.ts` — `saveAndOfferShare()`, `timestampedName()`;
 - decision D1.
 
 **Target files**
 
 - `src/video.ts` (new: camera paths and recorder: `canvas.captureStream` → crop canvas → `MediaRecorder` per D1);
-- `src/editor.ts` (force continuous rendering while recording);
-- `src/ui.ts` (record control in photo mode with progress and stop), `src/i18n.ts`, `src/style.css`.
+- `src/core/editor.ts` (force continuous rendering while recording);
+- `src/ui/ui.ts` (record control in photo mode with progress and stop), `src/core/i18n.ts`, `src/ui/style.css`.
 
 **Scope**
 
@@ -587,14 +587,14 @@ Browse and add Poly Haven HDRIs and models from inside the app (search, categori
 
 - decisions D3 and D4;
 - Poly Haven public API documentation (assets list, files per asset, thumbnails) — verify endpoints, CORS and terms before coding;
-- `src/editor.ts` — `addFromUrl()`, `loadAsset()`, custom environment path from P05;
-- `src/ui.ts` — `addPanel()`, `envPanel()`, `panelParts()`;
+- `src/core/editor.ts` — `addFromUrl()`, `loadAsset()`, custom environment path from P05;
+- `src/ui/ui.ts` — `addPanel()`, `envPanel()`, `panelParts()`;
 - `src/optimize.ts` (P06 budgets for resolution choice).
 
 **Target files**
 
 - `src/library.ts` (new: read-only client with caching of the index);
-- `src/ui.ts` (Library part in Add and in Environment), `src/project.ts` (source + license per asset, embed per D4), `src/i18n.ts`, `src/style.css`;
+- `src/ui/ui.ts` (Library part in Add and in Environment), `src/core/project.ts` (source + license per asset, embed per D4), `src/core/i18n.ts`, `src/ui/style.css`;
 - `vite.config.ts` (runtime caching rule for the library host).
 
 **Scope**
@@ -630,12 +630,12 @@ After placing, the scene is attached to an ARCore anchor so it doesn't drift whe
 
 **Required reading**
 
-- `src/ar.ts` — `enter()`, `wrapScene()`, `placeAt()`, `applyTransform()`, cleanup;
+- `src/ar/ar.ts` — `enter()`, `wrapScene()`, `placeAt()`, `applyTransform()`, cleanup;
 - Babylon `XR/features/WebXRAnchorSystem.d.ts`.
 
 **Target files**
 
-- `src/ar.ts`, `src/arHud.ts` (status only if needed).
+- `src/ar/ar.ts`, `src/ar/arHud.ts` (status only if needed).
 
 **Scope**
 
@@ -668,14 +668,14 @@ In AR, tap two real-world points (detected surfaces) to measure real distances, 
 
 **Required reading**
 
-- `src/tools.ts` — `Measurement`, anchors, `format()`, labels;
-- `src/ar.ts` — hit test, `lastHit`, `setHitTest()`;
-- `src/arHud.ts` — options panel and gestures;
-- `src/ui.ts` — `updateLabels()` (labels are in the main DOM; AR needs them in the overlay).
+- `src/tools/tools.ts` — `Measurement`, anchors, `format()`, labels;
+- `src/ar/ar.ts` — hit test, `lastHit`, `setHitTest()`;
+- `src/ar/arHud.ts` — options panel and gestures;
+- `src/ui/ui.ts` — `updateLabels()` (labels are in the main DOM; AR needs them in the overlay).
 
 **Target files**
 
-- `src/tools.ts` (measurement anchors in world space for AR), `src/ar.ts`, `src/arHud.ts`, `src/i18n.ts`.
+- `src/tools/tools.ts` (measurement anchors in world space for AR), `src/ar/ar.ts`, `src/ar/arHud.ts`, `src/core/i18n.ts`.
 
 **Scope**
 
@@ -708,13 +708,13 @@ Optional AR depth occlusion: real objects in front of the virtual scene hide it.
 
 **Required reading**
 
-- `src/ar.ts` (feature enabling pattern, options);
+- `src/ar/ar.ts` (feature enabling pattern, options);
 - Babylon `XR/features/WebXRDepthSensing.d.ts` (`DEPTH_SENSING`);
-- `src/arHud.ts` options panel.
+- `src/ar/arHud.ts` options panel.
 
 **Target files**
 
-- `src/ar.ts`, `src/arHud.ts`, `src/i18n.ts`.
+- `src/ar/ar.ts`, `src/ar/arHud.ts`, `src/core/i18n.ts`.
 
 **Scope**
 
@@ -747,15 +747,15 @@ A non-tracked camera mode: the live camera image is the background and the 3D sc
 **Required reading**
 
 - decision D6 (device probe results);
-- `src/editor.ts` — clear color/background handling, `capture()`, photo pipeline;
-- `src/ar.ts` — how AR composes camera + 3D in photos (`capture()`), for reuse of the compositing approach;
-- `src/ui.ts` — mode switch (`segmented` in `renderTopbar()`), photo HUD;
-- `src/gyro.ts` (useful combination: gyro + camera background).
+- `src/core/editor.ts` — clear color/background handling, `capture()`, photo pipeline;
+- `src/ar/ar.ts` — how AR composes camera + 3D in photos (`capture()`), for reuse of the compositing approach;
+- `src/ui/ui.ts` — mode switch (`segmented` in `renderTopbar()`), photo HUD;
+- `src/device/gyro.ts` (useful combination: gyro + camera background).
 
 **Target files**
 
 - `src/cameraMode.ts` (new: `getUserMedia`, `enumerateDevices`, lens list, `zoom` capability, stream lifecycle);
-- `src/editor.ts` (transparent background while active), `src/ui.ts` (entry in the Photo mode or a fourth mode per decision), `src/i18n.ts`, `src/style.css`.
+- `src/core/editor.ts` (transparent background while active), `src/ui/ui.ts` (entry in the Photo mode or a fourth mode per decision), `src/core/i18n.ts`, `src/ui/style.css`.
 
 **Scope**
 
@@ -792,12 +792,12 @@ On iPhone/iPad, an "AR" action opens the current scene in Apple's AR Quick Look.
 **Required reading**
 
 - `node_modules/@babylonjs/serializers/USDZ/usdzExporter.d.ts` (`USDZExportAsync`, `fflateUrl`);
-- `src/editor.ts` — `exportGLB()` (node filtering of helpers/overlays to reuse);
-- `src/ui.ts` — mode switch / AR availability.
+- `src/core/editor.ts` — `exportGLB()` (node filtering of helpers/overlays to reuse);
+- `src/ui/ui.ts` — mode switch / AR availability.
 
 **Target files**
 
-- `src/quicklook.ts` (new) or `src/ar.ts`, `src/ui.ts`, `src/i18n.ts`.
+- `src/quicklook.ts` (new) or `src/ar/ar.ts`, `src/ui/ui.ts`, `src/core/i18n.ts`.
 
 **Scope**
 
@@ -847,14 +847,14 @@ The editor is usable with a keyboard and a screen reader for its main flows, res
 
 **Required reading**
 
-- `src/dom.ts` (all components);
-- `src/ui.ts` (menus, panels, toasts, dock, selection bar);
-- `src/style.css` (focus styles, colors);
-- `src/editor.ts` (camera tweens and flashes for reduced motion).
+- `src/ui/dom.ts` (all components);
+- `src/ui/ui.ts` (menus, panels, toasts, dock, selection bar);
+- `src/ui/style.css` (focus styles, colors);
+- `src/core/editor.ts` (camera tweens and flashes for reduced motion).
 
 **Target files**
 
-- `src/dom.ts`, `src/ui.ts`, `src/style.css`, `src/editor.ts`, `src/i18n.ts`.
+- `src/ui/dom.ts`, `src/ui/ui.ts`, `src/ui/style.css`, `src/core/editor.ts`, `src/core/i18n.ts`.
 
 **Scope**
 

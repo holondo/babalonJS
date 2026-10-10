@@ -82,18 +82,18 @@ Na câmera: arraste para orbitar, pinça/roda para zoom, dois dedos (ou botão d
 
 ## Estrutura
 
-- `src/editor.ts`: núcleo, sem interface. Cena, câmera, carregamento, seleção, gizmos, luzes, sombras, ambiente, pós-processamento, captura, exportação e histórico.
-- `src/tools.ts`: medições (inclusive o caminho pela superfície), guias, guias inteligentes e alinhamento.
-- `src/animation.ts`, `src/motion.ts`: reprodução de animações; girar/flutuar/pulsar/balançar.
-- `src/humanoid.ts`, `src/pose.ts`, `src/retarget.ts`: detecção dos ossos de humanoides, poses (FK, IK, espelho, poses prontas), animações feitas para outros esqueletos.
-- `src/humanoidTemplate.ts`, `src/rigging.ts`, `src/weights.ts`, `src/weights.worker.ts`: o esqueleto padrão, o rigging manual e os pesos da pele (difusão de calor num Web Worker).
+- `src/core/editor.ts`: núcleo, sem interface. Cena, câmera, carregamento, seleção, gizmos, luzes, sombras, ambiente, pós-processamento, captura, exportação e histórico.
+- `src/tools/tools.ts`: medições (inclusive o caminho pela superfície), guias, guias inteligentes e alinhamento.
+- `src/animation/animation.ts`, `src/animation/motion.ts`: reprodução de animações; girar/flutuar/pulsar/balançar.
+- `src/rigging/humanoid.ts`, `src/animation/pose.ts`, `src/animation/retarget.ts`: detecção dos ossos de humanoides, poses (FK, IK, espelho, poses prontas), animações feitas para outros esqueletos.
+- `src/rigging/humanoidTemplate.ts`, `src/rigging/rigging.ts`, `src/rigging/weights.ts`, `src/rigging/weights.worker.ts`: o esqueleto padrão, o rigging manual e os pesos da pele (difusão de calor num Web Worker).
 - `public/animations`, `public/models`: a biblioteca livre de animações e os manequins de exemplo (CC0, veja [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)), gerados por `scripts/build-animation-library.mjs`.
-- `src/ar.ts`, `src/arHud.ts`: realidade aumentada com WebXR e os controles sobre a câmera.
-- `src/project.ts`: salvar/abrir projeto (.babalon) e salvamento automático.
-- `src/ui.ts`: painéis e barras, em DOM puro.
-- `src/dom.ts`: helpers de interface (slider, toggle, cor, chips…).
-- `src/i18n.ts`: traduções. As chaves são o texto em inglês; para outro idioma, basta adicionar um dicionário.
-- `src/style.css`: tema escuro de vidro, com layout de celular abaixo de 760px.
+- `src/ar/ar.ts`, `src/ar/arHud.ts`: realidade aumentada com WebXR e os controles sobre a câmera.
+- `src/core/project.ts`: salvar/abrir projeto (.babalon) e salvamento automático.
+- `src/ui/ui.ts`: painéis e barras, em DOM puro.
+- `src/ui/dom.ts`: helpers de interface (slider, toggle, cor, chips…).
+- `src/core/i18n.ts`: traduções. As chaves são o texto em inglês; para outro idioma, basta adicionar um dicionário.
+- `src/ui/style.css`: tema escuro de vidro, com layout de celular abaixo de 760px.
 - `vite.config.ts`: manifesto do PWA, cache offline e associação de arquivos.
 - `public/icons`, `public/brand`: ícones e lettering do app, gerados a partir das artes em tamanho original em `design/`.
 

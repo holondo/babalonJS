@@ -1,6 +1,6 @@
 import type { AnimationGroup } from '@babylonjs/core';
-import type { Editor, Entity } from './editor';
-import { jointNodes } from './humanoid';
+import type { Editor, Entity } from '../core/editor';
+import { jointNodes } from '../rigging/humanoid';
 import { captureJoints, restoreJoints } from './pose';
 import type { JointState } from './pose';
 

@@ -19,29 +19,29 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 
 | File | Responsibility |
 | --- | --- |
-| `src/editor.ts` | Core with no UI: scene, camera, loading, entities, selection, gizmos, lights, shadows, environment, post-processing, capture, export, undo history, render-on-demand, AR scene state |
-| `src/tools.ts` | Measurements (incl. along-the-surface path), guides, smart guides, alignment |
-| `src/animation.ts` | Clip playback per object: play, pause, scrub/freeze, loop, speed, crossfade (with undo) |
-| `src/motion.ts` | Simple motion for any object (spin, float, pulse, sway) on a child pivot |
-| `src/humanoid.ts` | Canonical humanoid bones (VRM names), detection from any naming convention, manual mapping, up-to-date world matrices (`worldMatrix`) |
-| `src/pose.ts` | Joint math (world-space rotations, aim, two-bone IK, mirror, character frame) and pose mode (`Poser`) |
-| `src/retarget.ts` | Playing clips made for another humanoid (`AnimatorAvatar` + rest-pose alignment) and clips added to objects (`ClipManager`) |
-| `src/humanoidTemplate.ts`, `src/rigging.ts` | The standard skeleton (CC0 rig) and manual rigging (`Rigger`) |
-| `src/weights.ts`, `src/weights.worker.ts`, `src/skinMath.ts` | Skin weights: envelope and heat diffusion (both in a Web Worker) |
-| `src/skinTreatments.ts` | Optional treatments where limbs meet the trunk (direct, trunk protection, helper bones) |
-| `src/bodyLandmarks.ts` | Body landmarks from horizontal sections (leg split, skeleton root, hip pivots) for Find the joints |
-| `src/deformationMap.ts` | Difference map between rig treatments (final skinned positions) |
-| `src/jointOverlay.ts` | Joint handles drawn over the view (posing, rigging) |
-| `src/project.ts` | `.babalon` save/open and browser autosave (IndexedDB) |
-| `src/presets.ts` | Shared data: lighting presets, photo filters, pose presets, animation library |
-| `src/ar.ts` / `src/arHud.ts` | WebXR AR session / its on-camera overlay |
-| `src/gyro.ts` | Gyro mode (device orientation turns the camera) |
-| `src/systemBars.ts` | Status bar / title bar color, desktop title-bar overlay |
-| `src/files.ts` | Saving, sharing and receiving files (share target) |
-| `src/ui.ts` | Panels, bars, menus (plain DOM) |
-| `src/dom.ts` | Reusable UI components (slider, toggle, chips, segmented, menu item, buttons…) |
-| `src/i18n.ts` | Translations |
-| `src/style.css` | Theme and layout |
+| `src/core/editor.ts` | Core with no UI: scene, camera, loading, entities, selection, gizmos, lights, shadows, environment, post-processing, capture, export, undo history, render-on-demand, AR scene state |
+| `src/tools/tools.ts` | Measurements (incl. along-the-surface path), guides, smart guides, alignment |
+| `src/animation/animation.ts` | Clip playback per object: play, pause, scrub/freeze, loop, speed, crossfade (with undo) |
+| `src/animation/motion.ts` | Simple motion for any object (spin, float, pulse, sway) on a child pivot |
+| `src/rigging/humanoid.ts` | Canonical humanoid bones (VRM names), detection from any naming convention, manual mapping, up-to-date world matrices (`worldMatrix`) |
+| `src/animation/pose.ts` | Joint math (world-space rotations, aim, two-bone IK, mirror, character frame) and pose mode (`Poser`) |
+| `src/animation/retarget.ts` | Playing clips made for another humanoid (`AnimatorAvatar` + rest-pose alignment) and clips added to objects (`ClipManager`) |
+| `src/rigging/humanoidTemplate.ts`, `src/rigging/rigging.ts` | The standard skeleton (CC0 rig) and manual rigging (`Rigger`) |
+| `src/rigging/weights.ts`, `src/rigging/weights.worker.ts`, `src/rigging/skinMath.ts` | Skin weights: envelope and heat diffusion (both in a Web Worker) |
+| `src/rigging/skinTreatments.ts` | Optional treatments where limbs meet the trunk (direct, trunk protection, helper bones) |
+| `src/rigging/bodyLandmarks.ts` | Body landmarks from horizontal sections (leg split, skeleton root, hip pivots) for Find the joints |
+| `src/rigging/deformationMap.ts` | Difference map between rig treatments (final skinned positions) |
+| `src/ui/jointOverlay.ts` | Joint handles drawn over the view (posing, rigging) |
+| `src/core/project.ts` | `.babalon` save/open and browser autosave (IndexedDB) |
+| `src/core/presets.ts` | Shared data: lighting presets, photo filters, pose presets, animation library |
+| `src/ar/ar.ts` / `src/ar/arHud.ts` | WebXR AR session / its on-camera overlay |
+| `src/device/gyro.ts` | Gyro mode (device orientation turns the camera) |
+| `src/device/systemBars.ts` | Status bar / title bar color, desktop title-bar overlay |
+| `src/core/files.ts` | Saving, sharing and receiving files (share target) |
+| `src/ui/ui.ts` | Panels, bars, menus (plain DOM) |
+| `src/ui/dom.ts` | Reusable UI components (slider, toggle, chips, segmented, menu item, buttons…) |
+| `src/core/i18n.ts` | Translations |
+| `src/ui/style.css` | Theme and layout |
 | `vite.config.ts`, `public/share-target.js` | PWA manifest, offline cache, file handlers, share target |
 | `design/` | Full-size source artwork (not shipped); `public/icons` and `public/brand` are generated from it |
 | `public/animations`, `public/models`, `scripts/build-animation-library.mjs` | Bundled CC0 clips and Mannequins, and the script that makes them (`docs/animation_sources.md`, `THIRD_PARTY_LICENSES.md`) |

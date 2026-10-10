@@ -15,9 +15,9 @@ import {
   WebXRSessionManager,
 } from '@babylonjs/core';
 import type { BaseTexture, IWebXRHitResult, Node, ShadowLight, WebXRHitTest, WebXRRawCameraAccess } from '@babylonjs/core';
-import { createLight, createShadowGenerator } from './editor';
-import type { Editor } from './editor';
-import { PHOTO_FILTERS, filterToCanvas, findLightPreset, presetIntensity } from './presets';
+import { createLight, createShadowGenerator } from '../core/editor';
+import type { Editor } from '../core/editor';
+import { PHOTO_FILTERS, filterToCanvas, findLightPreset, presetIntensity } from '../core/presets';
 
 export type ARStatus = 'searching' | 'ready' | 'placed';
 /** "scene" = the editor's own lights; "room" = estimated by the phone; the rest are presets. */

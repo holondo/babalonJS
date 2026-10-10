@@ -22,7 +22,7 @@
 
 Checked at commit `023885a` and with external sources:
 
-- **Animation today** (`src/ui.ts` `objectSection()`): when a model has animation groups, the Objects → Object part shows an "Animation" select, Play/Pause and a Speed slider. `src/editor.ts` `instantiate()` starts the first clip in loop; `loadAsset()` stops the clips auto-started on the hidden container template. `src/project.ts` saves `{ index, playing, speed }` per entity. Rendering on demand (`needsRender()`) keeps drawing while an `Animatable` is running and not paused.
+- **Animation today** (`src/ui/ui.ts` `objectSection()`): when a model has animation groups, the Objects → Object part shows an "Animation" select, Play/Pause and a Speed slider. `src/core/editor.ts` `instantiate()` starts the first clip in loop; `loadAsset()` stops the clips auto-started on the hidden container template. `src/core/project.ts` saves `{ index, playing, speed }` per entity. Rendering on demand (`needsRender()`) keeps drawing while an `Animatable` is running and not paused.
 - **Babylon 9.30 (installed):**
   - `node_modules/@babylonjs/core/Animations/animatorAvatar.d.ts` — `AnimatorAvatar.retargetAnimationGroup(group, IRetargetOptions)` with `mapNodeNames`, `fixRootPosition`, `fixGroundReference`, `rootNodeName`, `groundReferenceNodeName`.
   - `node_modules/@babylonjs/core/Bones/` — `Skeleton`, `Bone`, `BoneIKController`, `BoneLookController`.
@@ -33,27 +33,27 @@ Checked at commit `023885a` and with external sources:
   - **VRM humanoid specification** (`specification/VRMC_vrm-1.0/humanoid.md` in `vrm-c/vrm-specification`) — standard bone names, parents and *estimated anatomical positions* (e.g. hips: crotch; spine: top of pelvis). The repository declares no license → we use the naming convention only and write our own data.
   - **MakeHuman** — bundled assets (base mesh, proxies, poses, expressions) are CC0 per `LICENSE.md`; skeletons are not named explicitly → fallback source only, after checking.
   - **Godot `SkeletonProfileHumanoid`** (engine is MIT) — 56-bone humanoid profile with a reference T-pose; reference for conventions.
-- **Reusable pieces:** `src/presets.ts` (shared data), `src/dom.ts` (components, touch sliders), `src/tools.ts` (screen-space overlays, labels, picking helpers), editor gizmos (`GizmoManager`), `editor.pickSurface()`, `editor.toScreen()`, `editor.worldPerPixel()`.
+- **Reusable pieces:** `src/core/presets.ts` (shared data), `src/ui/dom.ts` (components, touch sliders), `src/tools/tools.ts` (screen-space overlays, labels, picking helpers), editor gizmos (`GizmoManager`), `editor.pickSurface()`, `editor.toScreen()`, `editor.worldPerPixel()`.
 
 ## 3. Target architecture
 
 | Responsibility | Where |
 | --- | --- |
-| Clip control (play, scrub, freeze, loop, crossfade) | `src/editor.ts` (entity animation API) + `src/ui.ts` (Object part, selection bar) |
-| Humanoid detection and canonical bone map | new `src/humanoid.ts` (pure data + functions, no UI) |
-| Standard skeleton template (bones, hierarchy, rest pose, anatomical guides) | new `src/humanoidTemplate.ts` (data, derived from the CC0 rig chosen in R00) |
-| Posing (FK, IK, presets, mirror) | new `src/pose.ts` + bone handles overlay; UI in Objects part "Pose" |
-| Retargeting (imported clips, library) | new `src/retarget.ts` using `AnimatorAvatar` + `src/humanoid.ts` maps |
-| Built-in CC0 animation library | `public/animations/` (lazy, runtime-cached) + `ANIMATION_LIBRARY` in `src/presets.ts` + `THIRD_PARTY_LICENSES.md` |
-| Procedural object animation | new `src/motion.ts` (Babylon `Animation`s so render-on-demand detects them) |
-| Manual rigging (joint placement, binding, weights) | new `src/rigging.ts` (+ `src/weights.worker.ts` for E2) |
-| Persistence | `src/project.ts` / `src/state.ts` (from roadmap P01) |
+| Clip control (play, scrub, freeze, loop, crossfade) | `src/core/editor.ts` (entity animation API) + `src/ui/ui.ts` (Object part, selection bar) |
+| Humanoid detection and canonical bone map | new `src/rigging/humanoid.ts` (pure data + functions, no UI) |
+| Standard skeleton template (bones, hierarchy, rest pose, anatomical guides) | new `src/rigging/humanoidTemplate.ts` (data, derived from the CC0 rig chosen in R00) |
+| Posing (FK, IK, presets, mirror) | new `src/animation/pose.ts` + bone handles overlay; UI in Objects part "Pose" |
+| Retargeting (imported clips, library) | new `src/animation/retarget.ts` using `AnimatorAvatar` + `src/rigging/humanoid.ts` maps |
+| Built-in CC0 animation library | `public/animations/` (lazy, runtime-cached) + `ANIMATION_LIBRARY` in `src/core/presets.ts` + `THIRD_PARTY_LICENSES.md` |
+| Procedural object animation | new `src/animation/motion.ts` (Babylon `Animation`s so render-on-demand detects them) |
+| Manual rigging (joint placement, binding, weights) | new `src/rigging/rigging.ts` (+ `src/rigging/weights.worker.ts` for E2) |
+| Persistence | `src/core/project.ts` / `src/state.ts` (from roadmap P01) |
 
 Boundaries: `editor.ts` stays UI-free; heavy math (weights) never on the main thread in E2; new UI lives inside existing panels (Objects parts) and the selection bar's More menu — no new top-level buttons.
 
 ## 4. Cross-cutting contracts and invariants
 
-- **Canonical bone names = VRM humanoid names** (`hips`, `spine`, `chest`, `upperChest`, `neck`, `head`, `leftShoulder`, `leftUpperArm`, `leftLowerArm`, `leftHand`, `leftUpperLeg`, `leftLowerLeg`, `leftFoot`, `leftToes`, and right side). Every other convention (Quaternius, Mixamo-style, Unreal, Rigify, MakeHuman) maps to these in `src/humanoid.ts`.
+- **Canonical bone names = VRM humanoid names** (`hips`, `spine`, `chest`, `upperChest`, `neck`, `head`, `leftShoulder`, `leftUpperArm`, `leftLowerArm`, `leftHand`, `leftUpperLeg`, `leftLowerLeg`, `leftFoot`, `leftToes`, and right side). Every other convention (Quaternius, Mixamo-style, Unreal, Rigify, MakeHuman) maps to these in `src/rigging/humanoid.ts`.
 - **One rig template** for rigging, posing presets and the built-in library (chosen in R00), so built-in clips need no runtime name mapping for rigs made in the app.
 - **Licenses:** every bundled third-party file is listed in `THIRD_PARTY_LICENSES.md` with source URL and license; projects record source/license for library clips.
 - **Projects:** new fields optional; old projects open unchanged. Pose = per-bone local rotations by canonical name; rig = template id + joint positions + weights method/version (weights recomputed on load when deterministic — decision D3).
@@ -91,7 +91,7 @@ Know exactly what the CC0 rig and clips contain and whether Babylon's retargetin
 **Required reading**
 
 - `node_modules/@babylonjs/core/Animations/animatorAvatar.d.ts`;
-- `src/editor.ts` — `loadAsset()`, `instantiate()`;
+- `src/core/editor.ts` — `loadAsset()`, `instantiate()`;
 - Quaternius UAL pages (section 2), VRM `humanoid.md`.
 
 **Target files**
@@ -145,16 +145,16 @@ Animations of any model are easy to find and control: clip chips, play/pause als
 
 **Required reading**
 
-- `src/ui.ts` — `objectSection()`, `renderSelbar()`, `toggleSelMenu()`;
-- `src/editor.ts` — `instantiate()` (auto-start), `needsRender()`;
-- `src/project.ts` — `entityToJSON()` animation field, `restore()`;
-- `src/dom.ts` — `chips`, `slider`;
+- `src/ui/ui.ts` — `objectSection()`, `renderSelbar()`, `toggleSelMenu()`;
+- `src/core/editor.ts` — `instantiate()` (auto-start), `needsRender()`;
+- `src/core/project.ts` — `entityToJSON()` animation field, `restore()`;
+- `src/ui/dom.ts` — `chips`, `slider`;
 - roadmap P09 (video should respect the chosen clip/frame).
 
 **Target files**
 
-- `src/editor.ts` (entity animation API: `playClip`, `pauseClip`, `seekClip(frame)`, `setLoop`, crossfade);
-- `src/ui.ts`, `src/project.ts`, `src/i18n.ts`, `src/style.css`.
+- `src/core/editor.ts` (entity animation API: `playClip`, `pauseClip`, `seekClip(frame)`, `setLoop`, crossfade);
+- `src/ui/ui.ts`, `src/core/project.ts`, `src/core/i18n.ts`, `src/ui/style.css`.
 
 **Scope**
 
@@ -193,12 +193,12 @@ The app knows when a model is a humanoid and which bone is the hips, left upper 
 
 - `docs/animation_sources.md` (R00);
 - VRM `humanoid.md` (canonical names and hierarchy);
-- `src/editor.ts` — `Entity`, skeletons from `instantiate()`.
+- `src/core/editor.ts` — `Entity`, skeletons from `instantiate()`.
 
 **Target files**
 
-- `src/humanoid.ts` (convention tables, `detectHumanoid(entity)` → canonical map + confidence);
-- `src/ui.ts` (mapping screen inside Objects → Object when detection is partial), `src/i18n.ts`.
+- `src/rigging/humanoid.ts` (convention tables, `detectHumanoid(entity)` → canonical map + confidence);
+- `src/ui/ui.ts` (mapping screen inside Objects → Object when detection is partial), `src/core/i18n.ts`.
 
 **Scope**
 
@@ -248,17 +248,17 @@ In a "Pose" part of the Objects panel, select a joint (tap its handle or pick it
 
 **Required reading**
 
-- `src/humanoid.ts` (R02);
-- `src/editor.ts` — `GizmoManager` setup, `applyTool()`, `select()`, overlays (`overlays` set);
-- `src/tools.ts` — overlay/labels patterns, `screenLine()`;
-- `src/ui.ts` — `panelParts()`, Objects part;
+- `src/rigging/humanoid.ts` (R02);
+- `src/core/editor.ts` — `GizmoManager` setup, `applyTool()`, `select()`, overlays (`overlays` set);
+- `src/tools/tools.ts` — overlay/labels patterns, `screenLine()`;
+- `src/ui/ui.ts` — `panelParts()`, Objects part;
 - Babylon `Bone`, `bone.getTransformNode()`.
 
 **Target files**
 
-- `src/pose.ts` (pose state, apply/mirror/reset, serialize by canonical bone);
-- `src/editor.ts` (pose mode: gizmo attached to bone transform nodes, handles overlay);
-- `src/ui.ts`, `src/project.ts`, `src/i18n.ts`, `src/style.css`.
+- `src/animation/pose.ts` (pose state, apply/mirror/reset, serialize by canonical bone);
+- `src/core/editor.ts` (pose mode: gizmo attached to bone transform nodes, handles overlay);
+- `src/ui/ui.ts`, `src/core/project.ts`, `src/core/i18n.ts`, `src/ui/style.css`.
 
 **Scope**
 
@@ -293,14 +293,14 @@ Drag a hand or foot target and the arm or leg follows (IK); apply ready poses (s
 
 **Required reading**
 
-- `src/pose.ts` (R03);
+- `src/animation/pose.ts` (R03);
 - `node_modules/@babylonjs/core/Bones/boneIKController.d.ts`;
-- `src/presets.ts` (where pose presets live);
+- `src/core/presets.ts` (where pose presets live);
 - `docs/animation_sources.md` (frames usable as presets).
 
 **Target files**
 
-- `src/pose.ts`, `src/presets.ts` (`POSE_PRESETS` by canonical bone), `src/ui.ts`, `src/i18n.ts`.
+- `src/animation/pose.ts`, `src/core/presets.ts` (`POSE_PRESETS` by canonical bone), `src/ui/ui.ts`, `src/core/i18n.ts`.
 
 **Scope**
 
@@ -350,15 +350,15 @@ Import an animation file (GLB/glTF/FBX with clips) and apply its clips to a sele
 **Required reading**
 
 - `docs/animation_sources.md` (retarget options that worked);
-- `src/humanoid.ts` (R02) — source and target maps;
+- `src/rigging/humanoid.ts` (R02) — source and target maps;
 - `node_modules/@babylonjs/core/Animations/animatorAvatar.d.ts`;
-- `src/editor.ts` — `loadAsset()` (load the clip file without adding it to the scene);
-- `src/project.ts` (store the clip file under `animations/`).
+- `src/core/editor.ts` — `loadAsset()` (load the clip file without adding it to the scene);
+- `src/core/project.ts` (store the clip file under `animations/`).
 
 **Target files**
 
-- `src/retarget.ts` (load clip container, build `mapNodeNames` from both canonical maps, call `retargetAnimationGroup` with root/ground fixes);
-- `src/editor.ts` (attach retargeted groups to the entity), `src/ui.ts` ("Add animation" in the Object part), `src/project.ts`, `src/i18n.ts`.
+- `src/animation/retarget.ts` (load clip container, build `mapNodeNames` from both canonical maps, call `retargetAnimationGroup` with root/ground fixes);
+- `src/core/editor.ts` (attach retargeted groups to the entity), `src/ui/ui.ts` ("Add animation" in the Object part), `src/core/project.ts`, `src/core/i18n.ts`.
 
 **Scope**
 
@@ -394,16 +394,16 @@ Pick from a built-in list of free animations (idle, walk, run, jump, sit, wave, 
 **Required reading**
 
 - D2 (chosen clips and size);
-- `src/retarget.ts` (R05);
-- `src/presets.ts` (data format);
+- `src/animation/retarget.ts` (R05);
+- `src/core/presets.ts` (data format);
 - `vite.config.ts` (precache vs. runtime caching).
 
 **Target files**
 
 - `public/animations/` (CC0 clips, size-optimized);
-- `src/presets.ts` (`ANIMATION_LIBRARY` with id, label, file, license, source);
+- `src/core/presets.ts` (`ANIMATION_LIBRARY` with id, label, file, license, source);
 - `THIRD_PARTY_LICENSES.md` (new);
-- `vite.config.ts` (runtime-cache the clips, don't precache), `src/ui.ts`, `src/i18n.ts`.
+- `vite.config.ts` (runtime-cache the clips, don't precache), `src/ui/ui.ts`, `src/core/i18n.ts`.
 
 **Scope**
 
@@ -437,15 +437,15 @@ Give any object a simple motion — spin, float, pulse, swing — with speed and
 
 **Required reading**
 
-- `src/editor.ts` — `needsRender()` (animatables), entity transforms;
-- `src/project.ts` (entity JSON);
-- `src/ui.ts` — Object part;
+- `src/core/editor.ts` — `needsRender()` (animatables), entity transforms;
+- `src/core/project.ts` (entity JSON);
+- `src/ui/ui.ts` — Object part;
 - roadmap P09 (video).
 
 **Target files**
 
-- `src/motion.ts` (builds Babylon `Animation`s on a dedicated child node so the user's transform stays editable);
-- `src/editor.ts`, `src/ui.ts`, `src/project.ts`, `src/i18n.ts`.
+- `src/animation/motion.ts` (builds Babylon `Animation`s on a dedicated child node so the user's transform stays editable);
+- `src/core/editor.ts`, `src/ui/ui.ts`, `src/core/project.ts`, `src/core/i18n.ts`.
 
 **Scope**
 
@@ -494,17 +494,17 @@ Turn a static humanoid model into a skinned character: the standard template ske
 
 **Required reading**
 
-- `src/humanoidTemplate.ts` / D1 (template bones, hierarchy, rest pose, anatomical guide positions from VRM `humanoid.md`);
-- `src/editor.ts` — `pickSurface()` (ray hits for depth), `boundsOf()`, overlays, orthographic/front camera handling;
-- `src/tools.ts` — handle/label overlay patterns and drag logic (`dragGuide` style);
+- `src/rigging/humanoidTemplate.ts` / D1 (template bones, hierarchy, rest pose, anatomical guide positions from VRM `humanoid.md`);
+- `src/core/editor.ts` — `pickSurface()` (ray hits for depth), `boundsOf()`, overlays, orthographic/front camera handling;
+- `src/tools/tools.ts` — handle/label overlay patterns and drag logic (`dragGuide` style);
 - Babylon `Skeleton`, `Bone`, `VertexBuffer.MatricesIndicesKind`/`MatricesWeightsKind`;
 - D3.
 
 **Target files**
 
-- `src/humanoidTemplate.ts` (template data);
-- `src/rigging.ts` (fit, joint editing, depth from front/back ray midpoint, mirror, envelope weights + smoothing, bind/unbind);
-- `src/editor.ts` (rig mode, bind result as a regular skinned entity), `src/ui.ts` (Rig part in Objects for unrigged meshes), `src/project.ts`, `src/i18n.ts`, `src/style.css`.
+- `src/rigging/humanoidTemplate.ts` (template data);
+- `src/rigging/rigging.ts` (fit, joint editing, depth from front/back ray midpoint, mirror, envelope weights + smoothing, bind/unbind);
+- `src/core/editor.ts` (rig mode, bind result as a regular skinned entity), `src/ui/ui.ts` (Rig part in Objects for unrigged meshes), `src/core/project.ts`, `src/core/i18n.ts`, `src/ui/style.css`.
 
 **Scope**
 
@@ -542,13 +542,13 @@ An optional "better weights" pass (heat diffusion) that bends shoulders, hips an
 
 **Required reading**
 
-- `src/rigging.ts` (R08 weights interface);
+- `src/rigging/rigging.ts` (R08 weights interface);
 - D4;
 - roadmap P07 decimation choice (proxy mesh).
 
 **Target files**
 
-- `src/weights.worker.ts` (mesh Laplacian + per-bone sparse solve, conjugate gradient), `src/rigging.ts` (proxy decimation and weight transfer back), `src/ui.ts` (progress, cancel), `src/i18n.ts`.
+- `src/rigging/weights.worker.ts` (mesh Laplacian + per-bone sparse solve, conjugate gradient), `src/rigging/rigging.ts` (proxy decimation and weight transfer back), `src/ui/ui.ts` (progress, cancel), `src/core/i18n.ts`.
 
 **Scope**
 

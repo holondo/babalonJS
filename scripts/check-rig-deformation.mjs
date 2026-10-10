@@ -15,14 +15,14 @@ function sourceModule(url) {
   modules.set(url.href, encoded); return encoded;
 }
 const load = name => import(sourceModule(new URL(`../src/${name}.ts`, import.meta.url)));
-const { Rigger, updateHelperBones } = await load('rigging');
-const { strongest } = await load('weights');
-const { applyBoneDirections, characterFrame, captureJoints, restoreJoints } = await load('pose');
-const { worldMatrix } = await load('humanoid');
-const { RIG_TEMPLATE, TIP_JOINTS } = await load('humanoidTemplate');
-const { POSE_PRESETS } = await load('presets');
-const { visibleBoneDistances } = await load('skinVisibility');
-const { vertexNormals } = await load('skinMath');
+const { Rigger, updateHelperBones } = await load('rigging/rigging');
+const { strongest } = await load('rigging/weights');
+const { applyBoneDirections, characterFrame, captureJoints, restoreJoints } = await load('animation/pose');
+const { worldMatrix } = await load('rigging/humanoid');
+const { RIG_TEMPLATE, TIP_JOINTS } = await load('rigging/humanoidTemplate');
+const { POSE_PRESETS } = await load('core/presets');
+const { visibleBoneDistances } = await load('rigging/skinVisibility');
+const { vertexNormals } = await load('rigging/skinMath');
 const decoderScope = { WebAssembly, Uint8Array, Int8Array, Uint32Array, Float32Array, console };
 decoderScope.self = decoderScope;
 vm.runInNewContext(fs.readFileSync(new URL('../node_modules/@babylonjs/core/assets/meshopt/meshopt_decoder.js', import.meta.url),'utf8'), decoderScope);
@@ -63,7 +63,7 @@ const armBones = new Set(RIG_TEMPLATE.filter(j=>!TIP_JOINTS.includes(j.id)).flat
 const method = process.argv[3] ?? 'heat';
 let result;
 console.time(method);
-const workerModule = sourceModule(new URL('../src/weights.worker.ts',import.meta.url));
+const workerModule = sourceModule(new URL('../src/rigging/weights.worker.ts',import.meta.url));
 const workerSource = `import {parentPort,workerData} from 'node:worker_threads'; globalThis.self={postMessage(m){parentPort.postMessage(m)}}; await import(${JSON.stringify(workerModule)}); self.onmessage({data:workerData});`;
 const worker = new Worker(new URL(`data:text/javascript;base64,${Buffer.from(workerSource).toString('base64')}`),{workerData:{...input,method,limit:15000}});
 let ticks=0;
