@@ -124,6 +124,14 @@ export class ARMode {
   /** Multiplies every light and the environment (1 = as designed). */
   lightLevel = 1;
   filter = 'none';
+  /** Virtual AR: the scene's environment instead of the camera image. */
+  virtual = false;
+
+  setVirtual(on: boolean) {
+    this.virtual = on;
+    this.editor.setARVirtual(on);
+    this.changed.notifyObservers();
+  }
 
   private rig: { light: ShadowLight; base: number; gen?: ShadowGenerator }[] = [];
   /** The editor's lights and their intensities, restored when AR ends. */
@@ -316,6 +324,7 @@ export class ARMode {
     this.lighting = 'scene';
     this.lightLevel = 1;
     this.filter = 'none';
+    this.virtual = false;
     this.baseEnvIntensity = this.editor.env.intensity;
     this.editor.setShadowsEnabled(false);
     this.active = true;
@@ -419,10 +428,33 @@ export class ARMode {
 
   /** Tap: places (or moves) the scene where the marker is. */
   place() {
-    if (!this.lastHit || !this.anchor || !this.xr) return false;
-    this.anchor.position.copyFrom(this.lastHit.position);
+    if (!this.lastHit) return false;
+    return this.placeAt(this.lastHit.position);
+  }
+
+  /**
+   * Places the scene on the floor in front of the user, without needing a detected surface
+   * (useful in virtual AR, or when the camera can't find the floor).
+   */
+  placeInFront() {
+    if (!this.xr) return false;
+    const cam = this.xr.baseExperience.camera;
+    const pos = cam.globalPosition;
+    const forward = cam.getDirection(Vector3.Forward());
+    forward.y = 0;
+    if (forward.lengthSquared() < 1e-6) forward.set(0, 0, 1);
+    forward.normalize();
+    const distance = Math.max(1.2, this.local.size * 1.2);
+    // "local-floor" puts the floor at 0; otherwise assume the phone is held ~1.4 m above it
+    const floor = pos.y > 0.6 ? 0 : pos.y - 1.4;
+    return this.placeAt(new Vector3(pos.x + forward.x * distance, floor, pos.z + forward.z * distance));
+  }
+
+  private placeAt(point: Vector3) {
+    if (!this.anchor || !this.xr) return false;
+    this.anchor.position.copyFrom(point);
     const cam = this.xr.baseExperience.camera.globalPosition;
-    const toUser = cam.subtract(this.lastHit.position);
+    const toUser = cam.subtract(point);
     this.yaw = Math.atan2(toUser.x, toUser.z) - this.baseYaw;
     this.applyTransform();
     this.anchor.setEnabled(true);

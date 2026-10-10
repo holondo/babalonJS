@@ -1489,6 +1489,21 @@ export class Editor {
     if (this.envTexture) this.scene.environmentTexture = this.envTexture;
   }
 
+  /**
+   * Virtual AR: during an AR session, covers the camera image with the scene's own environment
+   * (sky, background, floor), so the phone becomes a window into the virtual scene.
+   */
+  setARVirtual(virtual: boolean) {
+    if (!this.arMode || !this.arSaved) return;
+    const s = this.arSaved;
+    if (virtual) {
+      this.applyEnv({ skybox: s.skybox, ground: s.ground, background: s.background, grid: false });
+    } else {
+      this.applyEnv({ skybox: false, ground: 'shadow', grid: false });
+      this.scene.clearColor = new Color4(0, 0, 0, 0);
+    }
+  }
+
   /** Prepares the scene for AR (and restores it afterwards). */
   setARMode(on: boolean) {
     if (on === this.arMode) return;

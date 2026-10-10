@@ -42,6 +42,7 @@ import {
   RotateCcw,
   Scale3d,
   Shrink,
+  Smartphone,
   Scan,
   SlidersHorizontal,
   Sun,
@@ -66,6 +67,7 @@ import type { Editor, Entity, GroundMode, LightType, PhotoSettings, PrimitiveTyp
 import { PROJECT_EXT, fromZip, loadAutosave, restore, saveAutosave, snapshot, toZip } from './project';
 import type { ProjectSnapshot } from './project';
 import type { ARMode } from './ar';
+import type { GyroControl } from './gyro';
 import { canShareFile, saveFile, shareFile } from './files';
 import { LANGS, getLang, locale, setLang, tr } from './i18n';
 import type { Lang } from './i18n';
@@ -229,6 +231,32 @@ export class UI {
     if (files.length) this.loadFiles(files);
   }
 
+  private gyro: GyroControl | null = null;
+
+  /** Gyro mode: moving the phone turns the camera (button only on devices with sensors). */
+  setGyro(gyro: GyroControl) {
+    this.gyro = gyro;
+    gyro.changed.add(() => {
+      this.renderTopbar();
+      this.renderPhotoHud();
+    });
+    this.renderTopbar();
+  }
+
+  private gyroButton() {
+    const g = this.gyro;
+    if (!g?.available) return null;
+    return iconButton(Smartphone, tr('Gyro mode: move the phone to look around'), () => this.toggleGyro(), { active: g.active });
+  }
+
+  private async toggleGyro() {
+    const g = this.gyro;
+    if (!g) return;
+    if (g.active) return g.disable();
+    if (await g.enable()) this.toast(tr('Gyro mode on: turn and tilt the phone'));
+    else this.toast(tr('Orientation sensors are not available'), 'error');
+  }
+
   private ar: ARMode | null = null;
   private arOverlay: HTMLElement | null = null;
 
@@ -366,6 +394,7 @@ export class UI {
         document.fullscreenElement
           ? iconButton(Shrink, tr('Exit fullscreen'), () => toggleFullscreen())
           : iconButton(Expand, tr('Fullscreen'), () => toggleFullscreen()),
+        this.gyroButton(),
         this.ar?.supported ? iconButton(View, tr('View in AR'), () => this.enterAR(), { cls: 'accent', label: 'AR' }) : null,
         iconButton(Camera, tr('Photo mode (P)'), () => ed.setPhotoMode(true), { cls: 'accent' }),
       ),
@@ -1279,7 +1308,7 @@ export class UI {
             this.renderPanel();
           }, { active: this.photoPanel }),
           h('button', { class: 'shutter', title: tr('Take photo'), 'aria-label': tr('Take photo'), onClick: () => this.capture() }, h('i', {})),
-          iconButton(Scan, tr('Frame all'), () => ed.frameAll()),
+          ...(this.gyroButton() ? [this.gyroButton()!] : [iconButton(Scan, tr('Frame all'), () => ed.frameAll())]),
         ),
       ),
     );

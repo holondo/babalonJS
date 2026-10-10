@@ -92,6 +92,15 @@ export class ARHud {
       ),
       ...(this.showFps ? [h('div', { class: 'ar-fps' }, '— fps')] : []),
       ...(this.settingsOpen ? [this.optionsPanel()] : []),
+      ...(ar.status !== 'placed'
+        ? [
+            h(
+              'div',
+              { class: 'ar-bottom' },
+              h('button', { class: 'btn primary', onClick: stop(() => ar.placeInFront()) }, tr('Place in front of me')),
+            ),
+          ]
+        : []),
       ...(ar.status === 'placed'
         ? [h(
             'div',
@@ -133,6 +142,8 @@ export class ARHud {
     const panel = h(
       'div',
       { class: 'ar-options' },
+      this.option(tr('Camera background'), !ar.virtual, (v) => ar.setVirtual(!v)),
+      ar.virtual ? h('p', { class: 'ar-note' }, tr('Virtual AR: walk around the scene in its own environment.')) : null,
       h('h4', {}, tr('Lighting')),
       chips(lights, ar.lighting, (v) => ar.setLighting(v)),
       ar.lighting === 'room' ? h('p', { class: 'ar-note' }, tr('Heavier: uses the phone to estimate the room light.')) : null,
@@ -240,7 +251,8 @@ export class ARHud {
       if (pointers.size < 2) pinch = null;
       // A quick tap without movement places (or moves) the scene at the marker
       if (pointers.size === 0 && !moved && performance.now() - start.t < 400 && this.ar.status !== 'placed') {
-        if (!this.ar.place()) this.flash(tr('Move the phone slowly to find the floor'));
+        // No surface found: in virtual AR place it in front of the user
+        if (!this.ar.place() && !(this.ar.virtual && this.ar.placeInFront())) this.flash(tr('Move the phone slowly to find the floor'));
       }
     };
     this.el.addEventListener('pointerup', end);

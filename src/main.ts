@@ -7,6 +7,7 @@ import { setupSystemBars } from './systemBars';
 import { ARMode } from './ar';
 import { ARHud } from './arHud';
 import { takeSharedFiles } from './files';
+import { GyroControl } from './gyro';
 
 document.documentElement.lang = locale();
 
@@ -19,6 +20,9 @@ setupSystemBars(editor);
 const ar = new ARMode(editor);
 const arHud = new ARHud(ar);
 ar.checkSupport().then(() => ui.setAR(ar, arHud.el));
+
+// Gyro mode: the phone's orientation turns the camera (any phone, no camera needed)
+ui.setGyro(new GyroControl(editor));
 
 // PWA: offline cache + "new version" notice (the update is applied only when the user accepts)
 const updateSW = registerSW({
