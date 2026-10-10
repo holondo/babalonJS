@@ -33,6 +33,9 @@ babalon JS is a Progressive Web App. Once hosted over HTTPS (or on `localhost`),
 
 ## Features
 
+Layout: the logo opens the project menu, the top right switches between **Edit / Photo / AR**, the dock has **Add, Objects, Light and Tools**, and the floating buttons at the bottom right frame the scene, toggle gyro mode and fullscreen, and hide the interface.
+
+
 - **Add**: GLB, glTF, OBJ, STL, FBX, PLY/SPLAT/SPZ (gaussian splats), USDZ and .babylon, through the file picker or by dragging files onto the window. Also sample models, basic shapes and lights.
 - **Place**: tap to select. With *Move*, drag the object across the floor with your finger or mouse, or use the gizmos. *Rotate* and *Scale* use gizmos. The magnet toggles grid snapping.
 - **Scene**: object list, show/hide, position/rotation/scale sliders, 90° turns (handy for models that load lying down), drop to floor, duplicate, delete, model animations.
@@ -62,6 +65,7 @@ babalon JS is a Progressive Web App. Once hosted over HTTPS (or on `localhost`),
 | O | Orbit around the selected object |
 | M | Measure mode |
 | P | Photo mode |
+| H | Hide / show the interface |
 | Ctrl+Z / Ctrl+Y | Undo / Redo |
 | Ctrl+D | Duplicate |
 | Ctrl+S / Ctrl+O | Save / open project |

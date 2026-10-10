@@ -1,9 +1,10 @@
 import {
-  Aperture,
   ArrowDownToLine,
   Box,
   Camera,
+  ChevronDown,
   Copy,
+  Ellipsis,
   Crosshair,
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -31,9 +32,7 @@ import {
   Lightbulb,
   Magnet,
   Expand,
-  Mountain,
   Move3d,
-  Palette,
   Pause,
   Play,
   Plus,
@@ -75,17 +74,17 @@ import { button, chips, colorInput, h, hint, icon, iconButton, numberInput, row,
 import { UNITS } from './tools';
 import type { Axis, Edge, Guide, Measurement, Unit } from './tools';
 
-type Tab = 'add' | 'scene' | 'tools' | 'material' | 'lights' | 'env' | 'photo';
+type Tab = 'add' | 'objects' | 'light' | 'tools' | 'photo';
 
-const TABS: { id: Tab; label: string; icon: IconNode }[] = [
+/** Dock tabs. Photo isn't a tab: it's a mode, with its own panel inside photo mode. */
+const TABS: { id: Exclude<Tab, 'photo'>; label: string; icon: IconNode }[] = [
   { id: 'add', label: 'Add', icon: Plus },
-  { id: 'scene', label: 'Scene', icon: Layers },
+  { id: 'objects', label: 'Objects', icon: Layers },
+  { id: 'light', label: 'Light', icon: Lightbulb },
   { id: 'tools', label: 'Tools', icon: Ruler },
-  { id: 'material', label: 'Material', icon: Palette },
-  { id: 'lights', label: 'Lights', icon: Lightbulb },
-  { id: 'env', label: 'Environment', icon: Mountain },
-  { id: 'photo', label: 'Photo', icon: Aperture },
 ];
+
+const PANEL_TITLES: Record<Tab, string> = { add: 'Add', objects: 'Objects', light: 'Light', tools: 'Tools', photo: 'Photo' };
 
 const FILTERS: { id: string; label: string; values: Partial<PhotoSettings> }[] = [
   { id: 'none', label: 'Original', values: {} },
@@ -121,6 +120,14 @@ export class UI {
   private autosaveTimer = 0;
   private restoring = false;
   private readonly menu = h('div', { class: 'menu' });
+  /** Secondary actions of the selection ("⋯" in the selection bar). */
+  private readonly selMenu = h('div', { class: 'menu selmenu' });
+  private selMenuOpen = false;
+  /** Floating viewport controls: frame all, gyro, fullscreen, hide interface. */
+  private readonly viewStack = h('div', { class: 'viewstack' });
+  /** Everything hidden except this button (any screen). */
+  private uiHidden = false;
+  private readonly uiRestore = h('button', { class: 'ibtn ui-restore' });
   private readonly projectInput = h('input', { type: 'file', accept: `${PROJECT_EXT},.zip`, hidden: true });
 
   private readonly topbar = h('header', { class: 'topbar' });
@@ -150,7 +157,9 @@ export class UI {
   constructor(editor: Editor, root: HTMLElement) {
     this.editor = editor;
     this.root = root;
-    root.append(h('div', { class: 'titlebar-drag' }), this.menu, this.projectInput);
+    root.append(h('div', { class: 'titlebar-drag' }), this.menu, this.selMenu, this.projectInput);
+    this.uiRestore.append(icon(Eye));
+    this.uiRestore.addEventListener('click', () => this.setUiHidden(false));
     this.projectInput.addEventListener('change', () => {
       const file = this.projectInput.files?.[0];
       this.projectInput.value = '';
@@ -158,10 +167,11 @@ export class UI {
     });
     document.addEventListener('pointerdown', (e) => {
       if (this.menuOpen && !this.menu.contains(e.target as Node) && !(e.target as Element).closest?.('.project-btn')) this.toggleMenu(false);
+      if (this.selMenuOpen && !this.selMenu.contains(e.target as Node) && !(e.target as Element).closest?.('.more-btn')) this.toggleSelMenu(false);
     });
     this.setupAutosave();
-    document.addEventListener('fullscreenchange', () => this.renderTopbar());
-    root.append(this.labels, this.frame, this.topbar, this.selbar, this.panel, this.dock, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
+    document.addEventListener('fullscreenchange', () => this.renderViewStack());
+    root.append(this.labels, this.frame, this.topbar, this.selbar, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
     this.fileInput.addEventListener('change', () => {
       const files = [...(this.fileInput.files ?? [])];
       this.fileInput.value = '';
@@ -182,7 +192,7 @@ export class UI {
         this.renderFrame();
       }
       if (this.busy) return;
-      if (kind === 'env' && this.tab !== 'env' && this.tab !== 'photo' && this.tab !== 'lights') return;
+      if (kind === 'env' && this.tab !== 'light') return;
       if (kind === 'entities') this.buildLabels();
       this.renderAll();
     });
@@ -190,7 +200,7 @@ export class UI {
       this.buildLabels();
       this.renderSelbar();
       this.scheduleAutosave();
-      if (!this.busy && (this.tab === 'tools' || this.tab === 'scene')) this.renderPanel();
+      if (!this.busy && (this.tab === 'tools' || this.tab === 'objects')) this.renderPanel();
     });
     editor.scene.onAfterRenderObservable.add(() => this.updateLabels());
     editor.loading.add((l) => {
@@ -237,10 +247,10 @@ export class UI {
   setGyro(gyro: GyroControl) {
     this.gyro = gyro;
     gyro.changed.add(() => {
-      this.renderTopbar();
+      this.renderViewStack();
       this.renderPhotoHud();
     });
-    this.renderTopbar();
+    this.renderViewStack();
   }
 
   private gyroButton() {
@@ -351,6 +361,7 @@ export class UI {
       else if (e.key === 'f') ed.selected ? ed.focus() : ed.frameAll();
       else if (e.key === 'o') ed.orbitAround();
       else if (e.key === 'p') ed.setPhotoMode(!ed.photoMode);
+      else if (e.key === 'h') this.setUiHidden(!this.uiHidden);
     });
   }
 
@@ -359,9 +370,11 @@ export class UI {
     this.renderTopbar();
     this.renderDock();
     this.renderSelbar();
+    this.renderViewStack();
     this.renderPanel();
     this.renderPhotoHud();
     this.renderFrame();
+    this.uiRestore.title = this.uiRestore.ariaLabel = tr('Show interface');
     const hasObjects = this.editor.entities.some((e) => e.kind !== 'light');
     this.empty.classList.toggle('show', !hasObjects && !this.editor.photoMode);
     const saved = this.autosaved;
@@ -382,21 +395,31 @@ export class UI {
 
   private renderTopbar() {
     const ed = this.editor;
+    const base = import.meta.env.BASE_URL;
+    const mode = (label: string, active: boolean, run: () => void, node?: IconNode) =>
+      h('button', { class: `mode ${active ? 'active' : ''}`, onClick: run }, node ? icon(node, 16) : null, h('span', {}, label));
     this.topbar.replaceChildren(
-      h('div', { class: 'brand' }, h('img', { src: `${import.meta.env.BASE_URL}brand/lettering.webp`, alt: 'babalon JS', width: 94, height: 32, draggable: false })),
+      // The logo opens the project menu (new, open, save, export, language, install)
+      h(
+        'button',
+        { class: `brand project-btn ${this.menuOpen ? 'open' : ''}`, title: tr('Project'), 'aria-label': tr('Project'), onClick: () => this.toggleMenu() },
+        h('img', { class: 'brand-lettering', src: `${base}brand/lettering.webp`, alt: 'babalon JS', width: 94, height: 32, draggable: false }),
+        h('img', { class: 'brand-icon', src: `${base}icons/icon-192.png`, alt: 'babalon JS', width: 28, height: 28, draggable: false }),
+        icon(ChevronDown, 16),
+      ),
       h(
         'div',
         { class: 'top-actions' },
         iconButton(Undo2, tr('Undo (Ctrl+Z)'), () => ed.undo(), { disabled: !ed.canUndo }),
         iconButton(Redo2, tr('Redo (Ctrl+Y)'), () => ed.redo(), { disabled: !ed.canRedo }),
-        iconButton(Scan, tr('Frame all (F)'), () => ed.frameAll()),
-        iconButton(FolderOpen, tr('Project: open, save, export'), () => this.toggleMenu(), { cls: 'project-btn', active: this.menuOpen }),
-        document.fullscreenElement
-          ? iconButton(Shrink, tr('Exit fullscreen'), () => toggleFullscreen())
-          : iconButton(Expand, tr('Fullscreen'), () => toggleFullscreen()),
-        this.gyroButton(),
-        this.ar?.supported ? iconButton(View, tr('View in AR'), () => this.enterAR(), { cls: 'accent', label: 'AR' }) : null,
-        iconButton(Camera, tr('Photo mode (P)'), () => ed.setPhotoMode(true), { cls: 'accent' }),
+        h('span', { class: 'sep' }),
+        h(
+          'div',
+          { class: 'modes', role: 'group', 'aria-label': tr('Mode') },
+          mode(tr('Edit'), !ed.photoMode && !this.ar?.active, () => ed.setPhotoMode(false), Move3d),
+          mode(tr('Photo'), ed.photoMode, () => ed.setPhotoMode(true), Camera),
+          this.ar?.supported ? mode('AR', !!this.ar?.active, () => this.enterAR(), View) : null,
+        ),
       ),
     );
   }
@@ -571,27 +594,76 @@ export class UI {
     const toolBtn = (t: Tool, node: IconNode, label: string) =>
       iconButton(node, label, () => ed.setTool(t), { active: ed.tool === t, label, cls: 'tool' });
     const count = ed.selection.length;
+    // Only the most used actions stay visible; the rest live in the "⋯" menu
     this.selbar.replaceChildren(
       h('div', { class: 'sel-name' }, icon(KIND_ICON[e.kind], 16), h('span', {}, count > 1 ? tr('{n} selected', { n: count }) : e.name)),
       h(
         'div',
         { class: 'sel-tools' },
-        multi,
         toolBtn('move', Move3d, tr('Move')),
         toolBtn('rotate', Rotate3d, tr('Rotate')),
         e.kind !== 'light' ? toolBtn('scale', Scale3d, tr('Scale')) : null,
         h('span', { class: 'sep' }),
-        iconButton(Magnet, tr('Snap to grid'), () => ed.setSnap(!ed.snap), { active: ed.snap }),
-        iconButton(Orbit, tr('Orbit around this object'), () => {
-          ed.orbitAround();
-          this.toast(tr('Orbiting around {name}', { name: e.name }));
-        }, { active: ed.orbitEntity === e }),
-        iconButton(Focus, tr('Focus camera'), () => ed.focus()),
-        iconButton(Copy, tr('Duplicate (Ctrl+D)'), () => ed.duplicate()),
         iconButton(Trash2, tr('Delete (Del)'), () => ed.remove(), { cls: 'danger' }),
-        iconButton(X, tr('Deselect'), () => ed.select(null)),
+        iconButton(Ellipsis, tr('More'), () => this.toggleSelMenu(), { cls: 'more-btn', active: this.selMenuOpen }),
       ),
     );
+    if (this.selMenuOpen) this.toggleSelMenu(true);
+  }
+
+  /** Secondary selection actions, one level deep. */
+  private toggleSelMenu(open = !this.selMenuOpen) {
+    const ed = this.editor;
+    const e = ed.selected;
+    this.selMenuOpen = open && !!e;
+    this.selMenu.classList.toggle('show', this.selMenuOpen);
+    this.selbar.querySelector('.more-btn')?.classList.toggle('active', this.selMenuOpen);
+    if (!this.selMenuOpen || !e) return;
+    const item = (node: IconNode, label: string, run: () => void, opts: { on?: boolean; keep?: boolean; kbd?: string } = {}) =>
+      h(
+        'button',
+        { class: `menu-item ${opts.on ? 'on' : ''}`, onClick: () => (opts.keep ? null : this.toggleSelMenu(false), run()) },
+        icon(node, 18),
+        h('span', {}, label),
+        opts.kbd ? h('kbd', {}, opts.kbd) : opts.on !== undefined ? h('i', { class: 'menu-check' }) : null,
+      );
+    this.selMenu.replaceChildren(
+      item(Copy, tr('Duplicate'), () => ed.duplicate(), { kbd: 'Ctrl+D' }),
+      item(Focus, tr('Focus camera'), () => ed.focus(), { kbd: 'F' }),
+      item(Orbit, tr('Orbit around this object'), () => {
+        ed.orbitAround();
+        this.toast(tr('Orbiting around {name}', { name: e.name }));
+      }, { on: ed.orbitEntity === e, kbd: 'O' }),
+      item(Group, tr('Multi-select'), () => (ed.setMultiSelect(!ed.multiSelect), this.toggleSelMenu(true)), { on: ed.multiSelect, keep: true }),
+      item(Magnet, tr('Snap to grid'), () => (ed.setSnap(!ed.snap), this.toggleSelMenu(true)), { on: ed.snap, keep: true }),
+      item(X, tr('Deselect'), () => ed.select(null), { kbd: 'Esc' }),
+    );
+  }
+
+  /** Viewport controls float in a corner, apart from the editing tools. */
+  private renderViewStack() {
+    const ed = this.editor;
+    const buttons: (HTMLElement | null)[] = [
+      iconButton(Scan, tr('Frame all (F)'), () => ed.frameAll()),
+      this.gyroButton(),
+      document.fullscreenEnabled
+        ? document.fullscreenElement
+          ? iconButton(Shrink, tr('Exit fullscreen'), () => toggleFullscreen())
+          : iconButton(Expand, tr('Fullscreen'), () => toggleFullscreen())
+        : null,
+      iconButton(EyeOff, tr('Hide interface (H)'), () => this.setUiHidden(true)),
+    ];
+    this.viewStack.replaceChildren(...buttons.filter((b): b is HTMLElement => !!b));
+  }
+
+  /** Hides every control (any screen); a faint button brings them back. Gestures keep working. */
+  private setUiHidden(on: boolean) {
+    this.uiHidden = on;
+    document.body.classList.toggle('ui-hidden', on);
+    if (on) {
+      this.toggleMenu(false);
+      this.toggleSelMenu(false);
+    }
   }
 
   private renderPanel() {
@@ -600,7 +672,7 @@ export class UI {
     this.panel.classList.toggle('show', !!tab);
     document.body.classList.toggle('panel-open', !!tab);
     if (!tab) return this.panel.replaceChildren();
-    const title = tr(TABS.find((t) => t.id === tab)!.label);
+    const title = tr(PANEL_TITLES[tab]);
     const scroll = this.panel.querySelector('.panel-body')?.scrollTop ?? 0;
     const body = h('div', { class: 'panel-body' }, ...this.panelContent(tab));
     this.panel.replaceChildren(
@@ -619,14 +691,10 @@ export class UI {
     switch (tab) {
       case 'add':
         return this.addPanel();
-      case 'scene':
-        return this.scenePanel();
-      case 'material':
-        return this.materialPanel();
-      case 'lights':
-        return this.lightsPanel();
-      case 'env':
-        return this.envPanel();
+      case 'objects':
+        return [...this.scenePanel(), ...this.objectMaterial()];
+      case 'light':
+        return [...this.lightsPanel(), ...this.envPanel()];
       case 'photo':
         return this.photoPanelContent();
       case 'tools':
@@ -1059,6 +1127,13 @@ export class UI {
 
   // ---------- Material ----------
 
+  /** Materials of the selected object, as part of the Objects panel. */
+  private objectMaterial(): (Node | null)[] {
+    const e = this.editor.selected;
+    if (!e || e.kind === 'light') return [];
+    return [h('h2', { class: 'group-title' }, tr('Material')), ...this.materialPanel()];
+  }
+
   private materialPanel() {
     const ed = this.editor;
     const e = ed.selected;
@@ -1191,7 +1266,7 @@ export class UI {
         light.diffuse = c;
         light.specular = c;
         e.root.getChildMeshes().forEach((m) => ((m.material as StandardMaterial).emissiveColor = c));
-        if (this.tab === 'lights') this.root.querySelector<HTMLElement>('.outliner li.active .swatch')?.style.setProperty('background', v);
+        if (this.tab === 'light') this.root.querySelector<HTMLElement>('.outliner li.active .swatch')?.style.setProperty('background', v);
       }),
       slider(tr('Intensity'), light.intensity, { min: 0, max, step: max / 300 }, (v) => (light.intensity = v)),
       e.lightType === 'spot'
@@ -1296,6 +1371,7 @@ export class UI {
     if (!ed.photoMode) return this.photoHud.replaceChildren();
     this.photoHud.replaceChildren(
       iconButton(X, tr('Exit photo mode'), () => ed.setPhotoMode(false), { cls: 'hud-exit' }),
+      iconButton(EyeOff, tr('Hide interface (H)'), () => this.setUiHidden(true), { cls: 'hud-hide' }),
       h(
         'div',
         { class: 'hud-bottom' },
