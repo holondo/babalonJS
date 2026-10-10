@@ -89,6 +89,8 @@ Na câmera: arraste para orbitar, pinça/roda para zoom, dois dedos (ou botão d
 
 O objeto `editor` fica disponível no console do navegador para depuração.
 
+As diretrizes de desenvolvimento (para pessoas e agentes de código) estão em [AGENTS.md](AGENTS.md).
+
 ## Licença
 
 Copyright (C) 2026 Guilherme Holanda Sanches

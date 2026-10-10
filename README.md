@@ -89,6 +89,8 @@ Camera: drag to orbit, pinch or scroll to zoom, two fingers (or right mouse butt
 
 The `editor` object is exposed on `window` for debugging from the browser console.
 
+Development guidelines (for people and coding agents) are in [AGENTS.md](AGENTS.md).
+
 ## License
 
 Copyright (C) 2026 Guilherme Holanda Sanches
