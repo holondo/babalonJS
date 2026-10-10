@@ -1,5 +1,6 @@
-import { Move, Ruler, SlidersHorizontal, X } from 'lucide';
-import type { ARMode } from './ar';
+import { Eye, EyeOff, Move, Ruler, SlidersHorizontal, X } from 'lucide';
+import { AR_FILTERS } from './ar';
+import type { ARLighting, ARMode } from './ar';
 import { h, icon } from './dom';
 import { canShareFile, saveFile, shareFile } from './files';
 import { tr } from './i18n';
@@ -12,6 +13,10 @@ export class ARHud {
   readonly el = h('div', { class: 'ar-hud' });
   private message = '';
   private settingsOpen = false;
+  /** Everything hidden except a small button to bring it back (gestures keep working). */
+  private uiHidden = false;
+  private showFps = false;
+  private fpsTimer = 0;
   /** Last photo, offered for sharing for a few seconds after it's saved. */
   private lastPhoto: { blob: Blob; name: string } | null = null;
   private messageTimer = 0;
@@ -39,7 +44,20 @@ export class ARHud {
   private render() {
     const ar = this.ar;
     this.el.classList.toggle('show', ar.active);
-    if (!ar.active) return this.el.replaceChildren();
+    if (!ar.active) {
+      this.uiHidden = false;
+      this.settingsOpen = false;
+      // Stop the counter directly (setFps would render again and loop)
+      this.showFps = false;
+      clearInterval(this.fpsTimer);
+      return this.el.replaceChildren();
+    }
+    if (this.uiHidden) {
+      return this.el.replaceChildren(
+        h('button', { class: 'ar-btn ar-show-ui', 'aria-label': tr('Show interface'), onClick: (ev: Event) => (ev.stopPropagation(), (this.uiHidden = false), this.render()) }, icon(Eye)),
+      );
+    }
+    const scroll = this.el.querySelector('.ar-options')?.scrollTop ?? 0;
     const hint =
       (ar.lastError && `⚠ ${ar.lastError}`) ||
       this.message ||
@@ -56,27 +74,24 @@ export class ARHud {
       h('button', { class: 'ar-btn ar-exit', 'aria-label': tr('Exit AR'), onClick: stop(() => ar.exit()) }, icon(X)),
       h(
         'div',
-        { class: 'ar-hint' },
+        { class: 'ar-hint', style: this.settingsOpen ? 'display:none' : undefined },
         h('span', {}, hint),
         this.message && this.lastPhoto && canShareFile(this.lastPhoto.blob, this.lastPhoto.name)
           ? h('button', { class: 'chip active', onClick: stop(() => this.lastPhoto && shareFile(this.lastPhoto.blob, this.lastPhoto.name)) }, tr('Share'))
           : null,
       ),
       h(
-        'button',
-        { class: `ar-btn ar-settings ${this.settingsOpen ? 'active' : ''}`, 'aria-label': tr('AR options'), onClick: stop(() => ((this.settingsOpen = !this.settingsOpen), this.render())) },
-        icon(SlidersHorizontal),
+        'div',
+        { class: 'ar-top-right' },
+        h('button', { class: 'ar-btn', 'aria-label': tr('Hide interface'), onClick: stop(() => ((this.uiHidden = true), (this.settingsOpen = false), this.render())) }, icon(EyeOff)),
+        h(
+          'button',
+          { class: `ar-btn ${this.settingsOpen ? 'active' : ''}`, 'aria-label': tr('AR options'), onClick: stop(() => ((this.settingsOpen = !this.settingsOpen), this.render())) },
+          icon(SlidersHorizontal),
+        ),
       ),
-      ...(this.settingsOpen
-        ? [
-            h(
-              'div',
-              { class: 'ar-options' },
-              this.option(tr('Shadows on the floor'), ar.shadows, (v) => ar.setShadows(v)),
-              this.option(tr('Room lighting (heavier)'), ar.roomLight, (v) => ar.setRoomLight(v)),
-            ),
-          ]
-        : []),
+      ...(this.showFps ? [h('div', { class: 'ar-fps' }, '— fps')] : []),
+      ...(this.settingsOpen ? [this.optionsPanel()] : []),
       ...(ar.status === 'placed'
         ? [h(
             'div',
@@ -91,6 +106,59 @@ export class ARHud {
           )]
         : []),
     );
+    const panel = this.el.querySelector('.ar-options');
+    if (panel) panel.scrollTop = scroll;
+  }
+
+  /** Options panel: everything optional, cheapest settings by default. */
+  private optionsPanel() {
+    const ar = this.ar;
+    const lights: { id: ARLighting; label: string }[] = [
+      { id: 'scene', label: tr('Scene') },
+      { id: 'room', label: tr('Real room') },
+      { id: 'studio', label: tr('Studio') },
+      { id: 'daylight', label: tr('Daylight') },
+      { id: 'sunset', label: tr('Sunset') },
+      { id: 'neon', label: tr('Neon') },
+      { id: 'dramatic', label: tr('Dramatic') },
+    ];
+    const chips = <T extends string>(items: { id: T; label: string }[], value: T, pick: (v: T) => void) =>
+      h(
+        'div',
+        { class: 'ar-chips' },
+        ...items.map((it) => h('button', { class: `chip ${it.id === value ? 'active' : ''}`, onClick: (ev: Event) => (ev.stopPropagation(), pick(it.id)) }, it.label)),
+      );
+    const level = h('input', { type: 'range', min: '0.2', max: '2.5', step: '0.05', value: String(ar.lightLevel) });
+    level.addEventListener('input', () => ar.setLightLevel(parseFloat(level.value)));
+    const panel = h(
+      'div',
+      { class: 'ar-options' },
+      h('h4', {}, tr('Lighting')),
+      chips(lights, ar.lighting, (v) => ar.setLighting(v)),
+      ar.lighting === 'room' ? h('p', { class: 'ar-note' }, tr('Heavier: uses the phone to estimate the room light.')) : null,
+      h('label', { class: 'ar-slider' }, h('span', {}, tr('Light intensity')), level),
+      this.option(tr('Shadows on the floor'), ar.shadows, (v) => ar.setShadows(v)),
+      h('h4', {}, tr('Photo filter')),
+      chips(
+        Object.entries(AR_FILTERS).map(([id, f]) => ({ id, label: tr(f.label) })),
+        ar.filter,
+        (v) => ar.setFilter(v),
+      ),
+      this.option(tr('Show FPS'), this.showFps, (v) => this.setFps(v)),
+    );
+    return panel;
+  }
+
+  private setFps(on: boolean) {
+    this.showFps = on;
+    clearInterval(this.fpsTimer);
+    if (on) {
+      this.fpsTimer = window.setInterval(() => {
+        const el = this.el.querySelector('.ar-fps');
+        if (el) el.textContent = `${Math.round(this.ar.fps())} fps`;
+      }, 500);
+    }
+    this.render();
   }
 
   private option(label: string, value: boolean, onChange: (v: boolean) => void) {
@@ -138,7 +206,7 @@ export class ARHud {
     };
 
     this.el.addEventListener('pointerdown', (ev) => {
-      if ((ev.target as Element).closest('button')) return;
+      if ((ev.target as Element).closest('button, .ar-options')) return;
       this.el.setPointerCapture(ev.pointerId);
       pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
       if (pointers.size === 1) {

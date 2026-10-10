@@ -1282,10 +1282,14 @@ button:disabled svg.lucide {
 }
 .ar-hint {
   position: absolute;
-  top: calc(20px + var(--safe-t));
+  top: calc(78px + var(--safe-t));
   left: 50%;
   transform: translateX(-50%);
-  max-width: calc(100vw - 150px);
+  width: max-content;
+  max-width: calc(100vw - 28px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 10px 16px;
   border-radius: 999px;
   background: var(--glass-strong);
@@ -1304,10 +1308,28 @@ button:disabled svg.lucide {
   align-items: center;
   gap: 28px;
 }
-.ar-settings {
+.ar-top-right {
   position: absolute;
   top: calc(14px + var(--safe-t));
   right: 14px;
+  display: flex;
+  gap: 8px;
+}
+.ar-show-ui {
+  position: absolute;
+  right: 14px;
+  bottom: calc(24px + var(--safe-b));
+  opacity: 0.55;
+}
+.ar-fps {
+  position: absolute;
+  bottom: calc(108px + var(--safe-b));
+  left: 14px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 .ar-btn.active {
   background: var(--accent);
@@ -1319,10 +1341,13 @@ button:disabled svg.lucide {
   position: absolute;
   top: calc(76px + var(--safe-t));
   right: 14px;
+  width: min(320px, calc(100vw - 28px));
+  max-height: calc(100vh - 220px - var(--safe-t) - var(--safe-b));
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 8px;
+  padding: 10px 12px;
   border-radius: 24px;
   background: var(--glass-strong);
   backdrop-filter: var(--blur);
@@ -1364,4 +1389,29 @@ button:disabled svg.lucide {
 .ar-option.on i::after {
   transform: translateX(18px);
   background: var(--purple);
+}
+.ar-options h4 {
+  margin: 6px 4px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.ar-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0 4px;
+}
+.ar-note {
+  margin: 0 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.ar-slider {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 4px 0;
+  font-size: 13px;
 }

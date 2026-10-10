@@ -1,6 +1,11 @@
 import {
   Color3,
   CreateScreenshotUsingRenderTargetAsync,
+  DirectionalLight,
+  PointLight,
+  RenderTargetTexture,
+  ShadowGenerator,
+  SpotLight,
   Mesh,
   MeshBuilder,
   Observable,
@@ -12,10 +17,57 @@ import {
   WebXRFeatureName,
   WebXRSessionManager,
 } from '@babylonjs/core';
-import type { BaseTexture, IWebXRHitResult, Node, WebXRHitTest, WebXRRawCameraAccess } from '@babylonjs/core';
+import type { BaseTexture, IWebXRHitResult, Node, ShadowLight, WebXRHitTest, WebXRRawCameraAccess } from '@babylonjs/core';
 import type { Editor } from './editor';
 
 export type ARStatus = 'searching' | 'ready' | 'placed';
+/** "scene" = the editor's own lights; "room" = estimated by the phone; the rest are presets. */
+export type ARLighting = 'scene' | 'room' | 'studio' | 'daylight' | 'sunset' | 'neon' | 'dramatic';
+
+type RigLight = { type: 'directional' | 'point' | 'spot'; pos: [number, number, number]; intensity: number; color: string; shadows?: boolean; angle?: number };
+
+/**
+ * Light presets for AR, like the editor's: positions are for a ~2 m scene and scale with it.
+ * They live under the AR anchor, so they move with the scene and vanish when AR ends.
+ */
+const AR_RIGS: Record<Exclude<ARLighting, 'scene' | 'room'>, { env: number; lights: RigLight[] }> = {
+  studio: {
+    env: 0.7,
+    lights: [
+      { type: 'directional', pos: [-3, 5, -3], intensity: 2.6, color: '#fff2e0', shadows: true },
+      { type: 'point', pos: [3, 2, -2], intensity: 12, color: '#dbe8ff' },
+      { type: 'spot', pos: [0, 3, 4], intensity: 45, color: '#ffffff' },
+    ],
+  },
+  daylight: { env: 1, lights: [{ type: 'directional', pos: [4, 8, 3], intensity: 3, color: '#fff8ec', shadows: true }] },
+  sunset: {
+    env: 0.35,
+    lights: [
+      { type: 'directional', pos: [-6, 1.6, -3], intensity: 3.5, color: '#ff8a3d', shadows: true },
+      { type: 'point', pos: [3, 2.5, 3], intensity: 15, color: '#5b7cff' },
+    ],
+  },
+  neon: {
+    env: 0.08,
+    lights: [
+      { type: 'point', pos: [-2, 1.5, -1], intensity: 40, color: '#ff2fd6', shadows: true },
+      { type: 'point', pos: [2, 1.5, 1], intensity: 40, color: '#20e3ff' },
+      { type: 'spot', pos: [0, 4, 0.1], intensity: 30, color: '#b388ff' },
+    ],
+  },
+  dramatic: { env: 0.05, lights: [{ type: 'spot', pos: [0.5, 5, 1], intensity: 120, color: '#fff5e8', angle: Math.PI / 6, shadows: true }] },
+};
+
+/** Photo filters, applied only to the saved AR photo (free while the camera is open). */
+export const AR_FILTERS: Record<string, { label: string; css: string; vignette: number; grain: number }> = {
+  none: { label: 'Original', css: 'none', vignette: 0, grain: 0 },
+  cinema: { label: 'Cinema', css: 'contrast(1.2) saturate(1.1) sepia(0.12)', vignette: 0.35, grain: 0.04 },
+  bw: { label: 'B&W', css: 'grayscale(1) contrast(1.3)', vignette: 0.3, grain: 0.08 },
+  vintage: { label: 'Vintage', css: 'sepia(0.45) saturate(0.75) contrast(0.95)', vignette: 0.45, grain: 0.1 },
+  neon: { label: 'Neon', css: 'saturate(1.5) contrast(1.1)', vignette: 0.3, grain: 0 },
+  dream: { label: 'Dream', css: 'brightness(1.12) contrast(0.92) saturate(1.1)', vignette: 0.15, grain: 0 },
+  cold: { label: 'Cold', css: 'hue-rotate(-12deg) saturate(0.9) contrast(1.1)', vignette: 0.2, grain: 0 },
+};
 
 interface Saved {
   node: TransformNode;
@@ -66,32 +118,138 @@ export class ARMode {
     return this.supported;
   }
 
-  /** Optional, heavier extras (off when AR starts). */
+  /** Optional extras, all off / cheapest when AR starts. */
   shadows = false;
-  roomLight = false;
+  lighting: ARLighting = 'scene';
+  /** Multiplies every light and the environment (1 = as designed). */
+  lightLevel = 1;
+  filter = 'none';
+
+  private rig: { light: ShadowLight; base: number; gen?: ShadowGenerator }[] = [];
+  /** The editor's lights and their intensities, restored when AR ends. */
+  private sceneLights: { light: ShadowLight; base: number }[] = [];
+  private baseEnvIntensity = 1;
+  /** Scene size in anchor space (for presets). */
+  private local = { size: 2, height: 1 };
 
   /** Shadows of the scene on the real floor. */
   setShadows(on: boolean) {
     this.shadows = on;
-    this.editor.setShadowsEnabled(on);
+    this.editor.setShadowsEnabled(on && this.sceneLightsOn());
+    for (const r of this.rig) if (r.gen) r.light.shadowEnabled = on;
+    this.updateShadowRefresh();
     this.changed.notifyObservers();
   }
 
-  /** Real-world lighting estimated by the phone (reflections and light of the room). */
-  setRoomLight(on: boolean) {
+  private sceneLightsOn() {
+    return this.lighting === 'scene' || this.lighting === 'room';
+  }
+
+  /** Switches the AR lighting: the editor's lights, the room's (estimated), or a preset. */
+  setLighting(id: ARLighting) {
     if (!this.xr) return;
     const fm = this.xr.baseExperience.featuresManager;
+    this.clearRig();
     try {
-      if (on) fm.attachFeature(WebXRFeatureName.LIGHT_ESTIMATION);
-      else {
+      if (id === 'room') fm.attachFeature(WebXRFeatureName.LIGHT_ESTIMATION);
+      else if (this.lighting === 'room') {
         fm.detachFeature(WebXRFeatureName.LIGHT_ESTIMATION);
         this.editor.restoreEnvironmentTexture();
       }
-      this.roomLight = on;
     } catch (e) {
       this.reportError(e instanceof Error ? e.message : String(e));
     }
+    this.lighting = id;
+    const sceneOn = this.sceneLightsOn();
+    for (const s of this.sceneLights) s.light.setEnabled(sceneOn);
+    this.editor.setShadowsEnabled(this.shadows && sceneOn);
+    this.baseEnvIntensity = this.editor.env.intensity;
+    if (id !== 'scene' && id !== 'room') this.buildRig(id);
+    this.applyLightLevel();
+    this.updateShadowRefresh();
     this.changed.notifyObservers();
+  }
+
+  setLightLevel(level: number) {
+    this.lightLevel = level;
+    this.applyLightLevel();
+  }
+
+  fps() {
+    return this.editor.engine.getFps();
+  }
+
+  setFilter(id: string) {
+    this.filter = id;
+    this.changed.notifyObservers();
+  }
+
+  private applyLightLevel() {
+    for (const s of this.sceneLights) s.light.intensity = s.base * this.lightLevel;
+    for (const r of this.rig) r.light.intensity = r.base * this.lightLevel;
+    this.editor.scene.environmentIntensity = this.baseEnvIntensity * this.lightLevel;
+  }
+
+  private buildRig(id: keyof typeof AR_RIGS) {
+    const anchor = this.anchor;
+    if (!anchor) return;
+    const scene = this.editor.scene;
+    const preset = AR_RIGS[id];
+    this.baseEnvIntensity = preset.env;
+    const k = Math.max(this.local.size, 0.5) / 2;
+    const focus = new Vector3(0, this.local.height / 2, 0);
+    const casters = this.editor.entities.filter((e) => e.kind !== 'light' && e.visible).flatMap((e) => e.meshes);
+    for (const def of preset.lights) {
+      const pos = new Vector3(...def.pos).scale(k);
+      const dir = focus.subtract(pos).normalize();
+      let light: ShadowLight;
+      if (def.type === 'directional') light = new DirectionalLight('arRig', dir, scene);
+      else if (def.type === 'spot') light = new SpotLight('arRig', pos, dir, def.angle ?? Math.PI / 4, 2, scene);
+      else light = new PointLight('arRig', pos, scene);
+      light.position.copyFrom(pos);
+      light.parent = anchor;
+      light.diffuse = Color3.FromHexString(def.color);
+      light.specular = light.diffuse.clone();
+      // Point/spot fall off with distance: scale with the scene like the editor presets
+      const base = def.type === 'directional' ? def.intensity : def.intensity * k * k;
+      let gen: ShadowGenerator | undefined;
+      if (def.shadows) {
+        gen = new ShadowGenerator(1024, light);
+        if (def.type === 'point') gen.usePoissonSampling = true;
+        else {
+          gen.usePercentageCloserFiltering = true;
+          gen.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
+        }
+        gen.bias = 0.0008;
+        gen.normalBias = 0.015;
+        gen.getShadowMap()!.renderList = [...casters];
+        light.shadowEnabled = this.shadows;
+      }
+      this.rig.push({ light, base, gen });
+    }
+  }
+
+  private clearRig() {
+    for (const r of this.rig) {
+      r.gen?.dispose();
+      r.light.dispose();
+    }
+    this.rig = [];
+  }
+
+  /**
+   * Shadow maps are redrawn only when the scene moves (not every frame), unless something is
+   * animating. Same image, much less GPU work.
+   */
+  private updateShadowRefresh() {
+    const animating = this.editor.scene.animatables.some((a) => !a.paused);
+    const gens = [...this.editor.entities.map((e) => e.shadowGen), ...this.rig.map((r) => r.gen)].filter((g): g is ShadowGenerator => !!g);
+    for (const g of gens) {
+      const map = g.getShadowMap();
+      if (!map) continue;
+      map.refreshRate = animating ? RenderTargetTexture.REFRESHRATE_RENDER_ONEVERYFRAME : RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
+      map.resetRefreshCounter();
+    }
   }
 
   /** Last error seen during the session (shown in the overlay to help diagnose problems). */
@@ -155,7 +313,10 @@ export class ARMode {
     this.cameraImage = false;
     this.lastError = '';
     this.shadows = false;
-    this.roomLight = false;
+    this.lighting = 'scene';
+    this.lightLevel = 1;
+    this.filter = 'none';
+    this.baseEnvIntensity = this.editor.env.intensity;
     this.editor.setShadowsEnabled(false);
     this.active = true;
     this.changed.notifyObservers();
@@ -192,6 +353,8 @@ export class ARMode {
     for (const n of nodes) n.setParent(anchor);
     anchor.setEnabled(false);
     this.anchor = anchor;
+    this.local = { size: b ? Math.max(b.size.x, b.size.y, b.size.z) : 2, height: b ? b.size.y : 1 };
+    this.sceneLights = ed.entities.filter((e) => e.light && e.visible).map((e) => ({ light: e.light!, base: e.light!.intensity }));
 
     // Keep the side the user was looking at in the editor facing them in AR
     const cam = ed.camera;
@@ -202,6 +365,23 @@ export class ARMode {
   /** Puts everything back exactly where it was in the editor. */
   private cleanup() {
     if (!this.active) return;
+    this.clearRig();
+    for (const s of this.sceneLights) {
+      s.light.intensity = s.base;
+      s.light.setEnabled(true);
+    }
+    this.sceneLights = [];
+    for (const e of this.editor.entities) {
+      const map = e.shadowGen?.getShadowMap();
+      if (map) map.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONEVERYFRAME;
+    }
+    if (this.lighting === 'room') {
+      try {
+        this.xr?.baseExperience.featuresManager.detachFeature(WebXRFeatureName.LIGHT_ESTIMATION);
+      } catch {
+        // Session already gone
+      }
+    }
     for (const s of this.saved) {
       s.node.parent = s.parent;
       s.node.position.copyFrom(s.position);
@@ -248,14 +428,30 @@ export class ARMode {
     this.anchor.setEnabled(true);
     this.status = 'placed';
     this.reticle?.setEnabled(false);
+    // Surface detection runs every frame; it's only needed while looking for a spot
+    this.setHitTest(false);
+    this.updateShadowRefresh();
     this.changed.notifyObservers();
     return true;
   }
 
   /** Shows the marker again so the scene can be moved to another spot. */
   replace() {
-    this.status = this.lastHit ? 'ready' : 'searching';
+    this.lastHit = null;
+    this.setHitTest(true);
+    this.status = 'searching';
     this.changed.notifyObservers();
+  }
+
+  private setHitTest(on: boolean) {
+    const fm = this.xr?.baseExperience.featuresManager;
+    if (!fm) return;
+    try {
+      if (on) fm.attachFeature(WebXRFeatureName.HIT_TEST);
+      else fm.detachFeature(WebXRFeatureName.HIT_TEST);
+    } catch {
+      // Not available: keep it as it is
+    }
   }
 
   rotateBy(radians: number) {
@@ -279,6 +475,8 @@ export class ARMode {
     if (!this.anchor) return;
     Quaternion.RotationYawPitchRollToRef(this.yaw, 0, 0, this.anchor.rotationQuaternion!);
     this.anchor.scaling.setAll(this.scale);
+    // The scene moved: redraw shadows once
+    for (const g of [...this.editor.entities.map((e) => e.shadowGen), ...this.rig.map((r) => r.gen)]) g?.getShadowMap()?.resetRefreshCounter();
   }
 
   /**
@@ -314,7 +512,8 @@ export class ARMode {
     img.src = layer;
     await img.decode();
     ctx.drawImage(img, 0, 0, width, height);
-    return new Promise((resolve) => out.toBlob((b) => resolve(b), 'image/jpeg', 0.92));
+    const final = applyPhotoFilter(out, AR_FILTERS[this.filter] ?? AR_FILTERS.none);
+    return new Promise((resolve) => final.toBlob((b) => resolve(b), 'image/jpeg', 0.92));
   }
 
   /** Copies the current camera image (only readable during an XR frame, so wait for the next one). */
@@ -351,4 +550,43 @@ export class ARMode {
       });
     });
   }
+}
+
+/** Color filter + vignette + grain on a finished photo (2D canvas, only when saving). */
+function applyPhotoFilter(src: HTMLCanvasElement, f: { css: string; vignette: number; grain: number }) {
+  if (f.css === 'none' && !f.vignette && !f.grain) return src;
+  const out = document.createElement('canvas');
+  out.width = src.width;
+  out.height = src.height;
+  const ctx = out.getContext('2d')!;
+  ctx.filter = f.css;
+  ctx.drawImage(src, 0, 0);
+  ctx.filter = 'none';
+  const w = out.width;
+  const h = out.height;
+  if (f.vignette) {
+    const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.hypot(w, h) / 2);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `rgba(0,0,0,${f.vignette})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+  if (f.grain) {
+    // Small noise tile repeated over the photo
+    const tile = document.createElement('canvas');
+    tile.width = tile.height = 128;
+    const t = tile.getContext('2d')!;
+    const img = t.createImageData(128, 128);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = Math.random() * 255;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255 * f.grain;
+    }
+    t.putImageData(img, 0, 0);
+    ctx.fillStyle = ctx.createPattern(tile, 'repeat')!;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  return out;
 }
