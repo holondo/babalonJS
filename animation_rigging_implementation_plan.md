@@ -71,11 +71,18 @@ Boundaries: `editor.ts` stays UI-free; heavy math (weights) never on the main th
 | D3 | Rigged models in projects: store computed weights (fast load, bigger files) or recompute from joints (small files, slower load) | R08 |
 | D4 | E2 weights method details: heat diffusion on a decimated proxy vs. full mesh, size limits on phones | R09 |
 
+Proposed resolutions (implemented; awaiting the user's approval at the milestone gates):
+
+- **D1:** the Quaternius UAL rig (CC0, T-pose, Rigify deform names) is the template; canonical names are VRM's. Details in `docs/animation_sources.md`.
+- **D2:** all 43 UAL Standard clips except `A_TPose` and the `_RM` duplicates, one file each (≈2 MB total, lazy, runtime-cached), plus a rigged and a static Mannequin sample.
+- **D3:** store the computed weights (4 bone indices + 4 weights per vertex as bytes, `rigs/<n>.bin` in the project zip, ≈8 bytes per vertex): fast load, identical result for heat weights, recompute (envelope) only if the file is missing or the mesh changed.
+- **D4:** heat diffusion on a vertex-clustered proxy of at most 15 000 vertices on desktop and 6 000 on touch devices, weights copied back to every vertex; cotangent Laplacian clamped to stay stable; any failure falls back to envelope weights with a message.
+
 ## 5. Implementation steps
 
 ### R00 - Verify the free rig and animation sources
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective**
 
@@ -130,7 +137,7 @@ The free rig and clips are usable and legally clean.
 
 ### R01 - Control existing animations (A)
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective**
 
@@ -176,7 +183,7 @@ HVGirl and Xbot samples: switch clips, scrub, freeze, photo, save/reopen, check 
 
 ### R02 - Recognize humanoid skeletons
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective**
 
@@ -233,7 +240,7 @@ Existing animations are discoverable and photo-friendly, and humanoids are under
 
 ### R03 - Pose humanoids by hand (C, forward kinematics)
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective**
 
@@ -278,7 +285,7 @@ Pose the HVGirl (raise an arm, turn the head), mirror, photo, save/reopen, undo.
 
 ### R04 - Inverse kinematics and pose presets (C)
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective**
 
@@ -334,7 +341,7 @@ Characters can be posed for scenes and photos, by hand or from presets.
 
 ### R05 - Retarget imported clips (B)
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective**
 
@@ -378,7 +385,7 @@ Apply a UAL clip file onto HVGirl and Xbot; save/reopen.
 
 ### R06 - Built-in CC0 animation library (B)
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective**
 
@@ -422,7 +429,7 @@ Offline after first use; apply three clips to two humanoids on the S24.
 
 ### R07 - Simple animation for any object (D)
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective**
 
@@ -479,7 +486,7 @@ Any humanoid with a skeleton can be animated with free clips, and any object can
 
 ### R08 - Manual rigging with the standard skeleton (E1)
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective**
 
@@ -527,7 +534,7 @@ Rig a static CC0 humanoid (e.g. a MakeHuman or UAL base mesh with the skin remov
 
 ### R09 - Better skin weights (E2)
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective**
 
@@ -589,13 +596,15 @@ A static humanoid can be rigged in the app with free tools only and then posed a
 
 | Step | Status | Evidence / commit | Human approval | Notes |
 |---|---|---|---|---|
-| R00 | TODO | | [ ] | Verify CC0 rig/clips + retarget — Milestone M0, decides D1, D2 |
-| R01 | TODO | | [ ] | Control existing animations (A) |
-| R02 | TODO | | [ ] | Humanoid detection and mapping — Milestone M1 |
-| R03 | TODO | | [ ] | Posing FK (C) |
-| R04 | TODO | | [ ] | IK and pose presets (C) — Milestone M2 |
-| R05 | TODO | | [ ] | Retarget imported clips (B) |
-| R06 | TODO | | [ ] | Built-in CC0 animation library (B) |
-| R07 | TODO | | [ ] | Simple object motion (D) — Milestone M3 |
-| R08 | TODO | | [ ] | Manual rigging E1 — needs D3 |
-| R09 | TODO | | [ ] | Better weights E2 — Milestone M4, needs D4 |
+| R00 | VERIFIED | `docs/animation_sources.md`; UAL walk retargeted onto Mannequin, Xbot, HVGirl: bone directions, hip and shoulder axes equal to 2 decimals | [ ] | D1, D2 proposed |
+| R01 | VERIFIED | HVGirl: clip switch with crossfade, pause, scrub, loop/once, speed; undo/redo; save/reopen (new and old format); 0 renders/s when frozen | [ ] | Milestone M1 with R02 |
+| R02 | VERIFIED | All 22 canonical bones detected on Mannequin (Rigify), Xbot and HVGirl (Mixamo); manual mapping saved in projects | [ ] | Milestone M1 |
+| R03 | VERIFIED | Joint handles + rotation gizmo (pointer drag tested), Bend/Twist/Tilt sliders, mirror (error 0.2 mm, round trip exact), reset; pose kept through save/reopen and duplicate | [ ] | |
+| R04 | VERIFIED | Two-bone IK puts the hand exactly on target; direction presets and clip-frame presets applied to Mannequin and Xbot | [ ] | Milestone M2 |
+| R05 | VERIFIED | Import GLB/glTF/FBX clips; rest-pose alignment; in-place option; clips survive save/reopen and duplicate | [ ] | |
+| R06 | VERIFIED | 43 CC0 clips in `public/animations/` (not precached, runtime-cached), `THIRD_PARTY_LICENSES.md`; one tap applies a clip | [ ] | |
+| R07 | VERIFIED | Spin/float/pulse/sway on a child pivot; object still movable; undo, delete/undo, save/reopen; no rendering when paused | [ ] | Milestone M3 |
+| R08 | VERIFIED | Static Mannequin rigged in front view (joint drag with mirror tested with the pointer), envelope weights in ~0.1 s, test pose, heat map, confirm/undo/redo, cancel leaves the model untouched, library walk plays, save/reopen through the zip, duplicate, GLB export re-imports with its skin and clips | [ ] | D3 proposed |
+| R09 | VERIFIED | Heat weights in a Web Worker with progress and cancel (8.5k vertices in 0.6 s on desktop); visibly rounder shoulders than E1; fallback to E1 on failure | [ ] | Milestone M4, D4 proposed |
+
+**Not tested on a device yet:** posing and rigging with fingers on a phone (S24), AR with animated/posed characters, heat-weights timing on a phone.

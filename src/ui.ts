@@ -35,10 +35,19 @@ import {
   Move3d,
   Pause,
   Play,
+  Repeat,
+  ArrowRightToLine,
+  ArrowLeftRight,
+  Bone,
+  Check,
+  FileUp,
+  PersonStanding,
   Plus,
   Redo2,
   Rotate3d,
   RotateCcw,
+  RotateCw,
+  Wand,
   Scale3d,
   Shrink,
   Smartphone,
@@ -65,6 +74,17 @@ import {
 import type { Editor, Entity, GroundMode, LightType, PhotoSettings, PrimitiveType, Tool } from './editor';
 import { PROJECT_EXT, fromZip, loadAutosave, restore, saveAutosave, snapshot, toZip } from './project';
 import type { ProjectSnapshot } from './project';
+import type { ClipState } from './animation';
+import type { MotionSettings, MotionType } from './motion';
+import { JointOverlay } from './jointOverlay';
+import { REQUIRED_BONES, boneLabel, humanoidOf, jointNodes, setBoneMapping, skeletonsOf } from './humanoid';
+import type { HumanBone } from './humanoid';
+import { mappedParent, rotationOf } from './pose';
+import type { PoseJoint } from './pose';
+import { RIG_TEMPLATE } from './humanoidTemplate';
+import type { RigJoint } from './humanoidTemplate';
+import type { WeightMethod } from './rigging';
+import { ANIMATION_LIBRARY, ANIMATION_SOURCE, POSE_PRESETS } from './presets';
 import type { ARMode } from './ar';
 import type { GyroControl } from './gyro';
 import { saveAndOfferShare, timestampedName } from './files';
@@ -88,6 +108,16 @@ const TABS: { id: Exclude<Tab, 'photo'>; label: string; icon: IconNode }[] = [
 const PANEL_TITLES: Record<Tab, string> = { add: 'Add', objects: 'Objects', light: 'Light', tools: 'Tools', photo: 'Photo' };
 
 const KIND_ICON: Record<Entity['kind'], IconNode> = { model: Box, primitive: Box, light: Lightbulb };
+/** Name of a joint for lists and the selection bar. */
+function jointLabel(j: PoseJoint) {
+  return j.bone ? tr(boneLabel(j.bone)) : j.node.name;
+}
+
+/** Readable clip name: "Walk_Loop" → "Walk loop". */
+function clipLabel(name: string, i: number) {
+  const clean = name.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+  return clean ? clean[0].toUpperCase() + clean.slice(1).toLowerCase() : tr('Animation {n}', { n: i + 1 });
+}
 const deg = (r: number) => (r * 180) / Math.PI;
 const rad = (d: number) => (d * Math.PI) / 180;
 
@@ -125,6 +155,12 @@ export class UI {
   private readonly loader = h('div', { class: 'loader' });
   private readonly toasts = h('div', { class: 'toasts' });
   private readonly labels = h('div', { class: 'mlabels' });
+  /** Joint handles while posing (and rigging). */
+  private readonly jointOverlay: JointOverlay;
+  /** Animation files to apply to the selected character. */
+  private readonly clipInput = h('input', { type: 'file', accept: '.glb,.gltf,.fbx,.bin', multiple: true, hidden: true });
+  /** Show the manual bone mapping even when nothing is missing. */
+  private mapBones = false;
   private labelEls = new Map<Measurement, HTMLElement>();
   private guideEls = new Map<Guide, HTMLElement>();
   private draggingGuide: Guide | null = null;
@@ -142,6 +178,12 @@ export class UI {
   constructor(editor: Editor, root: HTMLElement) {
     this.editor = editor;
     this.root = root;
+    this.jointOverlay = new JointOverlay(editor);
+    this.clipInput.addEventListener('change', () => {
+      const files = [...(this.clipInput.files ?? [])];
+      this.clipInput.value = '';
+      if (files.length) this.importClips(files);
+    });
     root.append(h('div', { class: 'titlebar-drag' }), this.menu, this.selMenu, this.projectInput);
     this.uiRestore.append(icon(Eye));
     this.uiRestore.addEventListener('click', () => this.setUiHidden(false));
@@ -156,7 +198,8 @@ export class UI {
     });
     this.setupAutosave();
     document.addEventListener('fullscreenchange', () => this.renderViewStack());
-    root.append(this.labels, this.frame, this.topbar, this.selbar, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
+    root.append(this.clipInput);
+    root.append(this.labels, this.jointOverlay.el, this.frame, this.topbar, this.selbar, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
     this.fileInput.addEventListener('change', () => {
       const files = [...(this.fileInput.files ?? [])];
       this.fileInput.value = '';
@@ -172,6 +215,17 @@ export class UI {
         return this.renderAll();
       }
       if (kind === 'tool') return this.renderSelbar();
+      if (kind === 'animation' || kind === 'pose' || kind === 'rig') {
+        if (editor.rigger.fellBack) {
+          editor.rigger.fellBack = false;
+          this.toast(tr('Heat diffusion failed on this mesh: envelope weights were used.'), 'error');
+        }
+        this.renderSelbar();
+        this.renderPoseOverlay();
+        if (kind === 'rig') this.renderTopbar();
+        if (!this.busy && this.tab === 'objects') this.renderPanel();
+        return;
+      }
       if (kind === 'env' && editor.photoMode) {
         this.renderPhotoHud();
         this.renderFrame();
@@ -187,7 +241,11 @@ export class UI {
       this.scheduleAutosave();
       if (!this.busy && (this.tab === 'tools' || this.tab === 'objects')) this.renderPanel();
     });
-    editor.scene.onAfterRenderObservable.add(() => this.updateLabels());
+    editor.scene.onAfterRenderObservable.add(() => {
+      this.updateLabels();
+      this.updateScrubber();
+      this.jointOverlay.update();
+    });
     editor.loading.add((l) => {
       this.loader.classList.toggle('show', !!l);
       if (l) this.loader.replaceChildren(h('div', { class: 'spinner' }), h('span', {}, tr('Loading {name}… {pct}%', { name: l.name, pct: Math.round(l.progress * 100) })));
@@ -355,6 +413,7 @@ export class UI {
     this.renderTopbar();
     this.renderDock();
     this.renderSelbar();
+    this.renderPoseOverlay();
     this.renderViewStack();
     this.renderPanel();
     this.renderPhotoHud();
@@ -495,7 +554,7 @@ export class UI {
 
   private setupAutosave() {
     this.editor.changed.add((kind) => {
-      if (kind === 'entities' || kind === 'transform' || kind === 'env' || kind === 'history') this.scheduleAutosave();
+      if (kind === 'entities' || kind === 'transform' || kind === 'env' || kind === 'history' || kind === 'animation' || kind === 'pose' || kind === 'rig') this.scheduleAutosave();
     });
     // Material tweaks and the like don't emit editor events: save when a control is released
     this.panel.addEventListener('change', () => this.scheduleAutosave());
@@ -572,6 +631,8 @@ export class UI {
         h('div', { class: 'sel-tools' }, button(tr('Done'), () => ed.tools.setMeasureMode(false), { cls: 'small primary' })),
       );
     }
+    if (ed.rigger.active && !ed.photoMode) return this.renderRigBar();
+    if (ed.pose.active && !ed.photoMode) return this.renderPoseBar();
     const multi = iconButton(Group, tr('Multi-select (or Shift+click)'), () => ed.setMultiSelect(!ed.multiSelect), { active: ed.multiSelect });
     this.selbar.classList.toggle('show', (!!e || ed.multiSelect) && !ed.photoMode);
     if (!e) return this.selbar.replaceChildren(h('div', { class: 'sel-name wide' }, h('span', {}, tr('Tap objects to select'))), h('div', { class: 'sel-tools' }, multi));
@@ -587,6 +648,11 @@ export class UI {
         toolBtn('move', Move3d, tr('Move')),
         toolBtn('rotate', Rotate3d, tr('Rotate')),
         e.kind !== 'light' ? toolBtn('scale', Scale3d, tr('Scale')) : null,
+        count === 1 && e.animationGroups.length
+          ? ed.anim.isPlaying(e)
+            ? iconButton(Pause, tr('Pause animation'), () => ed.anim.pause(e), { cls: 'play-btn' })
+            : iconButton(Play, tr('Play animation'), () => ed.anim.play(e), { cls: 'play-btn' })
+          : null,
         h('span', { class: 'sep' }),
         iconButton(Trash2, tr('Delete (Del)'), () => ed.remove(), { cls: 'danger' }),
         iconButton(Ellipsis, tr('More'), () => this.toggleSelMenu(), { cls: 'more-btn', active: this.selMenuOpen }),
@@ -594,6 +660,103 @@ export class UI {
       ),
     );
     if (this.selMenuOpen) this.toggleSelMenu(true);
+  }
+
+  /** Selection bar while posing: the joint, how to move it, and Done. */
+  private renderPoseBar() {
+    const p = this.editor.pose;
+    const j = p.joint;
+    this.selbar.classList.add('show');
+    const tool = (t: 'rotate' | 'move', node: IconNode, label: string, title = label) => iconButton(node, title, () => p.setTool(t), { active: p.tool === t, label, cls: 'tool' });
+    this.selbar.replaceChildren(
+      h('div', { class: 'sel-name always' }, icon(Bone, 16), h('span', {}, j ? jointLabel(j) : tr('Tap a joint'))),
+      h(
+        'div',
+        { class: 'sel-tools' },
+        j ? tool('rotate', Rotate3d, tr('Turn')) : null,
+        j && p.canMove() ? tool('move', Move3d, tr('Drag'), tr('Drag the hand or foot: the arm or leg follows')) : null,
+        p.human ? iconButton(ArrowLeftRight, tr('Mirror pose'), () => p.mirror()) : null,
+        h('span', { class: 'sep' }),
+        button(tr('Done'), () => p.stop(), { icon: Check, cls: 'small primary' }),
+      ),
+    );
+  }
+
+  /** Selection bar while rigging: the step, its main action and cancel. */
+  private renderRigBar() {
+    const r = this.editor.rigger;
+    this.selbar.classList.add('show');
+    const computing = r.progress !== null;
+    this.selbar.replaceChildren(
+      h(
+        'div',
+        { class: 'sel-name always' },
+        icon(Bone, 16),
+        h('span', {}, computing ? tr('Computing weights… {pct}%', { pct: Math.round(r.progress! * 100) }) : r.step === 'place' ? tr('Place the joints') : tr('Check the skin')),
+      ),
+      h(
+        'div',
+        { class: 'sel-tools' },
+        computing
+          ? button(tr('Stop'), () => r.stopComputing(), { icon: X, cls: 'small' })
+          : r.step === 'place'
+            ? button(tr('Bind skin'), () => this.run(() => r.bind()), { icon: Check, cls: 'small primary' })
+            : button(tr('Done'), () => r.confirm(), { icon: Check, cls: 'small primary' }),
+        iconButton(X, tr('Cancel rigging'), () => r.cancel()),
+      ),
+    );
+  }
+
+  /** Joint handles over the posed object (or the skeleton being placed while rigging). */
+  private renderPoseOverlay() {
+    const ed = this.editor;
+    const p = ed.pose;
+    const r = ed.rigger;
+    if (r.active && r.step === 'place' && !ed.cleanView) return this.renderRigOverlay();
+    if (!p.active || ed.cleanView) return this.jointOverlay.clear();
+    const joints = p.joints();
+    const map = p.human;
+    const id = (j: PoseJoint) => String(joints.indexOf(j));
+    const byNode = new Map(joints.map((j) => [j.node, j]));
+    this.jointOverlay.set(
+      joints.map((j) => {
+        let parent: PoseJoint | undefined;
+        if (map && j.bone) {
+          const pb = mappedParent(map, j.bone);
+          parent = pb ? joints.find((x) => x.bone === pb) : undefined;
+        } else {
+          parent = byNode.get(j.node.parent as never);
+        }
+        return {
+          id: id(j),
+          position: () => j.node.getAbsolutePosition(),
+          parent: parent ? id(parent) : undefined,
+          label: jointLabel(j),
+          cls: `${p.joint?.node === j.node ? 'active' : ''} ${p.canMove(j) ? 'ik' : ''}`,
+        };
+      }),
+      { onPick: (i) => p.selectJoint(p.joint?.node === joints[+i].node ? null : joints[+i]) },
+    );
+  }
+
+  /** Template joints to drag onto the model; the joints that follow them are shown smaller. */
+  private renderRigOverlay() {
+    const r = this.editor.rigger;
+    this.jointOverlay.set(
+      RIG_TEMPLATE.map((j) => ({
+        id: j.id,
+        position: () => r.jointWorld(j.id),
+        parent: j.parent ?? undefined,
+        label: tr(boneLabel(j.id as HumanBone)),
+        cls: `${j.handle ? '' : 'auto'} ${j.id.startsWith('left') ? 'side' : ''} ${r.selected === j.id ? 'active' : ''}`,
+      })),
+      {
+        onPick: (id) => r.selectJoint(id as RigJoint),
+        onDragStart: () => r.remember(),
+        onDrag: (id, x, y) => r.dragJoint(id as RigJoint, x, y),
+        onDragEnd: (id) => r.endDrag(id as RigJoint),
+      },
+    );
   }
 
   /** Secondary selection actions, one level deep. */
@@ -613,6 +776,10 @@ export class UI {
         ed.orbitAround();
         this.toast(tr('Orbiting around {name}', { name: e.name }));
       }, { on: ed.orbitEntity === e, kbd: 'O' }),
+      ...(e.animationGroups.length && ed.selection.length === 1
+        ? [ed.anim.isPlaying(e) ? item(Pause, tr('Pause animation'), () => ed.anim.pause(e)) : item(Play, tr('Play animation'), () => ed.anim.play(e))]
+        : []),
+      ...(skeletonsOf(e).length ? [item(PersonStanding, tr('Pose joints'), () => this.startPosing(e))] : []),
       item(Group, tr('Multi-select'), () => (ed.setMultiSelect(!ed.multiSelect), this.toggleSelMenu(true)), { on: ed.multiSelect, keep: true }),
       item(Magnet, tr('Snap to grid'), () => (ed.setSnap(!ed.snap), this.toggleSelMenu(true)), { on: ed.snap, keep: true }),
     );
@@ -682,12 +849,13 @@ export class UI {
     switch (tab) {
       case 'objects': {
         const e = this.editor.selected;
-        return e && e.kind !== 'light' && this.editor.materialsOf(e).length
-          ? [
-              { id: 'object', label: tr('Object') },
-              { id: 'material', label: tr('Material') },
-            ]
-          : null;
+        if (!e || e.kind === 'light') return null;
+        return [
+          { id: 'object', label: tr('Object') },
+          ...(this.editor.materialsOf(e).length ? [{ id: 'material', label: tr('Material') }] : []),
+          { id: 'animate', label: tr('Animate') },
+          ...(skeletonsOf(e).length ? [{ id: 'pose', label: tr('Pose') }] : this.editor.rigger.canRig(e) ? [{ id: 'rig', label: tr('Rig') }] : []),
+        ];
       }
       case 'light':
         return [
@@ -714,7 +882,11 @@ export class UI {
       case 'add':
         return this.addPanel();
       case 'objects':
-        return part === 'material' ? this.materialPanel() : this.scenePanel();
+        if (part === 'material') return this.materialPanel();
+        if (part === 'animate') return this.animatePanel();
+        if (part === 'pose') return this.posePanel();
+        if (part === 'rig') return this.rigPanel();
+        return this.scenePanel();
       case 'light':
         return part === 'environment' ? this.envPanel() : this.lightsPanel();
       case 'photo': {
@@ -1125,31 +1297,416 @@ export class UI {
       toggle(tr('Wireframe'), ed.materialsOf(e).some((m) => m.wireframe), (v) => ed.setWireframe(e, v)),
       h('p', { class: 'stats' }, tr('{vertices} vertices · {faces} faces · {materials} materials', { vertices: s.vertices.toLocaleString(locale()), faces: s.faces.toLocaleString(locale()), materials: s.materials })),
     ];
-    if (e.animationGroups.length) {
-      const playing = e.animationGroups.find((a) => a.isPlaying);
-      const current = playing ?? e.animationGroups[0];
-      nodes.push(
-        select(
-          tr('Animation'),
-          e.animationGroups.map((a, i) => ({ value: String(i), label: a.name || tr('Animation {n}', { n: i + 1 }) })),
-          String(e.animationGroups.indexOf(current)),
-          (v) => {
-            e.animationGroups.forEach((a) => a.stop());
-            e.animationGroups[+v].start(true);
+    return section(tr('Object'), ...nodes);
+  }
+
+  // ---------- Animate ----------
+
+  /** Live scrubber of the selected object's clip (moves while the clip plays). */
+  private scrubber: { entity: Entity; input: HTMLInputElement; out: HTMLOutputElement; fps: number } | null = null;
+
+  private animatePanel(): (Node | null)[] {
+    const ed = this.editor;
+    const e = ed.selected;
+    this.scrubber = null;
+    if (!e) return [];
+    const out: (Node | null)[] = [];
+    const a = ed.anim;
+    const clips = a.clips(e);
+    const g = a.current(e);
+    if (clips.length && g) {
+      const st = a.state(e);
+      const fps = g.targetedAnimations[0]?.animation.framePerSecond || 60;
+      const seconds = (f: number) => `${((f - g.from) / fps).toFixed(2)} s`;
+      let before: ClipState | null = null;
+      const scrub = slider(
+        tr('Frame'),
+        st.frame,
+        {
+          min: g.from,
+          max: g.to,
+          step: 0.5,
+          format: seconds,
+          onCommit: () => {
+            if (before) this.quiet(() => a.seek(e, a.frame(e), before!));
+            before = null;
+            this.renderSelbar();
             this.renderPanel();
           },
+        },
+        (v) => {
+          before ??= a.state(e);
+          this.quiet(() => a.seek(e, v));
+        },
+      );
+      this.scrubber = { entity: e, input: scrub.querySelector('input')!, out: scrub.querySelector('output')!, fps };
+      let speedBefore: ClipState | null = null;
+      out.push(
+        section(
+          tr('Clips'),
+          chips(
+            clips.map((c, i) => {
+              // Library clips show their friendly name
+              const from = e.addedClips?.find((x) => x.group === c)?.from;
+              const lib = from && 'library' in from ? ANIMATION_LIBRARY.find((l) => l.id === from.library) : undefined;
+              return { value: String(i), label: lib ? tr(lib.label) : clipLabel(c.name, i) };
+            }),
+            String(st.index),
+            (v) => a.select(e, +v),
+          ),
+          row(
+            button(st.playing ? tr('Pause') : tr('Play'), () => a.toggle(e), { icon: st.playing ? Pause : Play, cls: 'small primary' }),
+            button(st.loop ? tr('Loop') : tr('Once'), () => a.setLoop(e, !st.loop), { icon: st.loop ? Repeat : ArrowRightToLine, cls: 'small' }),
+          ),
+          scrub,
+          slider(
+            tr('Speed'),
+            st.speed,
+            {
+              min: 0,
+              max: 3,
+              step: 0.05,
+              format: (v) => `${v.toFixed(2)}×`,
+              onCommit: () => {
+                if (speedBefore) this.quiet(() => a.setSpeed(e, a.state(e).speed, speedBefore!));
+                speedBefore = null;
+              },
+            },
+            (v) => {
+              speedBefore ??= a.state(e);
+              this.quiet(() => a.setSpeed(e, v));
+            },
+          ),
+          ed.anim.current(e) && e.addedClips?.some((c) => c.group === ed.anim.current(e))
+            ? row(button(tr('Remove this clip'), () => ed.clips.remove(e, ed.anim.current(e)!), { icon: Trash2, cls: 'small ghost' }))
+            : null,
+          hint(tr('Pause or drag the frame to keep a pose: photos, AR and saved projects keep it.')),
         ),
-        row(
-          button(playing ? tr('Pause') : tr('Play'), () => {
-            if (playing) playing.pause();
-            else current.play(true);
-            this.renderPanel();
-          }, { icon: playing ? Pause : Play, cls: 'small' }),
-        ),
-        slider(tr('Speed'), current.speedRatio, { min: 0, max: 3, step: 0.05, format: (v) => `${v.toFixed(2)}×` }, (v) => e.animationGroups.forEach((a) => (a.speedRatio = v))),
       );
     }
-    return section(tr('Object'), ...nodes);
+    out.push(...this.librarySections(e), this.motionSection(e));
+    return out;
+  }
+
+  /** Spin, float, pulse or sway: for any object, no keyframes. */
+  private motionSection(e: Entity) {
+    const mo = this.editor.motions;
+    const m = mo.get(e);
+    const types: { value: MotionType; label: string }[] = [
+      { value: 'none', label: tr('None') },
+      { value: 'spin', label: tr('Spin') },
+      { value: 'float', label: tr('Float') },
+      { value: 'pulse', label: tr('Pulse') },
+      { value: 'sway', label: tr('Sway') },
+    ];
+    let before: MotionSettings | undefined | null = null;
+    const live = (patch: Partial<MotionSettings>) => {
+      if (before === null) before = e.motion ? { ...e.motion } : undefined;
+      this.quiet(() => mo.set(e, { ...mo.get(e), ...patch }, false));
+    };
+    const commit = () => {
+      if (before !== null) mo.commit(e, before);
+      before = null;
+    };
+    const amount =
+      m.type === 'float'
+        ? { min: 0.02, max: 1, step: 0.01, format: (v: number) => `${Math.round(v * 100)}%` }
+        : m.type === 'pulse'
+          ? { min: 0.01, max: 0.5, step: 0.01, format: (v: number) => `${Math.round(v * 100)}%` }
+          : { min: 1, max: 45, step: 1, format: (v: number) => `${Math.round(v)}°` };
+    return section(
+      tr('Motion'),
+      chips(types, m.type, (v) => mo.choose(e, v)),
+      ...(m.type === 'none'
+        ? [hint(tr('Simple motion for any object. You can still move it while it plays.'))]
+        : [
+            row(
+              button(m.playing ? tr('Pause') : tr('Play'), () => mo.set(e, { ...m, playing: !m.playing }), { icon: m.playing ? Pause : Play, cls: 'small' }),
+            ),
+            slider(
+              m.type === 'spin' ? tr('Turns per second') : tr('Speed'),
+              m.speed,
+              { min: 0.05, max: 3, step: 0.05, format: (v) => (m.type === 'spin' ? v.toFixed(2) : `${v.toFixed(2)}×`), onCommit: commit },
+              (v) => live({ speed: v }),
+            ),
+            m.type !== 'spin' ? slider(m.type === 'sway' ? tr('Angle') : tr('Amount'), m.amount, { ...amount, onCommit: commit }, (v) => live({ amount: v })) : null,
+          ]),
+    );
+  }
+
+  /** Built-in clips and imported animation files, for humanoids. */
+  private librarySections(e: Entity): (Node | null)[] {
+    const ed = this.editor;
+    const d = e.kind === 'model' ? humanoidOf(e) : null;
+    if (!d) {
+      return e.kind === 'model' && !e.animationGroups.length
+        ? [section(tr('Add animation'), hint(tr('Clips from the library work on characters with a skeleton. Give this model one in Objects → Rig.')))]
+        : [];
+    }
+    if (!d.humanoid) return [section(tr('Add animation'), hint(tr('Clips from the library work on humanoid characters. Map its bones in Objects → Pose.')))];
+    if (!d.complete) return [section(tr('Add animation'), hint(tr('Some bones of this skeleton were not recognized. Map them in Objects → Pose.')))];
+    const add = (id: string) => this.run(() => ed.clips.add(e, { library: id }, { inPlace: this.inPlace }));
+    const groups = [...new Set(ANIMATION_LIBRARY.map((c) => c.group))];
+    return [
+      section(
+        tr('Add animation'),
+        toggle(tr('Keep in place'), this.inPlace, (v) => (this.inPlace = v)),
+        ...groups.flatMap((g) => [
+          h('h4', { class: 'sub' }, tr(g)),
+          h(
+            'div',
+            { class: 'chips' },
+            ...ANIMATION_LIBRARY.filter((c) => c.group === g).map((c) => h('button', { class: 'chip', onClick: () => add(c.id) }, tr(c.label))),
+          ),
+        ]),
+        hint(tr('Free animations: {name} by {author} ({license}).', { name: ANIMATION_SOURCE.name, author: ANIMATION_SOURCE.author, license: ANIMATION_SOURCE.license })),
+        row(button(tr('Import animation file'), () => this.clipInput.click(), { icon: FileUp, cls: 'small' })),
+        hint(tr('GLB, glTF or FBX with clips for a humanoid skeleton (any common bone naming).')),
+      ),
+    ];
+  }
+
+  /** Keep retargeted clips in place (no walking away). */
+  private inPlace = true;
+
+  private async importClips(files: File[]) {
+    const ed = this.editor;
+    const e = ed.selected;
+    if (!e) return;
+    const main = files.find((f) => /\.(glb|gltf|fbx)$/i.test(f.name));
+    if (!main) return this.toast(tr('Choose a GLB, glTF or FBX file.'), 'error');
+    const asset = { id: ed.nextAssetId++, name: main.name.replace(/\.[^.]+$/, ''), main, deps: files.filter((f) => f !== main) };
+    await this.run(async () => {
+      const added = await ed.clips.add(e, { asset }, { inPlace: this.inPlace });
+      this.toast(tr('{n} animations added to {name}', { n: added.length, name: e.name }));
+    });
+  }
+
+  /** Runs an action that may fail with a message for the user. */
+  private async run(fn: () => unknown) {
+    try {
+      await fn();
+    } catch (err) {
+      this.toast(err instanceof Error ? err.message : String(err), 'error');
+    }
+  }
+
+  // ---------- Pose ----------
+
+  private startPosing(e: Entity) {
+    this.editor.pose.start(e);
+    this.segment.objects = 'pose';
+    if (this.tab === 'objects') this.renderPanel();
+  }
+
+  private posePanel(): (Node | null)[] {
+    const ed = this.editor;
+    const e = ed.selected;
+    if (!e) return [];
+    const p = ed.pose;
+    const d = humanoidOf(e);
+    const active = p.active && p.entity === e;
+    const out: (Node | null)[] = [];
+    if (!active) {
+      out.push(
+        section(
+          tr('Pose'),
+          hint(tr('Turn the joints of this character to pose it for scenes and photos.')),
+          row(button(tr('Pose joints'), () => this.startPosing(e), { icon: PersonStanding, cls: 'primary' })),
+        ),
+      );
+    } else {
+      const joints = p.joints();
+      const j = p.joint;
+      const turn = (axis: 'x' | 'y' | 'z', label: string) => {
+        let from: ReturnType<typeof rotationOf> | null = null;
+        return slider(
+          label,
+          0,
+          { min: -180, max: 180, step: 1, format: (v) => `${Math.round(v)}°`, onCommit: () => ((from = null), p.end()) },
+          (v) => {
+            if (!j) return;
+            from ??= rotationOf(j.node).clone();
+            this.quiet(() => p.turnJoint(axis, v, from!));
+          },
+        );
+      };
+      out.push(
+        section(
+          tr('Joint'),
+          select(
+            tr('Joint'),
+            [{ value: '', label: tr('Tap a joint or pick one') }, ...joints.map((x, i) => ({ value: String(i), label: jointLabel(x) }))],
+            j ? String(joints.findIndex((x) => x.node === j.node)) : '',
+            (v) => p.selectJoint(v === '' ? null : joints[+v]),
+          ),
+          ...(j
+            ? [
+                turn('x', tr('Bend')),
+                turn('y', tr('Twist')),
+                turn('z', tr('Tilt')),
+                row(button(tr('Reset joint'), () => p.reset(j.node), { icon: RotateCcw, cls: 'small ghost' })),
+              ]
+            : [hint(tr('Drag the rings to turn the joint. Hands and feet can also be dragged: the arm or leg follows.'))]),
+        ),
+      );
+      out.push(
+        section(
+          tr('Whole pose'),
+          p.human
+            ? row(
+                button(tr('Mirror'), () => p.mirror(), { icon: ArrowLeftRight, cls: 'small' }),
+                button(tr('Left → right'), () => p.copySide('left'), { cls: 'small' }),
+                button(tr('Right → left'), () => p.copySide('right'), { cls: 'small' }),
+              )
+            : null,
+          row(
+            button(tr('Reset pose'), () => p.reset(), { icon: RotateCcw, cls: 'small ghost' }),
+            e.animationGroups.length ? button(tr('Back to animation'), () => p.backToAnimation(), { icon: Play, cls: 'small ghost' }) : null,
+          ),
+        ),
+      );
+    }
+    if (d?.humanoid && d.complete) {
+      out.push(
+        section(
+          tr('Ready poses'),
+          h(
+            'div',
+            { class: 'chips' },
+            ...POSE_PRESETS.map((preset) =>
+              h(
+                'button',
+                {
+                  class: 'chip',
+                  onClick: () =>
+                    this.run(() =>
+                      preset.dirs
+                        ? p.applyDirections(e, Object.fromEntries(Object.entries(preset.dirs).map(([b, v]) => [b, Vector3.FromArray(v).normalize()])))
+                        : ed.clips.poseFromClip(e, preset.clip!, preset.time ?? 0),
+                    ),
+                },
+                tr(preset.label),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    out.push(this.skeletonSection(e));
+    return out;
+  }
+
+  // ---------- Rig ----------
+
+  private rigPanel(): (Node | null)[] {
+    const ed = this.editor;
+    const e = ed.selected;
+    const r = ed.rigger;
+    if (!e) return [];
+    if (!r.active || r.entity !== e) {
+      return [
+        section(
+          tr('Give it a skeleton'),
+          hint(tr('For a standing person or character without a skeleton. You place the joints of a standard free skeleton on it; then it can be posed and animated.')),
+          hint(tr('Works best with arms open (T or A pose), facing forward.')),
+          chips(
+            [
+              { value: 'envelope', label: tr('Envelope weights') },
+              { value: 'heat', label: tr('Heat diffusion') },
+            ],
+            r.method,
+            (v) => ((r.method = v as WeightMethod), this.renderPanel()),
+          ),
+          row(button(tr('Start rigging'), () => r.start(e), { icon: Bone, cls: 'primary' })),
+        ),
+      ];
+    }
+    if (r.step === 'place') {
+      return [
+        section(
+          tr('Place the joints'),
+          hint(tr('Drag the gold dots onto the model: neck, head, shoulders, elbows, wrists, hips, knees, ankles and toes. Depth is found automatically.')),
+          hint(tr('Tap a joint to move it along one axis with the arrows.')),
+          row(button(tr('Find the joints'), () => (r.remember(), r.findPose() || this.toast(tr('Could not read the shape of this model.'), 'error')), { icon: Wand, cls: 'small primary' })),
+          toggle(tr('Symmetry (left = right)'), r.symmetric, (v) => r.setSymmetric(v)),
+          row(
+            button(tr('Front view'), () => r.frontView(), { icon: Scan, cls: 'small' }),
+            button(tr('Turn 90°'), () => r.turn(true), { icon: RotateCw, cls: 'small' }),
+            button(tr('Turn 180°'), () => r.turn(), { icon: RotateCcw, cls: 'small' }),
+            button(tr('Reset joints'), () => (r.remember(), r.fit(), ed.notify('rig')), { cls: 'small ghost' }),
+          ),
+          chips(
+            [
+              { value: 'envelope', label: tr('Envelope weights') },
+              { value: 'heat', label: tr('Heat diffusion') },
+            ],
+            r.method,
+            (v) => ((r.method = v as WeightMethod), this.renderPanel()),
+          ),
+          r.progress !== null
+            ? hint(tr('Computing weights… {pct}%', { pct: Math.round(r.progress * 100) }))
+            : row(button(tr('Bind skin'), () => this.run(() => r.bind()), { icon: Check, cls: 'primary' }), button(tr('Cancel'), () => r.cancel(), { cls: 'ghost' })),
+        ),
+      ];
+    }
+    const bones = RIG_TEMPLATE.filter((j) => j.id !== 'headTop' && !j.id.endsWith('Tip'));
+    return [
+      section(
+        tr('Check the skin'),
+        hint(tr('Bend the test pose and look at shoulders, elbows, hips and knees. Weights show how much a bone moves each part (red = fully).')),
+        slider(tr('Test pose'), r.testPose, { min: 0, max: 1, step: 0.01, format: (v) => `${Math.round(v * 100)}%` }, (v) => this.quiet(() => r.setTestPose(v))),
+        select(
+          tr('Show weights of'),
+          [{ value: '', label: tr('None') }, ...bones.map((j) => ({ value: j.id, label: tr(boneLabel(j.id as HumanBone)) }))],
+          r.heatBone ?? '',
+          (v) => r.setHeatBone((v || null) as HumanBone | null),
+        ),
+        row(
+          button(tr('Done'), () => r.confirm(), { icon: Check, cls: 'primary' }),
+          button(tr('Adjust joints'), () => r.adjust(), { cls: 'ghost' }),
+          button(tr('Cancel'), () => r.cancel(), { cls: 'ghost' }),
+        ),
+      ),
+    ];
+  }
+
+  /** Which joint is which (humanoid detection), with manual mapping when something is missing. */
+  private skeletonSection(e: Entity) {
+    const ed = this.editor;
+    const d = humanoidOf(e);
+    if (!d) return null;
+    const joints = jointNodes(e);
+    const status = d.complete
+      ? tr('Humanoid skeleton: all main bones were recognized ({n} joints).', { n: joints.length })
+      : d.humanoid
+        ? tr('Some bones were not recognized. Pick them below to use ready poses and animations.')
+        : tr('This skeleton was not recognized as a person. You can still turn its joints, or map its bones by hand.');
+    const showMap = this.mapBones || (d.humanoid && !d.complete);
+    const options = [{ value: '', label: '—' }, ...joints.map((n) => ({ value: n.name, label: n.name }))];
+    const remap = (bone: HumanBone, v: string) => {
+      setBoneMapping(e, bone, v || null);
+      if (ed.pose.entity === e) ed.pose.selectJoint(null);
+      ed.notify('pose');
+    };
+    return section(
+      tr('Skeleton'),
+      hint(status),
+      ...(showMap ? REQUIRED_BONES.map((b) => select(tr(boneLabel(b)), options, d.map[b]?.name ?? '', (v) => remap(b, v))) : []),
+      !showMap ? row(button(tr('Map bones by hand'), () => ((this.mapBones = true), this.renderPanel()), { icon: Bone, cls: 'small ghost' })) : null,
+    );
+  }
+
+  /** Keeps the frame slider in step with a playing clip (runs only while the scene renders). */
+  private updateScrubber() {
+    const s = this.scrubber;
+    if (!s || !s.input.isConnected) return;
+    const a = this.editor.anim;
+    if (!a.isPlaying(s.entity) || s.input.closest('.dragging')) return;
+    const f = a.frame(s.entity);
+    const g = a.current(s.entity)!;
+    s.input.value = String(f);
+    s.out.textContent = `${((f - g.from) / s.fps).toFixed(2)} s`;
   }
 
   // ---------- Material ----------

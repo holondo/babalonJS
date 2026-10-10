@@ -1,3 +1,4 @@
+import type { HumanBone } from './humanoid';
 import type { EnvSettings, LightType, PhotoSettings } from './editor';
 
 /**
@@ -110,4 +111,132 @@ export function filterToCanvas(values: Partial<PhotoSettings>) {
     vignette: Math.min(0.6, (values.vignette ?? 0) * 0.45),
     grain: Math.min(0.15, (values.grain ?? 0) / 150),
   };
+}
+
+// ---------- Poses and animations for humanoids ----------
+
+type Dir = [number, number, number];
+
+/** Arms down by the sides, legs straight (directions in the character's frame: x right, y up, z forward). */
+const RELAXED: Partial<Record<HumanBone, Dir>> = {
+  leftUpperArm: [-0.3, -0.95, 0],
+  leftLowerArm: [-0.15, -0.95, 0.15],
+  rightUpperArm: [0.3, -0.95, 0],
+  rightLowerArm: [0.15, -0.95, 0.15],
+  leftUpperLeg: [0, -1, 0],
+  leftLowerLeg: [0, -1, 0],
+  rightUpperLeg: [0, -1, 0],
+  rightLowerLeg: [0, -1, 0],
+};
+
+/** Left-side directions plus their mirror on the right side. */
+function both(left: Partial<Record<HumanBone, Dir>>): Partial<Record<HumanBone, Dir>> {
+  const out = { ...left };
+  for (const [b, [x, y, z]] of Object.entries(left) as [HumanBone, Dir][]) out[b.replace('left', 'right') as HumanBone] = [-x, y, z];
+  return out;
+}
+
+export interface PosePreset {
+  id: string;
+  label: string;
+  /** Bone directions (character frame), applied from the rest pose. */
+  dirs?: Partial<Record<HumanBone, Dir>>;
+  /** Or a frame of a built-in clip (`ANIMATION_LIBRARY` id, time in seconds). */
+  clip?: string;
+  time?: number;
+}
+
+/** Ready poses; any detected humanoid can take them. */
+export const POSE_PRESETS: PosePreset[] = [
+  { id: 'relaxed', label: 'Relaxed', dirs: RELAXED },
+  { id: 'tpose', label: 'T-pose', dirs: { ...RELAXED, ...both({ leftUpperArm: [-1, 0, 0], leftLowerArm: [-1, 0, 0] }) } },
+  { id: 'arms-up', label: 'Arms up', dirs: { ...RELAXED, ...both({ leftUpperArm: [-0.55, 0.83, 0], leftLowerArm: [-0.45, 0.89, 0] }) } },
+  { id: 'wave', label: 'Wave', dirs: { ...RELAXED, rightUpperArm: [0.8, 0.3, 0.15], rightLowerArm: [0.15, 0.97, 0.1] } },
+  { id: 'point', label: 'Pointing', dirs: { ...RELAXED, rightUpperArm: [0.2, 0.05, 0.98], rightLowerArm: [0.1, 0.05, 1] } },
+  { id: 'hands-hips', label: 'Hands on hips', dirs: { ...RELAXED, ...both({ leftUpperArm: [-0.4, -0.88, -0.25], leftLowerArm: [0.33, -0.77, 0.54] }) } },
+  {
+    id: 'think',
+    label: 'Thinking',
+    dirs: { ...RELAXED, rightUpperArm: [0.25, -0.8, 0.55], rightLowerArm: [-0.35, 0.85, 0.4], leftUpperArm: [-0.15, -0.9, 0.4], leftLowerArm: [0.85, 0.05, 0.5] },
+  },
+  { id: 'walk', label: 'Walking', clip: 'Walk_Loop', time: 0.33 },
+  { id: 'run', label: 'Running', clip: 'Sprint_Loop', time: 0.15 },
+  { id: 'jump', label: 'Jumping', clip: 'Jump_Loop', time: 0.4 },
+  { id: 'sit', label: 'Sitting', clip: 'Sitting_Idle_Loop', time: 0 },
+  { id: 'crouch', label: 'Crouching', clip: 'Crouch_Idle_Loop', time: 0 },
+  { id: 'kneel', label: 'Kneeling', clip: 'Fixing_Kneeling', time: 1.5 },
+  { id: 'dance', label: 'Dancing', clip: 'Dance_Loop', time: 0.5 },
+  { id: 'punch', label: 'Punch', clip: 'Punch_Jab', time: 0.3 },
+  { id: 'sword', label: 'Sword', clip: 'Sword_Idle', time: 0 },
+  { id: 'aim', label: 'Aiming', clip: 'Pistol_Aim_Neutral', time: 0 },
+  { id: 'swim', label: 'Swimming', clip: 'Swim_Fwd_Loop', time: 0.4 },
+];
+
+export interface LibraryClip {
+  id: string;
+  label: string;
+  group: 'Everyday' | 'Moving' | 'Sitting' | 'Combat' | 'Action';
+}
+
+/** Where the built-in clips come from (shown in the app and stored in projects). */
+export const ANIMATION_SOURCE = {
+  author: 'Quaternius',
+  name: 'Universal Animation Library',
+  license: 'CC0 1.0',
+  url: 'https://quaternius.com/packs/universalanimationlibrary.html',
+};
+
+/**
+ * Built-in clips (Universal Animation Library by Quaternius, CC0). Files in
+ * public/animations/<id>.glb, made by scripts/build-animation-library.mjs; downloaded on first
+ * use and cached for offline. See THIRD_PARTY_LICENSES.md.
+ */
+export const ANIMATION_LIBRARY: LibraryClip[] = [
+  { id: 'Idle_Loop', label: 'Idle', group: 'Everyday' },
+  { id: 'Idle_Talking_Loop', label: 'Talking', group: 'Everyday' },
+  { id: 'Dance_Loop', label: 'Dance', group: 'Everyday' },
+  { id: 'Interact', label: 'Interact', group: 'Everyday' },
+  { id: 'PickUp_Table', label: 'Pick up', group: 'Everyday' },
+  { id: 'Fixing_Kneeling', label: 'Fixing (kneeling)', group: 'Everyday' },
+  { id: 'Idle_Torch_Loop', label: 'Holding a torch', group: 'Everyday' },
+  { id: 'Push_Loop', label: 'Push', group: 'Everyday' },
+  { id: 'Walk_Loop', label: 'Walk', group: 'Moving' },
+  { id: 'Walk_Formal_Loop', label: 'Formal walk', group: 'Moving' },
+  { id: 'Jog_Fwd_Loop', label: 'Jog', group: 'Moving' },
+  { id: 'Sprint_Loop', label: 'Sprint', group: 'Moving' },
+  { id: 'Crouch_Fwd_Loop', label: 'Crouch walk', group: 'Moving' },
+  { id: 'Jump_Start', label: 'Jump start', group: 'Moving' },
+  { id: 'Jump_Loop', label: 'In the air', group: 'Moving' },
+  { id: 'Jump_Land', label: 'Landing', group: 'Moving' },
+  { id: 'Roll', label: 'Roll', group: 'Moving' },
+  { id: 'Swim_Fwd_Loop', label: 'Swim', group: 'Moving' },
+  { id: 'Swim_Idle_Loop', label: 'Tread water', group: 'Moving' },
+  { id: 'Sitting_Enter', label: 'Sit down', group: 'Sitting' },
+  { id: 'Sitting_Idle_Loop', label: 'Sitting', group: 'Sitting' },
+  { id: 'Sitting_Talking_Loop', label: 'Sitting, talking', group: 'Sitting' },
+  { id: 'Sitting_Exit', label: 'Stand up', group: 'Sitting' },
+  { id: 'Driving_Loop', label: 'Driving', group: 'Sitting' },
+  { id: 'Crouch_Idle_Loop', label: 'Crouching', group: 'Sitting' },
+  { id: 'Punch_Enter', label: 'Guard up', group: 'Combat' },
+  { id: 'Punch_Jab', label: 'Jab', group: 'Combat' },
+  { id: 'Punch_Cross', label: 'Cross punch', group: 'Combat' },
+  { id: 'Sword_Idle', label: 'Sword ready', group: 'Combat' },
+  { id: 'Sword_Attack', label: 'Sword attack', group: 'Combat' },
+  { id: 'Pistol_Idle_Loop', label: 'Pistol ready', group: 'Combat' },
+  { id: 'Pistol_Aim_Neutral', label: 'Aim', group: 'Combat' },
+  { id: 'Pistol_Aim_Up', label: 'Aim up', group: 'Combat' },
+  { id: 'Pistol_Aim_Down', label: 'Aim down', group: 'Combat' },
+  { id: 'Pistol_Shoot', label: 'Shoot', group: 'Combat' },
+  { id: 'Pistol_Reload', label: 'Reload', group: 'Combat' },
+  { id: 'Spell_Simple_Enter', label: 'Spell: raise', group: 'Action' },
+  { id: 'Spell_Simple_Idle_Loop', label: 'Spell: hold', group: 'Action' },
+  { id: 'Spell_Simple_Shoot', label: 'Spell: cast', group: 'Action' },
+  { id: 'Spell_Simple_Exit', label: 'Spell: lower', group: 'Action' },
+  { id: 'Hit_Chest', label: 'Hit (chest)', group: 'Action' },
+  { id: 'Hit_Head', label: 'Hit (head)', group: 'Action' },
+  { id: 'Death01', label: 'Fall down', group: 'Action' },
+];
+
+export function libraryClipUrl(id: string) {
+  return `${import.meta.env.BASE_URL}animations/${id}.glb`;
 }

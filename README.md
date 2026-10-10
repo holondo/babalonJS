@@ -38,7 +38,7 @@ Layout: the logo opens the project menu, the top right switches between **Edit /
 
 - **Add**: GLB, glTF, OBJ, STL, FBX, PLY/SPLAT/SPZ (gaussian splats), USDZ and .babylon, through the file picker or by dragging files onto the window. Also sample models, basic shapes and lights.
 - **Place**: tap to select. With *Move*, drag the object across the floor with your finger or mouse, or use the gizmos. *Rotate* and *Scale* use gizmos. The magnet toggles grid snapping.
-- **Scene**: object list, show/hide, position/rotation/scale sliders, 90° turns (handy for models that load lying down), drop to floor, duplicate, delete, model animations.
+- **Scene**: object list, show/hide, position/rotation/scale sliders, 90° turns (handy for models that load lying down), drop to floor, duplicate, delete.
 - **Tools**:
   - *Measure*: tap two points to measure. Points stick to a model's surface (and follow it when it moves), or land on the floor. A measurement can follow the surface of the model instead of a straight line. Snap to vertices, units in m/cm/mm/in/ft, drag the points to adjust.
   - *Guides*: horizontal (height) and vertical (X/Z) planes to line things up, placed by value or at the bottom/center/top of the selection.
@@ -46,13 +46,19 @@ Layout: the logo opens the project menu, the top right switches between **Edit /
   - *Align & match* (2+ objects, the first selected is the reference): align edges/centers on each axis, match height/width/depth/scale, stack on top, distribute, drop to floor.
   - *Size*: width/height/depth fields in the Scene panel scale the object to an exact size.
 - **Multi-selection**: Shift/Ctrl+click, or the multi-select button on touch screens. Moving, deleting and duplicating act on all selected objects.
+- **Animate** (Objects → Animate):
+  - *Clips*: play, pause, loop or play once, speed, and a frame slider. A paused or dragged frame stays as a still pose in photos, AR and saved projects. Switching clips while playing crossfades.
+  - *Animation library*: 43 free animations (idle, walk, run, jump, sit, dance, combat…) that apply in one tap to any humanoid character, whatever its bone names (Mixamo-style, Unreal, Blender/Rigify, VRM/VRoid…). You can also import your own animation files (GLB/glTF/FBX). Optionally keeps the character in place.
+  - *Motion*: spin, float, pulse or sway any object, no keyframes. You can still move it while it plays.
+- **Pose** (characters with a skeleton): tap a joint and turn it with the rings or the Bend/Twist/Tilt sliders; drag a hand or foot and the arm or leg follows (IK). Mirror the pose or copy one side to the other, ready poses (relaxed, wave, point, sitting, walking, aiming…), back to the animation at any time. Skeletons with unusual bone names can be mapped by hand.
+- **Rig** (models without a skeleton): give a standing character the standard free skeleton. Drag its joints onto the model in a front view (left and right mirror each other, depth is found automatically), bind the skin with simple (instant) or better (heat diffusion, computed in the background) weights, check it with a test pose and a weight heat map, and confirm. The rigged model can then be posed, animated with the library and exported as GLB with its skeleton. Try it with the *Mannequin, no skeleton* sample.
 - **Material** (Sketchfab style): color/tint, show/hide texture, metallic, roughness, clear coat, emission, opacity, double-sided, unlit and wireframe.
 - **Lights**: presets (Studio, Daylight, Sunset, Neon, Dramatic), point, spot and sun lights with color, intensity, cone angle, range, shadows and "aim at".
 - **Environment**: HDR lighting with intensity and rotation, blurred or solid background, shadow-only or solid floor, reference grid.
 - **Photo**: filter presets, field of view, exposure, contrast, saturation, temperature, vignette, bloom, grain, chromatic aberration, sharpen, depth of field (tap to focus), and frames for 16:9, Cinema, 1:1, 4:5, 9:16… Photos are rendered at 2× screen resolution and saved straight to the device, with a **Share** button for a few seconds afterwards.
 - **AR** (Android with ARCore, in Chrome or the installed app): the **AR** button opens the camera; tap a detected surface to place the whole scene at real size, drag to turn, pinch to resize (**1:1** returns to real size). AR starts with the lightest setup; the options panel adds shadows on the real floor, the editor's lighting presets (or the room's estimated light), light intensity, photo filters and an FPS counter. The eye button hides the interface. Turning off **Camera background** gives *virtual AR*: you walk around the scene in its own environment (sky, floor) instead of the room, and **Place in front of me** works without a detected surface. The shutter saves a photo of camera + 3D when the phone shares the camera image with the browser; otherwise use the system screenshot. Not available on iPhone (Safari has no WebXR AR).
 - **Gyro mode** (phones, including iPhone): the phone button in the top bar or in photo mode turns the camera as you turn and tilt the phone, on top of the touch gestures. No camera needed, and all photo effects keep working.
-- **Projects**: new, open and save `.babalon` projects. A project is a zip with `project.json` (objects, transforms, materials, lights, animations, environment, effects and camera) plus the original model files in `assets/`. Sample models are stored as links only. You can also open a project by dragging it onto the window.
+- **Projects**: new, open and save `.babalon` projects. A project is a zip with `project.json` (objects, transforms, materials, lights, animations, poses, rigs, environment, effects and camera) plus the original model and animation files in `assets/` and skin weights in `rigs/`. Sample models are stored as links only. You can also open a project by dragging it onto the window.
 - **Autosave** in the browser (IndexedDB): when you come back, "Continue where you left off" restores the last session.
 - **Undo/redo**, **export the scene as .glb**, fullscreen.
 
@@ -78,6 +84,10 @@ Camera: drag to orbit, pinch or scroll to zoom, two fingers (or right mouse butt
 
 - `src/editor.ts`: the core, with no UI. Scene, camera, loading, selection, gizmos, lights, shadows, environment, post-processing, capture, export and history.
 - `src/tools.ts`: measurements (including the along-the-surface path), guides, smart guides and alignment.
+- `src/animation.ts`, `src/motion.ts`: clip playback; spin/float/pulse/sway.
+- `src/humanoid.ts`, `src/pose.ts`, `src/retarget.ts`: humanoid bone detection, posing (FK, IK, mirror, presets), playing clips made for other skeletons.
+- `src/humanoidTemplate.ts`, `src/rigging.ts`, `src/weights.ts`, `src/weights.worker.ts`: the standard skeleton, manual rigging, skin weights (heat diffusion in a Web Worker).
+- `public/animations`, `public/models`: the free animation library and Mannequin samples (CC0, see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)), made by `scripts/build-animation-library.mjs`.
 - `src/ar.ts`, `src/arHud.ts`: augmented reality with WebXR and its on-camera controls.
 - `src/project.ts`: saving/opening `.babalon` projects and autosave.
 - `src/ui.ts`: panels and toolbars, plain DOM.
@@ -97,4 +107,4 @@ Copyright (C) 2026 Guilherme Holanda Sanches
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE).
 
-Third-party libraries keep their own licenses: Babylon.js (Apache-2.0), fflate (MIT), Lucide icons (ISC). Sample models and HDR environments are loaded at runtime from the Babylon.js asset CDN and are not distributed with this repository.
+Third-party libraries keep their own licenses: Babylon.js (Apache-2.0), fflate (MIT), Lucide icons (ISC). The bundled animations and Mannequin models are CC0 (Universal Animation Library by Quaternius), listed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Other sample models and HDR environments are loaded at runtime from the Babylon.js asset CDN and are not distributed with this repository.

@@ -917,8 +917,16 @@ body.photo .panel {
   .selbar::-webkit-scrollbar {
     display: none;
   }
-  .sel-name.measure {
+  .sel-name.measure,
+  .sel-name.always {
     display: flex;
+  }
+  .sel-name.always {
+    max-width: 120px;
+    padding: 0 4px 0 8px;
+  }
+  .sel-name.always svg {
+    display: none;
   }
   .toasts {
     bottom: calc(var(--dock-h) + 24px + var(--safe-b));
@@ -1447,6 +1455,7 @@ body.ui-hidden .panel,
 body.ui-hidden .viewstack,
 body.ui-hidden .photo-hud > *,
 body.ui-hidden .mlabels,
+body.ui-hidden .joint-layer,
 body.ui-hidden .empty,
 body.ui-hidden .menu,
 body.ui-hidden .frame {
@@ -1569,6 +1578,91 @@ body.ui-hidden .ui-restore {
     padding: 0 10px;
   }
   .segmented.modes svg.lucide {
+    display: none;
+  }
+}
+
+/* ---------- Animation: clip groups, joint handles (posing and rigging) ---------- */
+
+.sec h4.sub {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.joint-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
+  display: none;
+}
+.joint-layer.show {
+  display: block;
+}
+.joint-layer svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.joint-layer line {
+  stroke: var(--gold);
+  stroke-width: 2;
+  stroke-opacity: 0.55;
+}
+/* The dot is small, the touch target around it is 36 px */
+.joint {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: none;
+}
+.joint::after {
+  content: '';
+  position: absolute;
+  inset: 11px;
+  border-radius: 50%;
+  background: rgba(37, 28, 53, 0.8);
+  border: 2px solid var(--gold);
+  transition: inset 0.12s, background 0.12s;
+}
+.joint.ik::after {
+  border-radius: 4px;
+}
+.joint.side::after {
+  border-color: var(--lilac);
+}
+.joint:hover::after,
+.joint.dragging::after {
+  inset: 9px;
+}
+/* Joints that follow the others (rigging): smaller, not draggable */
+.joint.auto {
+  pointer-events: none;
+}
+.joint.auto::after {
+  inset: 14px;
+  border-width: 1.5px;
+}
+.joint.active::after {
+  inset: 8px;
+  background: var(--gold);
+  border-color: #fff;
+}
+
+/* Narrow phones: play/pause moves to the "⋯" menu so Deselect stays visible */
+@media (max-width: 400px) {
+  .selbar .play-btn {
     display: none;
   }
 }

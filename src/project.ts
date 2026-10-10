@@ -1,9 +1,15 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { Zippable } from 'fflate';
-import { Color3, PBRMaterial, StandardMaterial, Vector3 } from '@babylonjs/core';
+import { Color3, PBRMaterial, Quaternion, StandardMaterial, Vector3 } from '@babylonjs/core';
 import type { AssetContainer, Material, PointLight, SpotLight } from '@babylonjs/core';
 import { tr } from './i18n';
 import type { ToolsJSON } from './tools';
+import { forgetHumanoid, jointNodes } from './humanoid';
+import type { HumanBone } from './humanoid';
+import type { MotionSettings } from './motion';
+import type { RigData } from './rigging';
+import { captureJoints } from './pose';
+import { ANIMATION_SOURCE } from './presets';
 import type { AssetRef, Editor, Entity, EnvSettings, LightType, ModelSource, PhotoSettings, PrimitiveType } from './editor';
 
 /** Project file: a .zip with project.json + the original model files in assets/. */
@@ -45,8 +51,19 @@ interface EntityJSON {
   asset?: number;
   primitive?: PrimitiveType;
   materials?: MaterialJSON[];
-  animation?: { index: number; playing: boolean; speed: number };
+  /** Clip state; `loop` and `frame` are missing in older projects. */
+  animation?: { index: number; playing: boolean; speed: number; loop?: boolean; frame?: number };
   light?: { type: LightType; color: string; intensity: number; shadows: boolean; angle?: number; exponent?: number; range?: number };
+  /** Humanoid bones mapped by hand (canonical bone → joint name). */
+  boneMap?: Partial<Record<HumanBone, string>>;
+  /** Clips retargeted from the built-in library or an imported file (recomputed on open). */
+  clips?: { library?: string; asset?: number; clip: string; inPlace: boolean; license?: string }[];
+  /** Hand-made pose: per joint (in skeleton order) rotation x, y, z, w and position x, y, z. */
+  pose?: number[][];
+  /** Simple motion (spin, float, pulse, sway). */
+  motion?: MotionSettings;
+  /** Skeleton given in the app; `weights` is the path of its skin weights in the project. */
+  rig?: RigData & { weights?: string };
 }
 
 interface AssetJSON {
@@ -84,8 +101,8 @@ export function snapshot(editor: Editor, name: string): ProjectSnapshot {
   const assets = new Map<number, AssetJSON>();
   const path = (asset: AssetRef, f: File) => `assets/${asset.id}/${f.name}`;
 
-  for (const e of editor.entities) {
-    const asset = e.source?.asset;
+  const used = editor.entities.flatMap((e) => [e.source?.asset, ...(e.addedClips ?? []).map((c) => ('asset' in c.from ? c.from.asset : undefined))]);
+  for (const asset of used) {
     if (!asset || assets.has(asset.id)) continue;
     const json: AssetJSON = { id: asset.id, name: asset.name };
     if (asset.url) json.url = asset.url;
@@ -109,13 +126,13 @@ export function snapshot(editor: Editor, name: string): ProjectSnapshot {
       env: { ...editor.env },
       photo: { ...editor.photo },
       assets: [...assets.values()],
-      entities: editor.entities.map((e) => entityToJSON(editor, e)),
+      entities: editor.entities.map((e, i) => entityToJSON(editor, e, files, i)),
       tools: editor.tools.toJSON(editor.entities),
     },
   };
 }
 
-function entityToJSON(editor: Editor, e: Entity): EntityJSON {
+function entityToJSON(editor: Editor, e: Entity, files: Record<string, Blob>, index: number): EntityJSON {
   const r = e.root;
   const json: EntityJSON = {
     kind: e.kind,
@@ -127,11 +144,26 @@ function entityToJSON(editor: Editor, e: Entity): EntityJSON {
   if (e.kind === 'model') json.asset = e.source!.asset.id;
   if (e.kind === 'primitive') json.primitive = e.primitive;
   if (e.kind !== 'light') json.materials = editor.materialsOf(e).map(materialToJSON);
-  if (e.animationGroups.length) {
-    const playing = e.animationGroups.find((a) => a.isPlaying);
-    const current = playing ?? e.animationGroups[0];
-    json.animation = { index: e.animationGroups.indexOf(current), playing: !!playing, speed: current.speedRatio };
+  if (e.boneMap) json.boneMap = { ...e.boneMap };
+  if (e.motion) json.motion = { ...e.motion };
+  const rig = editor.rigger.serialize(e);
+  if (rig) {
+    const path = `rigs/${index}.bin`;
+    files[path] = new Blob([rig.weights as Uint8Array<ArrayBuffer>]);
+    json.rig = { ...rig.data, weights: path };
   }
+  if (e.addedClips?.length) {
+    json.clips = e.addedClips.map((c) =>
+      'library' in c.from
+        ? { library: c.from.library, clip: c.clip, inPlace: c.inPlace, license: `${ANIMATION_SOURCE.license} · ${ANIMATION_SOURCE.author}` }
+        : { asset: c.from.asset.id, clip: c.clip, inPlace: c.inPlace },
+    );
+  }
+  if (e.animationGroups.length) {
+    const { pose: _, ...clip } = editor.anim.state(e);
+    json.animation = clip;
+  }
+  if (e.posed) json.pose = captureJoints(jointNodes(e)).map((j) => [...j.q.asArray(), ...j.p.asArray()].map((v) => +v.toFixed(6)));
   if (e.light) {
     const l = e.light;
     json.light = { type: e.lightType!, color: l.diffuse.toHexString(), intensity: l.intensity, shadows: !!e.shadowGen };
@@ -269,12 +301,44 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
       const mats = editor.materialsOf(entity);
       ej.materials.forEach((mj, i) => mats[i] && applyMaterial(mats[i], mj));
     }
-    if (ej.animation && entity.animationGroups.length) {
-      entity.animationGroups.forEach((a) => a.stop());
-      const anim = entity.animationGroups[ej.animation.index] ?? entity.animationGroups[0];
-      anim.speedRatio = ej.animation.speed;
-      if (ej.animation.playing) anim.start(true, ej.animation.speed);
+    if (ej.rig) {
+      try {
+        const blob = ej.rig.weights ? files[ej.rig.weights] : undefined;
+        editor.rigger.restore(entity, ej.rig, blob ? new Uint8Array(await blob.arrayBuffer()) : null);
+      } catch {
+        missing.add(tr('Rig of {name}', { name: ej.name }));
+      }
     }
+    if (ej.boneMap) {
+      entity.boneMap = { ...ej.boneMap };
+      forgetHumanoid(entity);
+    }
+    for (const c of ej.clips ?? []) {
+      const asset = c.asset !== undefined ? assets.get(c.asset) : undefined;
+      const ref = c.library ? { library: c.library } : asset ? { asset } : null;
+      try {
+        if (!ref) throw new Error('missing');
+        await editor.clips.add(entity, ref, { clips: [c.clip], inPlace: c.inPlace, record: false });
+      } catch {
+        missing.add(tr('Animation {name}', { name: c.clip }));
+      }
+    }
+    if (ej.animation && entity.animationGroups.length) {
+      const a = ej.animation;
+      editor.anim.apply(entity, { index: a.index, playing: a.playing, speed: a.speed, loop: a.loop ?? true, frame: a.frame ?? 0 });
+    }
+    if (ej.pose) {
+      const joints = jointNodes(entity);
+      editor.anim.hold(entity);
+      ej.pose.forEach((v, i) => {
+        const n = joints[i];
+        if (!n || v.length < 7) return;
+        (n.rotationQuaternion ??= new Quaternion()).set(v[0], v[1], v[2], v[3]);
+        n.position.set(v[4], v[5], v[6]);
+      });
+      entity.posed = true;
+    }
+    if (ej.motion && ej.motion.type !== 'none') editor.motions.set(entity, { ...ej.motion }, false);
     editor.setCastShadows(entity, ej.castShadows);
     if (!ej.visible) editor.setVisible(entity, false);
   }

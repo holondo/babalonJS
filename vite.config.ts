@@ -91,6 +91,16 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          {
+            // Built-in animation clips and the Mannequin sample: downloaded on first use, then offline
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/(animations|models)\/[^/]+\.glb$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'library',
+              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 60 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
         ],
       },
     }),

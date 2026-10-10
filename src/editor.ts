@@ -47,7 +47,18 @@ import { GLTF2Export } from '@babylonjs/serializers/glTF/2.0/glTFSerializer.js';
 import { tr } from './i18n';
 import { Tools } from './tools';
 import { findLightPreset, presetIntensity } from './presets';
+import { Animator } from './animation';
+import { Poser, captureJoints, restoreJoints } from './pose';
+import { Motion } from './motion';
+import { Rigger } from './rigging';
+import type { RigState } from './rigging';
+import type { MotionSettings } from './motion';
+import type { ClipState } from './animation';
 import type { Axis } from './tools';
+import { jointNodes } from './humanoid';
+import type { HumanBone } from './humanoid';
+import { ClipManager } from './retarget';
+import type { AddedClip } from './retarget';
 
 registerBuiltInLoaders();
 
@@ -57,7 +68,7 @@ export type Tool = 'move' | 'rotate' | 'scale';
 export type LightType = 'point' | 'spot' | 'directional';
 export type PrimitiveType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | 'plane';
 export type GroundMode = 'shadow' | 'solid' | 'none';
-export type ChangeKind = 'selection' | 'entities' | 'transform' | 'history' | 'env' | 'photo' | 'tool';
+export type ChangeKind = 'selection' | 'entities' | 'transform' | 'history' | 'env' | 'photo' | 'tool' | 'animation' | 'pose' | 'rig';
 
 export interface Entity {
   id: number;
@@ -66,6 +77,18 @@ export interface Entity {
   root: Mesh;
   meshes: AbstractMesh[];
   animationGroups: AnimationGroup[];
+  /** Clip shown/played (index in `animationGroups`). */
+  clipIndex?: number;
+  /** Humanoid bones mapped by hand (canonical bone → joint name). */
+  boneMap?: Partial<Record<HumanBone, string>>;
+  /** Joints were posed by hand (the pose is kept over the paused clip and saved). */
+  posed?: boolean;
+  /** Clips retargeted from other files (also in `animationGroups`). */
+  addedClips?: AddedClip[];
+  /** Simple motion (spin, float…) on a child pivot. */
+  motion?: MotionSettings;
+  /** Skeleton given in the app (manual rigging). */
+  rig?: RigState;
   castShadows: boolean;
   visible: boolean;
   light?: ShadowLight;
@@ -118,6 +141,9 @@ export const ENV_PRESETS: Record<string, { label: string; url: string }> = {
 };
 
 export const SAMPLE_MODELS = [
+  // CC0 Mannequin (Quaternius), bundled: rigged (posing, animation library) and static (to try rigging)
+  { label: 'Mannequin', url: `${import.meta.env.BASE_URL}models/mannequin.glb` },
+  { label: 'Mannequin, no skeleton', url: `${import.meta.env.BASE_URL}models/mannequin-static.glb` },
   { label: 'Boombox', url: 'https://assets.babylonjs.com/meshes/boombox.glb' },
   { label: 'Helmet', url: 'https://assets.babylonjs.com/meshes/flightHelmet.glb' },
   { label: 'Character', url: 'https://assets.babylonjs.com/meshes/HVGirl.glb' },
@@ -271,6 +297,16 @@ export class Editor {
   /** Measurement/guide visuals: never selected, exported or shown in photos. */
   readonly overlays = new Set<AbstractMesh>();
   readonly tools: Tools;
+  /** Clip playback of objects. */
+  readonly anim = new Animator(this);
+  /** Posing skeletons by hand. */
+  readonly pose: Poser;
+  /** Clips from the library or imported files, retargeted onto humanoids. */
+  readonly clips = new ClipManager(this);
+  /** Spin, float, pulse, sway for any object. */
+  readonly motions = new Motion(this);
+  /** Manual rigging of static humanoids. */
+  readonly rigger = new Rigger(this);
   /** Other selected objects besides `selected` (which is the reference for alignment). */
   extra: Entity[] = [];
   /** Touch: taps add to / remove from the selection instead of replacing it. */
@@ -356,8 +392,10 @@ export class Editor {
     const g = this.gizmos.gizmos;
     g.positionGizmo!.planarGizmoEnabled = true;
     for (const gz of [g.positionGizmo!, g.rotationGizmo!, g.scaleGizmo!]) {
-      gz.onDragStartObservable.add(() => this.beginTransform());
+      gz.onDragStartObservable.add(() => (this.rigger.active ? this.rigger.remember() : this.pose.active ? this.pose.begin() : this.beginTransform()));
       gz.onDragEndObservable.add(() => {
+        if (this.rigger.active) return this.rigger.endHandleDrag();
+        if (this.pose.active) return this.pose.end();
         this.tools.clearSmartLines();
         this.endTransform();
       });
@@ -366,6 +404,7 @@ export class Editor {
     const pg = g.positionGizmo!;
     let raw: Vector3 | null = null;
     pg.onDragStartObservable.add(() => {
+      if (this.pose.active || this.rigger.active) return;
       raw = this.selected?.root.position.clone() ?? null;
       this.startFollow();
     });
@@ -379,6 +418,9 @@ export class Editor {
     ];
     for (const [gizmo, axes] of axisGizmos) {
       gizmo.dragBehavior.onDragObservable.add((ev) => {
+        // Posing: the gizmo drags the IK target, the arm/leg follows
+        if (this.rigger.active) return this.rigger.dragHandle();
+        if (this.pose.active) return this.pose.dragIk();
         const e = this.selected;
         if (!e || !raw) return;
         raw.addInPlace(ev.delta);
@@ -417,6 +459,12 @@ export class Editor {
         return;
       }
       if (this.tools.handlePointer(info)) return;
+      // Rigging: a missed tap must not drop the joints being placed
+      if (this.rigger.active) {
+        // Tapping away from the joints (and the gizmo) drops the joint selection
+        if (info.type === PointerEventTypes.POINTERTAP && this.rigger.selected && !this.gizmos.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY)?.hit) this.rigger.selectJoint(null);
+        return;
+      }
       if (info.type === PointerEventTypes.POINTERTAP) {
         if (this.tools.measureMode) return;
         const ev = info.event as PointerEvent;
@@ -462,6 +510,7 @@ export class Editor {
     });
 
     this.tools = new Tools(this);
+    this.pose = new Poser(this);
 
     // A flat ring facing the camera
     this.pivotRing = MeshBuilder.CreateTorus('pivotRing', { diameter: 1, thickness: 0.06, tessellation: 48 }, scene);
@@ -537,6 +586,16 @@ export class Editor {
     this.changed.notifyObservers(kind);
   }
 
+  /** Tells the interface that something changed (for modules that work with the editor). */
+  notify(kind: ChangeKind) {
+    this.emit(kind);
+  }
+
+  /** Adds an undo step for a change made outside the editor's own methods. */
+  record(cmd: { undo: () => void; redo: () => void }) {
+    this.push(cmd);
+  }
+
   private batch: Command[] | null = null;
 
   /** Groups several changes into a single undo step. */
@@ -568,13 +627,17 @@ export class Editor {
   }
 
   get canUndo() {
+    if (this.rigger.active) return this.rigger.canUndo;
     return this.undoStack.length > 0;
   }
   get canRedo() {
+    if (this.rigger.active) return this.rigger.canRedo;
     return this.redoStack.length > 0;
   }
 
   undo() {
+    // While placing a rig's joints, undo/redo step through the joint moves
+    if (this.rigger.active) return this.rigger.undo();
     const cmd = this.undoStack.pop();
     if (!cmd) return;
     cmd.undo();
@@ -584,6 +647,7 @@ export class Editor {
   }
 
   redo() {
+    if (this.rigger.active) return this.rigger.redo();
     const cmd = this.redoStack.pop();
     if (!cmd) return;
     cmd.redo();
@@ -671,14 +735,21 @@ export class Editor {
 
   private register(entity: Entity, record = true, select = true) {
     entity.root.metadata = { entityId: entity.id };
+    this.anim.watch(entity);
     for (const m of entity.meshes) m.receiveShadows = true;
     this.attach(entity);
     if (record) this.push({ undo: () => this.detach(entity), redo: () => this.attach(entity), entities: [entity] });
     if (select) this.select(entity);
   }
 
+  /** Clip state of deleted objects, put back if the deletion is undone. */
+  private readonly detachedClips = new WeakMap<Entity, ClipState>();
+
   private attach(entity: Entity) {
     entity.root.setEnabled(true);
+    const clip = this.detachedClips.get(entity);
+    if (clip) this.anim.apply(entity, clip);
+    this.motions.resume(entity);
     if (entity.light) entity.light.setEnabled(true);
     if (!this.entities.includes(entity)) this.entities.push(entity);
     this.refreshShadows();
@@ -690,6 +761,8 @@ export class Editor {
     if (this.selected === entity) this.select(null);
     entity.root.setEnabled(false);
     if (entity.light) entity.light.setEnabled(false);
+    if (entity.animationGroups.length) this.detachedClips.set(entity, this.anim.state(entity));
+    this.motions.suspend(entity);
     entity.animationGroups.forEach((a) => a.stop());
     this.entities = this.entities.filter((e) => e !== entity);
     this.refreshShadows();
@@ -758,12 +831,13 @@ export class Editor {
       if (asset.main) for (const f of [asset.main, ...(asset.deps ?? [])]) FilesInputStore.FilesToLoad[f.name.toLowerCase()] = f;
       const container = await LoadAssetContainerAsync(asset.main ?? asset.url!, this.scene, {
         rootUrl: asset.main ? 'file:' : undefined,
+        // Animations start on the instances placed in the scene, never on the hidden template
+        // (which also keeps the template's joints in their rest pose, needed for retargeting)
+        pluginOptions: { gltf: { animationStartMode: 0 /* GLTFLoaderAnimationStartMode.NONE */ } },
         onProgress: (ev) => {
           if (ev.lengthComputable) this.loading.notifyObservers({ name: asset.name, progress: ev.loaded / ev.total });
         },
       });
-      // The glTF loader auto-starts the first animation on the container's hidden template;
-      // only the instances placed in the scene should animate.
       container.animationGroups.forEach((g) => g.stop());
       return container;
     } finally {
@@ -819,6 +893,7 @@ export class Editor {
       root,
       meshes,
       animationGroups: anims,
+      clipIndex: 0,
       castShadows: true,
       visible: true,
       source,
@@ -992,6 +1067,16 @@ export class Editor {
         select: false,
       });
     } else return;
+    if (entity.rig) this.rigger.copy(entity, copy);
+    if (entity.addedClips?.length) this.clips.copy(entity, copy);
+    if (entity.motion) this.motions.set(copy, { ...entity.motion }, false);
+    if (copy.animationGroups.length === entity.animationGroups.length && copy.animationGroups.length) this.anim.apply(copy, this.anim.state(entity));
+    if (entity.posed) {
+      // Same skeleton: copy the hand-made pose joint by joint
+      const from = jointNodes(entity);
+      jointNodes(copy).forEach((n, i) => from[i] && restoreJoints(captureJoints([from[i]]).map((s) => ({ ...s, node: n }))));
+      copy.posed = true;
+    }
     copy.root.rotationQuaternion!.copyFrom(entity.root.rotationQuaternion!);
     copy.root.scaling.copyFrom(entity.root.scaling);
     copy.root.position.copyFrom(entity.root.position).addInPlace(new Vector3(0.6, 0, 0.6));
@@ -1059,6 +1144,8 @@ export class Editor {
     for (const cmd of [...this.undoStack, ...this.redoStack]) for (const e of cmd.entities ?? []) all.add(e);
     const containers = new Set<AssetContainer>();
     for (const e of all) {
+      this.motions.stop(e);
+      e.rig?.skeleton.dispose();
       e.animationGroups.forEach((a) => a.dispose());
       e.shadowGen?.dispose();
       e.light?.dispose();
@@ -1112,6 +1199,8 @@ export class Editor {
 
   private setPrimary(entity: Entity | null) {
     this.endTransform();
+    if (this.pose.entity && this.pose.entity !== entity) this.pose.stop();
+    if (this.rigger.entity && this.rigger.entity !== entity) this.rigger.cancel();
     if (this.selected) this.selected.root.removeBehavior(this.drag);
     this.selected = entity;
   }
@@ -1133,8 +1222,50 @@ export class Editor {
     this.emit('tool');
   }
 
+  /** Shadows again after meshes changed (e.g. a model got a skeleton). */
+  refreshShadowCasters() {
+    this.refreshShadows();
+  }
+
+  /** Looks at `center` from the direction `dir` (unit vector), fitting a box of `size`. */
+  viewFrom(dir: Vector3, center: Vector3, size: Vector3) {
+    this.camera.alpha = Math.atan2(dir.z, dir.x);
+    this.camera.beta = Math.acos(Math.max(-0.999, Math.min(0.999, dir.y)));
+    this.animateCamera(center, this.fitRadius(size));
+  }
+
+  /** Re-applies the gizmo for the current tool, selection or pose joint. */
+  refreshTool() {
+    this.applyTool();
+  }
+
   private applyTool() {
     const e = this.selected;
+    if (this.rigger?.active) {
+      // Rigging: joints are dragged on screen; a selected joint also gets the move gizmo (one axis at a time)
+      const handle = this.rigger.gizmoHandle();
+      this.gizmos.rotationGizmoEnabled = this.gizmos.scaleGizmoEnabled = false;
+      this.gizmos.positionGizmoEnabled = !!handle && !this.cleanView;
+      this.gizmos.gizmos.positionGizmo!.snapDistance = 0;
+      this.gizmos.attachToNode(handle && !this.cleanView ? handle : null);
+      e?.root.removeBehavior(this.drag);
+      return;
+    }
+    const posing = this.pose?.active && this.pose.entity === e && !this.cleanView;
+    if (posing || this.pose?.active) {
+      const target = posing ? this.pose.gizmoTarget() : null;
+      this.gizmos.positionGizmoEnabled = target?.mode === 'move';
+      this.gizmos.rotationGizmoEnabled = target?.mode === 'rotate';
+      this.gizmos.scaleGizmoEnabled = false;
+      const g = this.gizmos.gizmos;
+      g.rotationGizmo!.snapDistance = 0;
+      g.positionGizmo!.snapDistance = 0;
+      // Joint axes are arbitrary: turn joints around the world axes
+      g.rotationGizmo!.updateGizmoRotationToMatchAttachedMesh = false;
+      this.gizmos.attachToNode(target?.node ?? null);
+      e?.root.removeBehavior(this.drag);
+      return;
+    }
     const tool = e?.kind === 'light' && this.tool === 'scale' ? 'move' : this.tool;
     const show = !!e && !this.cleanView && !this.tools?.measureMode;
     this.gizmos.positionGizmoEnabled = show && tool === 'move';
@@ -1143,6 +1274,7 @@ export class Editor {
     const g = this.gizmos.gizmos;
     g.positionGizmo!.snapDistance = 0; // grid snapping is done in moveTo()
     g.rotationGizmo!.snapDistance = this.snap ? Math.PI / 12 : 0;
+    g.rotationGizmo!.updateGizmoRotationToMatchAttachedMesh = true;
     g.scaleGizmo!.snapDistance = this.snap ? 0.1 : 0;
     this.gizmos.attachToMesh(show ? e!.root : null);
     if (e) {
@@ -1557,6 +1689,8 @@ export class Editor {
   async exportGLB() {
     const exclude = new Set<Node>([this.ground, this.grid, ...this.helpers, ...this.overlays]);
     if (this.skybox) exclude.add(this.skybox);
+    exclude.add(this.pose.ikTarget);
+    exclude.add(this.rigger.handle);
     const data = await GLTF2Export.GLBAsync(this.scene, 'scene', {
       shouldExportNode: (node) => {
         if (exclude.has(node) || node.name === 'ambient') return false;

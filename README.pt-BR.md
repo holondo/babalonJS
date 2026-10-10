@@ -38,7 +38,7 @@ Organização: o logo abre o menu de projeto, o canto superior direito alterna e
 
 - **Adicionar**: GLB, glTF, OBJ, STL, FBX, PLY/SPLAT/SPZ (gaussian splats), USDZ e .babylon, por botão ou arrastando os arquivos para a janela. Também há modelos de exemplo, formas básicas e luzes.
 - **Posicionar**: toque para selecionar. Com *Mover*, arraste o objeto sobre o chão com o dedo/mouse, ou use os gizmos. *Girar* e *Escala* usam gizmos. O ímã liga o encaixe na grade.
-- **Cena**: lista de objetos, ocultar/mostrar, sliders de posição/rotação/escala, girar 90° (útil para modelos "deitados"), pôr no chão, duplicar, excluir, animações do modelo.
+- **Cena**: lista de objetos, ocultar/mostrar, sliders de posição/rotação/escala, girar 90° (útil para modelos "deitados"), pôr no chão, duplicar, excluir.
 - **Ferramentas**:
   - *Medir*: toque em dois pontos para medir. Os pontos grudam na superfície do modelo (e acompanham quando ele se move) ou caem no chão. A medida pode seguir a superfície do modelo em vez de ser uma reta. Encaixe em vértices, unidades m/cm/mm/in/ft, arraste os pontos para ajustar.
   - *Guias*: planos horizontais (altura) e verticais (X/Z) para alinhar coisas, posicionados por valor ou na base/centro/topo da seleção.
@@ -46,13 +46,19 @@ Organização: o logo abre o menu de projeto, o canto superior direito alterna e
   - *Alinhar e igualar* (2+ objetos, o primeiro selecionado é a referência): alinhar bordas/centros em cada eixo, igualar altura/largura/profundidade/escala, empilhar em cima, distribuir, pôr no chão.
   - *Tamanho*: campos de largura/altura/profundidade no painel Cena deixam o objeto com um tamanho exato.
 - **Seleção múltipla**: Shift/Ctrl+clique, ou o botão de seleção múltipla em telas de toque. Mover, excluir e duplicar valem para todos os selecionados.
+- **Animar** (Objetos → Animar):
+  - *Animações*: tocar, pausar, repetir ou tocar uma vez, velocidade e um slider de quadro. Um quadro pausado ou arrastado fica como pose parada nas fotos, no AR e nos projetos salvos. Trocar de animação tocando faz uma transição suave.
+  - *Biblioteca de animações*: 43 animações livres (parado, andar, correr, pular, sentar, dançar, luta…) que se aplicam com um toque a qualquer personagem humanoide, sejam quais forem os nomes dos ossos (estilo Mixamo, Unreal, Blender/Rigify, VRM/VRoid…). Também dá para importar seus próprios arquivos de animação (GLB/glTF/FBX). Opcionalmente mantém o personagem no lugar.
+  - *Movimento simples*: girar, flutuar, pulsar ou balançar qualquer objeto, sem keyframes. Dá para movê-lo enquanto ele se mexe.
+- **Pose** (personagens com esqueleto): toque numa articulação e gire com os anéis ou com os sliders Dobrar/Torcer/Inclinar; arraste uma mão ou um pé e o braço ou a perna acompanha (IK). Espelhe a pose ou copie um lado para o outro, poses prontas (relaxado, acenar, apontar, sentado, andando, mirando…) e volte à animação quando quiser. Esqueletos com nomes de ossos incomuns podem ser indicados à mão.
+- **Esqueleto** (modelos sem esqueleto): dê o esqueleto padrão livre a um personagem em pé. Arraste as articulações sobre o modelo numa vista de frente (esquerda e direita se espelham, a profundidade é encontrada automaticamente), aplique a pele com pesos simples (instantâneo) ou melhores (difusão de calor, calculada em segundo plano), confira com uma pose de teste e um mapa de pesos, e confirme. Depois o modelo pode fazer poses, ser animado com a biblioteca e exportado em GLB com o esqueleto. Experimente com o exemplo *Manequim sem esqueleto*.
 - **Material** (estilo Sketchfab): cor/tom, mostrar ou ocultar textura, metálico, rugosidade, verniz, emissão, opacidade, dupla face, sem iluminação e wireframe.
 - **Luzes**: luzes prontas (Estúdio, Dia, Pôr do sol, Neon, Dramático), luz pontual, holofote e sol, com cor, intensidade, abertura, alcance, sombras e "mirar em".
 - **Ambiente**: iluminação HDR com intensidade e rotação, fundo desfocado ou cor sólida, chão só de sombra ou sólido, grade.
 - **Foto**: filtros prontos, campo de visão, exposição, contraste, saturação, temperatura, vinheta, bloom, granulado, aberração cromática, nitidez, desfoque de fundo (toque para focar), formatos 16:9, Cinema, 1:1, 4:5, 9:16… A foto sai em 2× a resolução da tela e é salva direto no aparelho, com um botão **Compartilhar** por alguns segundos.
 - **AR** (Android com ARCore, no Chrome ou no app instalado): o botão **AR** abre a câmera; toque numa superfície detectada para colocar a cena inteira em tamanho real, arraste para girar, pinça para redimensionar (**1:1** volta ao tamanho real). O AR começa na configuração mais leve; o painel de opções liga sombras no chão real, os estilos de iluminação do editor (ou a luz estimada do ambiente), intensidade da luz, filtros de foto e um contador de FPS. O botão de olho esconde a interface. Desligando **Fundo da câmera** você tem o *AR virtual*: anda em volta da cena no ambiente dela (céu, chão) em vez do cômodo, e **Colocar na minha frente** funciona sem superfície detectada. O botão de foto salva câmera + 3D quando o celular compartilha a imagem da câmera com o navegador; senão, use o print do sistema. Não disponível no iPhone (o Safari não tem AR via WebXR).
 - **Modo giroscópio** (celulares, inclusive iPhone): o botão de celular na barra superior ou no modo foto gira a câmera conforme você gira e inclina o celular, somado aos gestos de toque. Não precisa de câmera, e todos os efeitos de foto continuam funcionando.
-- **Projeto**: novo, abrir e salvar projeto `.babalon`. O arquivo é um .zip com `project.json` (objetos, transformações, materiais, luzes, animações, ambiente, efeitos e câmera) e os arquivos originais dos modelos em `assets/`. Modelos de exemplo ficam guardados só como link. Dá para abrir também arrastando o `.babalon` para a janela.
+- **Projeto**: novo, abrir e salvar projeto `.babalon`. O arquivo é um .zip com `project.json` (objetos, transformações, materiais, luzes, animações, poses, esqueletos, ambiente, efeitos e câmera), os arquivos originais dos modelos e das animações em `assets/` e os pesos da pele em `rigs/`. Modelos de exemplo ficam guardados só como link. Dá para abrir também arrastando o `.babalon` para a janela.
 - **Salvamento automático** no navegador (IndexedDB): ao reabrir o app aparece "Continuar de onde parou".
 - **Desfazer/refazer**, **exportar a cena como .glb**, tela cheia.
 
@@ -78,6 +84,10 @@ Na câmera: arraste para orbitar, pinça/roda para zoom, dois dedos (ou botão d
 
 - `src/editor.ts`: núcleo, sem interface. Cena, câmera, carregamento, seleção, gizmos, luzes, sombras, ambiente, pós-processamento, captura, exportação e histórico.
 - `src/tools.ts`: medições (inclusive o caminho pela superfície), guias, guias inteligentes e alinhamento.
+- `src/animation.ts`, `src/motion.ts`: reprodução de animações; girar/flutuar/pulsar/balançar.
+- `src/humanoid.ts`, `src/pose.ts`, `src/retarget.ts`: detecção dos ossos de humanoides, poses (FK, IK, espelho, poses prontas), animações feitas para outros esqueletos.
+- `src/humanoidTemplate.ts`, `src/rigging.ts`, `src/weights.ts`, `src/weights.worker.ts`: o esqueleto padrão, o rigging manual e os pesos da pele (difusão de calor num Web Worker).
+- `public/animations`, `public/models`: a biblioteca livre de animações e os manequins de exemplo (CC0, veja [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)), gerados por `scripts/build-animation-library.mjs`.
 - `src/ar.ts`, `src/arHud.ts`: realidade aumentada com WebXR e os controles sobre a câmera.
 - `src/project.ts`: salvar/abrir projeto (.babalon) e salvamento automático.
 - `src/ui.ts`: painéis e barras, em DOM puro.
@@ -97,4 +107,4 @@ Copyright (C) 2026 Guilherme Holanda Sanches
 
 Este programa é software livre: você pode redistribuí-lo e/ou modificá-lo sob os termos da GNU General Public License publicada pela Free Software Foundation, na versão 3 da licença ou (a seu critério) qualquer versão posterior. Veja [LICENSE](LICENSE).
 
-As bibliotecas de terceiros mantêm suas próprias licenças: Babylon.js (Apache-2.0), fflate (MIT), ícones Lucide (ISC). Os modelos de exemplo e ambientes HDR são carregados em tempo de execução do CDN de assets do Babylon.js e não são distribuídos neste repositório.
+As bibliotecas de terceiros mantêm suas próprias licenças: Babylon.js (Apache-2.0), fflate (MIT), ícones Lucide (ISC). As animações e os manequins incluídos são CC0 (Universal Animation Library, de Quaternius), listados em [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Os outros modelos de exemplo e ambientes HDR são carregados em tempo de execução do CDN de assets do Babylon.js e não são distribuídos neste repositório.

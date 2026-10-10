@@ -20,8 +20,16 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | --- | --- |
 | `src/editor.ts` | Core with no UI: scene, camera, loading, entities, selection, gizmos, lights, shadows, environment, post-processing, capture, export, undo history, render-on-demand, AR scene state |
 | `src/tools.ts` | Measurements (incl. along-the-surface path), guides, smart guides, alignment |
+| `src/animation.ts` | Clip playback per object: play, pause, scrub/freeze, loop, speed, crossfade (with undo) |
+| `src/motion.ts` | Simple motion for any object (spin, float, pulse, sway) on a child pivot |
+| `src/humanoid.ts` | Canonical humanoid bones (VRM names), detection from any naming convention, manual mapping, up-to-date world matrices (`worldMatrix`) |
+| `src/pose.ts` | Joint math (world-space rotations, aim, two-bone IK, mirror, character frame) and pose mode (`Poser`) |
+| `src/retarget.ts` | Playing clips made for another humanoid (`AnimatorAvatar` + rest-pose alignment) and clips added to objects (`ClipManager`) |
+| `src/humanoidTemplate.ts`, `src/rigging.ts` | The standard skeleton (CC0 rig) and manual rigging (`Rigger`) |
+| `src/weights.ts`, `src/weights.worker.ts`, `src/skinMath.ts` | Skin weights: envelope and heat diffusion (both in a Web Worker) |
+| `src/jointOverlay.ts` | Joint handles drawn over the view (posing, rigging) |
 | `src/project.ts` | `.babalon` save/open and browser autosave (IndexedDB) |
-| `src/presets.ts` | Shared data: lighting presets and photo filters (used by editor and AR) |
+| `src/presets.ts` | Shared data: lighting presets, photo filters, pose presets, animation library |
 | `src/ar.ts` / `src/arHud.ts` | WebXR AR session / its on-camera overlay |
 | `src/gyro.ts` | Gyro mode (device orientation turns the camera) |
 | `src/systemBars.ts` | Status bar / title bar color, desktop title-bar overlay |
@@ -32,6 +40,7 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | `src/style.css` | Theme and layout |
 | `vite.config.ts`, `public/share-target.js` | PWA manifest, offline cache, file handlers, share target |
 | `design/` | Full-size source artwork (not shipped); `public/icons` and `public/brand` are generated from it |
+| `public/animations`, `public/models`, `scripts/build-animation-library.mjs` | Bundled CC0 clips and Mannequins, and the script that makes them (`docs/animation_sources.md`, `THIRD_PARTY_LICENSES.md`) |
 
 Keep this split: `editor.ts` must not touch the DOM UI; `ui.ts` talks to the editor through its methods and the `changed` observable.
 
@@ -40,7 +49,9 @@ Keep this split: `editor.ts` must not touch the DOM UI; `ui.ts` talks to the edi
 ### Don't repeat yourself
 One implementation per function. Before writing something, look for it:
 - UI pieces → `dom.ts` (`slider`, `toggle`, `chips`, `segmented`, `select`, `colorInput`, `numberInput`, `menuItem`, `iconButton`, `button`, `shutterButton`, `flashScreen`). The AR overlay uses the same components as the panels.
-- Lighting presets and photo filters → `presets.ts`. Never copy their values.
+- Lighting presets, photo filters, pose presets and the animation library → `presets.ts`. Never copy their values.
+- Joint math (rotating joints in world space, IK, mirroring) → `pose.ts`; bone names and detection → `humanoid.ts`. Read world positions through `worldMatrix()`/`jointPosition()`: Babylon caches world matrices and a child only reads its parent's cached one.
+- Joint handles on screen → `JointOverlay`.
 - Lights and shadows → `createLight` / `createShadowGenerator` in `editor.ts`.
 - Saving/sharing files → `files.ts` (`saveAndOfferShare`, `timestampedName`).
 - Styles → reuse existing classes (`.ibtn.round`, `.segmented`, `.chips`, `.toggle`…) and CSS variables; add a variant instead of a near-copy.
@@ -87,6 +98,10 @@ Don't add new top-level buttons casually; find the right place in this structure
 - Transform changes go through `beginTransform` / `endTransform` / `transformMany` so they're undoable; several changes from one action must be one undo step (`group`).
 - Anything that should survive a reload must be saved in `project.ts` (snapshot + restore). New fields are optional so older projects still open; bump `VERSION` only for breaking changes.
 - AR must leave the editor exactly as it found it (transforms, environment, lights). Autosave is paused during AR.
+
+### Free software
+- Bundled assets must be CC0 (or GPL-compatible) and listed in `THIRD_PARTY_LICENSES.md` with their source. No proprietary services or downloads the user didn't choose.
+- Large bundled assets (animation clips, sample models) are loaded on demand and runtime-cached, never precached.
 
 ### PWA and paths
 - Reference public assets with `import.meta.env.BASE_URL` (the site lives under `/<repo>/` on GitHub Pages).
