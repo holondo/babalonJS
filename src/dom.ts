@@ -145,13 +145,43 @@ export function scrollFriendlyRange(track: HTMLElement, input: HTMLInputElement)
   track.addEventListener('pointercancel', end);
 }
 
-/** One-level switch at the top of a panel (e.g. Object | Material). */
-export function segmented(options: { id: string; label: string }[], value: string, onPick: (id: string) => void) {
+/** One-level switch (panel parts like Object | Material, or the Edit / Photo / AR modes). */
+export function segmented(options: { id: string; label: string; icon?: IconNode }[], value: string, onPick: (id: string) => void, cls = '') {
   return h(
     'div',
-    { class: 'segmented', role: 'tablist' },
-    ...options.map((o) => h('button', { class: o.id === value ? 'active' : '', role: 'tab', 'aria-selected': String(o.id === value), onClick: () => onPick(o.id) }, o.label)),
+    { class: `segmented ${cls}`, role: 'tablist' },
+    ...options.map((o) =>
+      h(
+        'button',
+        { class: o.id === value ? 'active' : '', role: 'tab', 'aria-selected': String(o.id === value), onClick: () => onPick(o.id) },
+        o.icon ? icon(o.icon, 16) : null,
+        h('span', {}, o.label),
+      ),
+    ),
   );
+}
+
+/** Row of a dropdown menu (project menu, selection "more" menu). */
+export function menuItem(node: IconNode, label: string, run: () => void, opts: { kbd?: string; on?: boolean } = {}) {
+  return h(
+    'button',
+    { class: `menu-item ${opts.on ? 'on' : ''}`, onClick: run },
+    icon(node, 18),
+    h('span', {}, label),
+    opts.kbd ? h('kbd', {}, opts.kbd) : opts.on !== undefined ? h('i', { class: 'menu-check' }) : null,
+  );
+}
+
+/** Big round camera shutter (photo mode and AR). */
+export function shutterButton(label: string, onClick: () => void) {
+  return h('button', { class: 'shutter', title: label, 'aria-label': label, onClick }, h('i', {}));
+}
+
+/** White flash over a container, as feedback for a photo. */
+export function flashScreen(parent: HTMLElement) {
+  const flash = h('div', { class: 'flash' });
+  parent.append(flash);
+  setTimeout(() => flash.remove(), 500);
 }
 
 export function colorInput(label: string, value: string, onInput: (hex: string) => void) {

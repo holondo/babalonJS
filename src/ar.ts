@@ -1,11 +1,8 @@
 import {
   Color3,
   CreateScreenshotUsingRenderTargetAsync,
-  DirectionalLight,
-  PointLight,
   RenderTargetTexture,
   ShadowGenerator,
-  SpotLight,
   Mesh,
   MeshBuilder,
   Observable,
@@ -18,56 +15,14 @@ import {
   WebXRSessionManager,
 } from '@babylonjs/core';
 import type { BaseTexture, IWebXRHitResult, Node, ShadowLight, WebXRHitTest, WebXRRawCameraAccess } from '@babylonjs/core';
+import { createLight, createShadowGenerator } from './editor';
 import type { Editor } from './editor';
+import { PHOTO_FILTERS, filterToCanvas, findLightPreset, presetIntensity } from './presets';
 
 export type ARStatus = 'searching' | 'ready' | 'placed';
 /** "scene" = the editor's own lights; "room" = estimated by the phone; the rest are presets. */
-export type ARLighting = 'scene' | 'room' | 'studio' | 'daylight' | 'sunset' | 'neon' | 'dramatic';
-
-type RigLight = { type: 'directional' | 'point' | 'spot'; pos: [number, number, number]; intensity: number; color: string; shadows?: boolean; angle?: number };
-
-/**
- * Light presets for AR, like the editor's: positions are for a ~2 m scene and scale with it.
- * They live under the AR anchor, so they move with the scene and vanish when AR ends.
- */
-const AR_RIGS: Record<Exclude<ARLighting, 'scene' | 'room'>, { env: number; lights: RigLight[] }> = {
-  studio: {
-    env: 0.7,
-    lights: [
-      { type: 'directional', pos: [-3, 5, -3], intensity: 2.6, color: '#fff2e0', shadows: true },
-      { type: 'point', pos: [3, 2, -2], intensity: 12, color: '#dbe8ff' },
-      { type: 'spot', pos: [0, 3, 4], intensity: 45, color: '#ffffff' },
-    ],
-  },
-  daylight: { env: 1, lights: [{ type: 'directional', pos: [4, 8, 3], intensity: 3, color: '#fff8ec', shadows: true }] },
-  sunset: {
-    env: 0.35,
-    lights: [
-      { type: 'directional', pos: [-6, 1.6, -3], intensity: 3.5, color: '#ff8a3d', shadows: true },
-      { type: 'point', pos: [3, 2.5, 3], intensity: 15, color: '#5b7cff' },
-    ],
-  },
-  neon: {
-    env: 0.08,
-    lights: [
-      { type: 'point', pos: [-2, 1.5, -1], intensity: 40, color: '#ff2fd6', shadows: true },
-      { type: 'point', pos: [2, 1.5, 1], intensity: 40, color: '#20e3ff' },
-      { type: 'spot', pos: [0, 4, 0.1], intensity: 30, color: '#b388ff' },
-    ],
-  },
-  dramatic: { env: 0.05, lights: [{ type: 'spot', pos: [0.5, 5, 1], intensity: 120, color: '#fff5e8', angle: Math.PI / 6, shadows: true }] },
-};
-
-/** Photo filters, applied only to the saved AR photo (free while the camera is open). */
-export const AR_FILTERS: Record<string, { label: string; css: string; vignette: number; grain: number }> = {
-  none: { label: 'Original', css: 'none', vignette: 0, grain: 0 },
-  cinema: { label: 'Cinema', css: 'contrast(1.2) saturate(1.1) sepia(0.12)', vignette: 0.35, grain: 0.04 },
-  bw: { label: 'B&W', css: 'grayscale(1) contrast(1.3)', vignette: 0.3, grain: 0.08 },
-  vintage: { label: 'Vintage', css: 'sepia(0.45) saturate(0.75) contrast(0.95)', vignette: 0.45, grain: 0.1 },
-  neon: { label: 'Neon', css: 'saturate(1.5) contrast(1.1)', vignette: 0.3, grain: 0 },
-  dream: { label: 'Dream', css: 'brightness(1.12) contrast(0.92) saturate(1.1)', vignette: 0.15, grain: 0 },
-  cold: { label: 'Cold', css: 'hue-rotate(-12deg) saturate(0.9) contrast(1.1)', vignette: 0.2, grain: 0 },
-};
+/** "scene" = the editor's own lights; "room" = estimated by the phone; otherwise a preset id (presets.ts). */
+export type ARLighting = string;
 
 interface Saved {
   node: TransformNode;
@@ -198,38 +153,24 @@ export class ARMode {
     this.editor.scene.environmentIntensity = this.baseEnvIntensity * this.lightLevel;
   }
 
-  private buildRig(id: keyof typeof AR_RIGS) {
+  private buildRig(id: string) {
     const anchor = this.anchor;
-    if (!anchor) return;
+    const preset = findLightPreset(id);
+    if (!anchor || !preset) return;
     const scene = this.editor.scene;
-    const preset = AR_RIGS[id];
-    this.baseEnvIntensity = preset.env;
+    this.baseEnvIntensity = preset.env.intensity ?? this.baseEnvIntensity;
     const k = Math.max(this.local.size, 0.5) / 2;
     const focus = new Vector3(0, this.local.height / 2, 0);
     const casters = this.editor.entities.filter((e) => e.kind !== 'light' && e.visible).flatMap((e) => e.meshes);
     for (const def of preset.lights) {
       const pos = new Vector3(...def.pos).scale(k);
-      const dir = focus.subtract(pos).normalize();
-      let light: ShadowLight;
-      if (def.type === 'directional') light = new DirectionalLight('arRig', dir, scene);
-      else if (def.type === 'spot') light = new SpotLight('arRig', pos, dir, def.angle ?? Math.PI / 4, 2, scene);
-      else light = new PointLight('arRig', pos, scene);
-      light.position.copyFrom(pos);
+      const direction = focus.subtract(pos).normalize();
+      const light = createLight(def.type, 'arRig', scene, { position: pos, direction, angle: def.angle, color: Color3.FromHexString(def.color) });
       light.parent = anchor;
-      light.diffuse = Color3.FromHexString(def.color);
-      light.specular = light.diffuse.clone();
-      // Point/spot fall off with distance: scale with the scene like the editor presets
-      const base = def.type === 'directional' ? def.intensity : def.intensity * k * k;
+      const base = presetIntensity(def, k);
       let gen: ShadowGenerator | undefined;
       if (def.shadows) {
-        gen = new ShadowGenerator(1024, light);
-        if (def.type === 'point') gen.usePoissonSampling = true;
-        else {
-          gen.usePercentageCloserFiltering = true;
-          gen.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
-        }
-        gen.bias = 0.0008;
-        gen.normalBias = 0.015;
+        gen = createShadowGenerator(light, def.type);
         gen.getShadowMap()!.renderList = [...casters];
         light.shadowEnabled = this.shadows;
       }
@@ -544,7 +485,7 @@ export class ARMode {
     img.src = layer;
     await img.decode();
     ctx.drawImage(img, 0, 0, width, height);
-    const final = applyPhotoFilter(out, AR_FILTERS[this.filter] ?? AR_FILTERS.none);
+    const final = applyPhotoFilter(out, filterToCanvas(PHOTO_FILTERS.find((f) => f.id === this.filter)?.values ?? {}));
     return new Promise((resolve) => final.toBlob((b) => resolve(b), 'image/jpeg', 0.92));
   }
 

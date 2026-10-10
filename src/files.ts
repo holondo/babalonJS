@@ -17,6 +17,17 @@ export async function shareFile(blob: Blob, name: string) {
   await navigator.share({ files: [new File([blob], name, { type: blob.type })] }).catch(() => {});
 }
 
+/** Saves the file right away and returns how to share it (null when the device can't share files). */
+export function saveAndOfferShare(blob: Blob, name: string): (() => void) | null {
+  saveFile(blob, name);
+  return canShareFile(blob, name) ? () => void shareFile(blob, name) : null;
+}
+
+/** File name with the date and time, e.g. babalon-2026-10-10T14-03-22.png */
+export function timestampedName(prefix: string, ext: string) {
+  return `${prefix}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${ext}`;
+}
+
 /** Files shared into the installed app from another app (Android "Share" → babalon JS). */
 export async function takeSharedFiles(): Promise<File[]> {
   const params = new URLSearchParams(location.search);

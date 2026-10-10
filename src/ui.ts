@@ -67,10 +67,11 @@ import { PROJECT_EXT, fromZip, loadAutosave, restore, saveAutosave, snapshot, to
 import type { ProjectSnapshot } from './project';
 import type { ARMode } from './ar';
 import type { GyroControl } from './gyro';
-import { canShareFile, saveFile, shareFile } from './files';
+import { saveAndOfferShare, timestampedName } from './files';
+import { LIGHT_PRESETS, PHOTO_FILTERS } from './presets';
 import { LANGS, getLang, locale, setLang, tr } from './i18n';
 import type { Lang } from './i18n';
-import { button, chips, colorInput, h, hint, icon, iconButton, numberInput, row, section, segmented, select, slider, toggle } from './dom';
+import { button, chips, colorInput, flashScreen, h, hint, icon, iconButton, menuItem, numberInput, row, section, segmented, select, shutterButton, slider, toggle } from './dom';
 import { UNITS } from './tools';
 import type { Axis, Edge, Guide, Measurement, Unit } from './tools';
 
@@ -85,24 +86,6 @@ const TABS: { id: Exclude<Tab, 'photo'>; label: string; icon: IconNode }[] = [
 ];
 
 const PANEL_TITLES: Record<Tab, string> = { add: 'Add', objects: 'Objects', light: 'Light', tools: 'Tools', photo: 'Photo' };
-
-const FILTERS: { id: string; label: string; values: Partial<PhotoSettings> }[] = [
-  { id: 'none', label: 'Original', values: {} },
-  { id: 'cinema', label: 'Cinema', values: { contrast: 1.25, saturation: 10, temperature: 10, vignette: 0.7, grain: 6, aspect: '2.39' } },
-  { id: 'bw', label: 'B&W', values: { saturation: -100, contrast: 1.35, grain: 12, vignette: 0.6 } },
-  { id: 'vintage', label: 'Vintage', values: { saturation: -35, temperature: 45, contrast: 0.95, vignette: 1.1, grain: 18 } },
-  { id: 'neon', label: 'Neon', values: { saturation: 40, bloom: 0.8, bloomThreshold: 0.45, chromatic: 8, vignette: 0.8 } },
-  { id: 'dream', label: 'Dream', values: { exposure: 1.2, contrast: 0.9, bloom: 0.6, bloomThreshold: 0.3, temperature: 15 } },
-  { id: 'cold', label: 'Cold', values: { temperature: -40, contrast: 1.15, saturation: -10 } },
-];
-
-const LIGHT_PRESETS = [
-  { id: 'studio', label: 'Studio' },
-  { id: 'daylight', label: 'Daylight' },
-  { id: 'sunset', label: 'Sunset' },
-  { id: 'neon', label: 'Neon' },
-  { id: 'dramatic', label: 'Dramatic' },
-];
 
 const KIND_ICON: Record<Entity['kind'], IconNode> = { model: Box, primitive: Box, light: Lightbulb };
 const deg = (r: number) => (r * 180) / Math.PI;
@@ -129,7 +112,7 @@ export class UI {
   private readonly viewStack = h('div', { class: 'viewstack' });
   /** Everything hidden except this button (any screen). */
   private uiHidden = false;
-  private readonly uiRestore = h('button', { class: 'ibtn ui-restore' });
+  private readonly uiRestore = h('button', { class: 'ibtn round ui-restore' });
   private readonly projectInput = h('input', { type: 'file', accept: `${PROJECT_EXT},.zip`, hidden: true });
 
   private readonly topbar = h('header', { class: 'topbar' });
@@ -255,10 +238,10 @@ export class UI {
     this.renderViewStack();
   }
 
-  private gyroButton() {
+  private gyroButton(round = false) {
     const g = this.gyro;
     if (!g?.available) return null;
-    return iconButton(Smartphone, tr('Gyro mode: move the phone to look around'), () => this.toggleGyro(), { active: g.active });
+    return iconButton(Smartphone, tr('Gyro mode: move the phone to look around'), () => this.toggleGyro(), { active: g.active, cls: round ? 'round' : '' });
   }
 
   private async toggleGyro() {
@@ -398,8 +381,6 @@ export class UI {
   private renderTopbar() {
     const ed = this.editor;
     const base = import.meta.env.BASE_URL;
-    const mode = (label: string, active: boolean, run: () => void, node?: IconNode) =>
-      h('button', { class: `mode ${active ? 'active' : ''}`, onClick: run }, node ? icon(node, 16) : null, h('span', {}, label));
     this.topbar.replaceChildren(
       // The logo opens the project menu (new, open, save, export, language, install)
       h(
@@ -415,12 +396,15 @@ export class UI {
         iconButton(Undo2, tr('Undo (Ctrl+Z)'), () => ed.undo(), { disabled: !ed.canUndo }),
         iconButton(Redo2, tr('Redo (Ctrl+Y)'), () => ed.redo(), { disabled: !ed.canRedo }),
         h('span', { class: 'sep' }),
-        h(
-          'div',
-          { class: 'modes', role: 'group', 'aria-label': tr('Mode') },
-          mode(tr('Edit'), !ed.photoMode && !this.ar?.active, () => ed.setPhotoMode(false), Move3d),
-          mode(tr('Photo'), ed.photoMode, () => ed.setPhotoMode(true), Camera),
-          this.ar?.supported ? mode('AR', !!this.ar?.active, () => this.enterAR(), View) : null,
+        segmented(
+          [
+            { id: 'edit', label: tr('Edit'), icon: Move3d },
+            { id: 'photo', label: tr('Photo'), icon: Camera },
+            ...(this.ar?.supported ? [{ id: 'ar', label: 'AR', icon: View }] : []),
+          ],
+          this.ar?.active ? 'ar' : ed.photoMode ? 'photo' : 'edit',
+          (id) => (id === 'ar' ? this.enterAR() : ed.setPhotoMode(id === 'photo')),
+          'modes',
         ),
       ),
     );
@@ -439,8 +423,7 @@ export class UI {
     if (!open) return;
     const name = h('input', { type: 'text', class: 'name', value: this.projectName, 'aria-label': tr('Project name') });
     name.addEventListener('change', () => (this.projectName = name.value.trim() || tr('my-scene')));
-    const item = (node: IconNode, label: string, kbd: string, fn: () => void) =>
-      h('button', { class: 'menu-item', onClick: () => (this.toggleMenu(false), fn()) }, icon(node, 18), h('span', {}, label), kbd ? h('kbd', {}, kbd) : null);
+    const item = (node: IconNode, label: string, kbd: string, fn: () => void) => menuItem(node, label, () => (this.toggleMenu(false), fn()), { kbd: kbd || undefined });
     this.menu.replaceChildren(
       h('label', { class: 'menu-name' }, h('span', {}, tr('Project name')), name),
       h('div', { class: 'menu-name' }, h('span', {}, getLang() === 'en' ? 'Language' : `${tr('Language')} · Language`), chips(LANGS, getLang(), (v) => this.setLanguage(v))),
@@ -546,9 +529,8 @@ export class UI {
   /** Hands a file to the user: share sheet on phones (when possible) or download. */
   /** Saves the file to the device right away, and offers sharing it for a few seconds. */
   private deliver(blob: Blob, name: string, message: string) {
-    saveFile(blob, name);
-    const share = canShareFile(blob, name) ? { label: tr('Share'), run: () => shareFile(blob, name) } : undefined;
-    this.toast(message, 'info', share, 7000);
+    const share = saveAndOfferShare(blob, name);
+    this.toast(message, 'info', share ? { label: tr('Share'), run: share } : undefined, 7000);
   }
 
   private async exportGLB() {
@@ -623,13 +605,7 @@ export class UI {
     this.selbar.querySelector('.more-btn')?.classList.toggle('active', this.selMenuOpen);
     if (!this.selMenuOpen || !e) return;
     const item = (node: IconNode, label: string, run: () => void, opts: { on?: boolean; keep?: boolean; kbd?: string } = {}) =>
-      h(
-        'button',
-        { class: `menu-item ${opts.on ? 'on' : ''}`, onClick: () => (opts.keep ? null : this.toggleSelMenu(false), run()) },
-        icon(node, 18),
-        h('span', {}, label),
-        opts.kbd ? h('kbd', {}, opts.kbd) : opts.on !== undefined ? h('i', { class: 'menu-check' }) : null,
-      );
+      menuItem(node, label, () => (opts.keep ? null : this.toggleSelMenu(false), run()), opts);
     this.selMenu.replaceChildren(
       item(Copy, tr('Duplicate'), () => ed.duplicate(), { kbd: 'Ctrl+D' }),
       item(Focus, tr('Focus camera'), () => ed.focus(), { kbd: 'F' }),
@@ -1377,7 +1353,7 @@ export class UI {
     const pct = (v: number) => `${Math.round(v)}`;
     return [
       ed.photoMode ? null : row(button(tr('Enter photo mode'), () => ed.setPhotoMode(true), { icon: Camera, cls: 'primary wide' })),
-      section(tr('Filters'), chips(FILTERS.map((f) => ({ value: f.id, label: tr(f.label) })), '', (id) => ed.setPhoto({ ...DEFAULT_PHOTO, fov: p.fov, focusDistance: p.focusDistance, ...FILTERS.find((f) => f.id === id)!.values }))),
+      section(tr('Filters'), chips(PHOTO_FILTERS.map((f) => ({ value: f.id, label: tr(f.label) })), '', (id) => ed.setPhoto({ ...DEFAULT_PHOTO, fov: p.fov, focusDistance: p.focusDistance, ...PHOTO_FILTERS.find((f) => f.id === id)!.values }))),
       section(
         tr('Camera'),
         slider(tr('Field of view'), p.fov, { min: 10, max: 110, step: 1, format: (v) => `${Math.round(v)}°` }, (v) => set({ fov: v })),
@@ -1414,8 +1390,8 @@ export class UI {
     const ed = this.editor;
     if (!ed.photoMode) return this.photoHud.replaceChildren();
     this.photoHud.replaceChildren(
-      iconButton(X, tr('Exit photo mode'), () => ed.setPhotoMode(false), { cls: 'hud-exit' }),
-      iconButton(EyeOff, tr('Hide interface (H)'), () => this.setUiHidden(true), { cls: 'hud-hide' }),
+      iconButton(X, tr('Exit photo mode'), () => ed.setPhotoMode(false), { cls: 'round hud-exit' }),
+      iconButton(EyeOff, tr('Hide interface (H)'), () => this.setUiHidden(true), { cls: 'round hud-hide' }),
       h(
         'div',
         { class: 'hud-bottom' },
@@ -1426,22 +1402,19 @@ export class UI {
           iconButton(SlidersHorizontal, tr('Adjustments'), () => {
             this.photoPanel = !this.photoPanel;
             this.renderPanel();
-          }, { active: this.photoPanel }),
-          h('button', { class: 'shutter', title: tr('Take photo'), 'aria-label': tr('Take photo'), onClick: () => this.capture() }, h('i', {})),
-          ...(this.gyroButton() ? [this.gyroButton()!] : [iconButton(Scan, tr('Frame all'), () => ed.frameAll())]),
+          }, { active: this.photoPanel, cls: 'round' }),
+          shutterButton(tr('Take photo'), () => this.capture()),
+          this.gyroButton(true) ?? iconButton(Scan, tr('Frame all'), () => ed.frameAll(), { cls: 'round' }),
         ),
       ),
     );
   }
 
   private async capture() {
-    const flash = h('div', { class: 'flash' });
-    this.root.append(flash);
-    setTimeout(() => flash.remove(), 500);
+    flashScreen(this.root);
     try {
       const blob = await this.editor.capture(2);
-      const name = `babalon-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`;
-      this.deliver(blob, name, tr('Photo saved!'));
+      this.deliver(blob, timestampedName('babalon', 'png'), tr('Photo saved!'));
     } catch (e) {
       this.toast(errorMessage(e), 'error');
     }

@@ -46,6 +46,7 @@ import { ShadowOnlyMaterial } from '@babylonjs/materials/shadowOnly/shadowOnlyMa
 import { GLTF2Export } from '@babylonjs/serializers/glTF/2.0/glTFSerializer.js';
 import { tr } from './i18n';
 import { Tools } from './tools';
+import { findLightPreset, presetIntensity } from './presets';
 import type { Axis } from './tools';
 
 registerBuiltInLoaders();
@@ -188,6 +189,45 @@ export const DEFAULT_PHOTO: PhotoSettings = {
 };
 
 const isTouch = matchMedia('(pointer: coarse)').matches;
+
+/** Creates a light of the given type (used for editor lights and for AR preset lights). */
+export function createLight(
+  type: LightType,
+  name: string,
+  scene: Scene,
+  opts: { position?: Vector3; direction?: Vector3; angle?: number; color?: Color3 } = {},
+): ShadowLight {
+  const position = opts.position ?? Vector3.Zero();
+  const direction = opts.direction ?? new Vector3(0, 0, 1);
+  let light: ShadowLight;
+  if (type === 'point') {
+    light = new PointLight(name, position, scene);
+  } else if (type === 'spot') {
+    light = new SpotLight(name, position, direction, opts.angle ?? Math.PI / 4, 2, scene);
+  } else {
+    light = new DirectionalLight(name, direction, scene);
+    light.position.copyFrom(position);
+    (light as DirectionalLight).autoCalcShadowZBounds = true;
+  }
+  const color = opts.color ?? Color3.White();
+  light.diffuse = color;
+  light.specular = color.clone();
+  return light;
+}
+
+/** Shadow generator with the app's settings (softer filtering for spot/sun, Poisson for point lights). */
+export function createShadowGenerator(light: ShadowLight, type: LightType) {
+  const gen = new ShadowGenerator(isTouch ? 1024 : 2048, light);
+  if (type === 'point') {
+    gen.usePoissonSampling = true;
+  } else {
+    gen.usePercentageCloserFiltering = true;
+    gen.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
+  }
+  gen.bias = 0.0008;
+  gen.normalBias = 0.015;
+  return gen;
+}
 const ACCENT = Color3.FromHexString('#e9a83b');
 
 export class Editor {
@@ -874,18 +914,8 @@ export class Editor {
       p.isVisible = !this.cleanView;
     }
 
-    let light: ShadowLight;
-    if (type === 'point') {
-      light = new PointLight(root.name, Vector3.Zero(), this.scene);
-    } else if (type === 'spot') {
-      light = new SpotLight(root.name, Vector3.Zero(), new Vector3(0, 0, 1), opts.angle ?? Math.PI / 4, 2, this.scene);
-    } else {
-      light = new DirectionalLight(root.name, new Vector3(0, 0, 1), this.scene);
-      (light as DirectionalLight).autoCalcShadowZBounds = true;
-    }
+    const light = createLight(type, root.name, this.scene, { angle: opts.angle, color });
     light.parent = root;
-    light.diffuse = color;
-    light.specular = color;
     light.intensity = opts.intensity ?? (type === 'directional' ? 2 : 30);
 
     root.position.copyFrom(opts.position ?? this.camera.target.add(new Vector3(2, 3, -2)));
@@ -911,16 +941,7 @@ export class Editor {
   setLightShadows(entity: Entity, on: boolean) {
     if (!entity.light) return;
     if (on && !entity.shadowGen) {
-      const gen = new ShadowGenerator(isTouch ? 1024 : 2048, entity.light);
-      if (entity.lightType === 'point') {
-        gen.usePoissonSampling = true;
-      } else {
-        gen.usePercentageCloserFiltering = true;
-        gen.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
-      }
-      gen.bias = 0.0008;
-      gen.normalBias = 0.015;
-      entity.shadowGen = gen;
+      entity.shadowGen = createShadowGenerator(entity.light, entity.lightType ?? 'directional');
     } else if (!on && entity.shadowGen) {
       entity.shadowGen.dispose();
       entity.shadowGen = undefined;
@@ -1379,39 +1400,14 @@ export class Editor {
     const at = (x: number, y: number, z: number) => c.add(new Vector3(x, y, z).scale(k));
     const focus = b ? b.center : at(0, 0.6, 0);
     const opt = { select: false, target: focus };
-    // Point/spot lights fall off with the square of the distance
-    const pw = (v: number) => v * k * k;
-    const bright = { skybox: true, ground: 'shadow' as GroundMode, background: '#1a1215' };
-    this.setPhoto({ ...DEFAULT_PHOTO, fov: this.photo.fov, aspect: this.photo.aspect });
-    switch (id) {
-      case 'studio':
-        this.applyEnv({ ...bright, preset: 'studio', intensity: 0.7, skyboxBlur: 0.7 });
-        this.addLight('directional', { ...opt, position: at(-3, 5, -3), intensity: 2.6, color: '#fff2e0' });
-        this.addLight('point', { ...opt, position: at(3, 2, -2), intensity: pw(12), color: '#dbe8ff', shadows: false });
-        this.addLight('spot', { ...opt, position: at(0, 3, 4), intensity: pw(45), color: '#ffffff', shadows: false });
-        break;
-      case 'sunset':
-        this.applyEnv({ ...bright, preset: 'country', intensity: 0.35, skyboxBlur: 0.4 });
-        this.addLight('directional', { ...opt, position: at(-6, 1.6, -3), intensity: 3.5, color: '#ff8a3d' });
-        this.addLight('point', { ...opt, position: at(3, 2.5, 3), intensity: pw(15), color: '#5b7cff', shadows: false });
-        this.setPhoto({ temperature: 30, bloom: 0.3, vignette: 0.6 });
-        break;
-      case 'neon':
-        this.applyEnv({ intensity: 0.08, background: '#07070c', skybox: false, ground: 'solid', groundColor: '#101018' });
-        this.addLight('point', { ...opt, position: at(-2, 1.5, -1), intensity: pw(40), color: '#ff2fd6', shadows: true });
-        this.addLight('point', { ...opt, position: at(2, 1.5, 1), intensity: pw(40), color: '#20e3ff', shadows: false });
-        this.addLight('spot', { ...opt, position: at(0, 4, 0.1), intensity: pw(30), color: '#b388ff' });
-        this.setPhoto({ bloom: 0.8, bloomThreshold: 0.5, saturation: 30, chromatic: 6, vignette: 1 });
-        break;
-      case 'dramatic':
-        this.applyEnv({ intensity: 0.05, background: '#050505', skybox: false, ground: 'solid', groundColor: '#121212' });
-        this.addLight('spot', { ...opt, position: at(0.5, 5, 1), intensity: pw(120), color: '#fff5e8', angle: Math.PI / 6 });
-        this.setPhoto({ contrast: 1.4, vignette: 1.2 });
-        break;
-      case 'daylight':
-        this.applyEnv({ ...bright, preset: 'country', intensity: 1, skyboxBlur: 0.2 });
-        this.addLight('directional', { ...opt, position: at(4, 8, 3), intensity: 3, color: '#fff8ec' });
-        break;
+    const preset = findLightPreset(id);
+    if (!preset) return;
+    const { bright, ...env } = preset.env;
+    // Bright presets start from the default sky and shadow-catcher floor
+    this.applyEnv(bright ? { skybox: true, ground: 'shadow', background: DEFAULT_ENV.background, ...env } : env);
+    this.setPhoto({ ...DEFAULT_PHOTO, fov: this.photo.fov, aspect: this.photo.aspect, ...preset.photo });
+    for (const l of preset.lights) {
+      this.addLight(l.type, { ...opt, position: at(...l.pos), intensity: presetIntensity(l, k), color: l.color, shadows: l.shadows, angle: l.angle });
     }
   }
 

@@ -760,8 +760,6 @@ body.photo .panel {
   position: absolute;
   top: var(--top-photo);
   left: 12px;
-  background: var(--glass);
-  backdrop-filter: var(--blur);
   z-index: 8;
 }
 .hud-bottom {
@@ -799,16 +797,6 @@ body.photo .panel {
   display: flex;
   align-items: center;
   gap: 28px;
-}
-.hud-row .ibtn {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: var(--glass);
-  backdrop-filter: var(--blur);
-}
-.hud-row .ibtn.active {
-  background: var(--accent);
 }
 .shutter {
   width: 74px;
@@ -879,12 +867,6 @@ body.photo .panel {
   .top-actions .ibtn {
     min-width: 36px;
     padding: 0 6px;
-  }
-  .mode {
-    padding: 0 10px;
-  }
-  .mode svg.lucide {
-    display: none;
   }
   .dock {
     left: 8px;
@@ -1290,19 +1272,6 @@ button:disabled svg.lucide {
 .ar-hud.show {
   display: block;
 }
-.ar-btn {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--glass);
-  backdrop-filter: var(--blur);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-weight: 600;
-  font-size: 13px;
-}
 .ar-exit {
   position: absolute;
   top: calc(14px + var(--safe-t));
@@ -1359,12 +1328,6 @@ button:disabled svg.lucide {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.ar-btn.active {
-  background: var(--accent);
-}
-.ar-btn.active svg.lucide {
-  stroke: var(--accent-ink);
-}
 .ar-options {
   position: absolute;
   top: calc(76px + var(--safe-t));
@@ -1381,43 +1344,6 @@ button:disabled svg.lucide {
   backdrop-filter: var(--blur);
   border: 1px solid var(--line);
 }
-.ar-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-height: 44px;
-  padding: 0 10px 0 14px;
-  border-radius: 999px;
-  font-size: 13px;
-  color: var(--text);
-}
-.ar-option i {
-  position: relative;
-  width: 42px;
-  height: 24px;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.16);
-  flex: none;
-}
-.ar-option i::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.15s;
-}
-.ar-option.on i {
-  background: var(--accent);
-}
-.ar-option.on i::after {
-  transform: translateX(18px);
-  background: var(--purple);
-}
 .ar-options h4 {
   margin: 6px 4px 2px;
   font-size: 11px;
@@ -1426,55 +1352,14 @@ button:disabled svg.lucide {
   letter-spacing: 0.08em;
   color: var(--muted);
 }
-.ar-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 2px 0 4px;
-}
 .ar-note {
   margin: 0 4px;
   font-size: 11.5px;
   color: var(--muted);
 }
-.ar-slider {
-  display: flex;
-  flex-direction: column;
-  padding: 4px 4px 0;
-  font-size: 13px;
-}
 
 /* ---------- Mode switch (Edit / Photo / AR) ---------- */
 
-.modes {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-}
-.mode {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 14px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--muted);
-}
-.mode:hover {
-  color: var(--text);
-}
-.mode.active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 600;
-}
-.mode.active svg.lucide {
-  stroke: var(--accent-ink);
-}
 
 /* ---------- Floating view controls ---------- */
 
@@ -1549,12 +1434,6 @@ body.photo .viewstack {
   position: absolute;
   right: 14px;
   bottom: calc(20px + var(--safe-b));
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  background: var(--glass);
-  backdrop-filter: var(--blur);
-  border: 1px solid var(--line);
   opacity: 0.55;
   z-index: 20;
 }
@@ -1581,8 +1460,6 @@ body.ui-hidden .ui-restore {
   position: absolute;
   top: var(--top-photo);
   right: 12px;
-  background: var(--glass);
-  backdrop-filter: var(--blur);
   z-index: 8;
 }
 
@@ -1640,5 +1517,58 @@ body.ui-hidden .ui-restore {
   }
   .slider-track.dragging input[type='range']::-webkit-slider-thumb {
     transform: scale(1.15);
+  }
+}
+
+/* ---------- Shared round glass button (photo HUD, AR, restore interface) ---------- */
+
+.ibtn.round {
+  width: 50px;
+  height: 50px;
+  min-width: 50px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 600;
+}
+.ibtn.round.active {
+  background: var(--accent);
+}
+
+/* The top bar's Edit / Photo / AR selector is a variant of the panel switch */
+.segmented.modes {
+  margin: 0;
+  padding: 2px;
+}
+.segmented.modes button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+}
+.segmented.modes button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.segmented.modes button.active svg.lucide {
+  stroke: var(--accent-ink);
+}
+.segmented svg.lucide {
+  stroke: currentColor;
+}
+.ar-options .chips {
+  padding: 2px 0 4px;
+}
+@media (max-width: 760px) {
+  .segmented.modes button {
+    padding: 0 10px;
+  }
+  .segmented.modes svg.lucide {
+    display: none;
   }
 }
