@@ -1,7 +1,9 @@
+import { materialToJSON, applyMaterial, lightToJSON, applyLight } from './state';
+import type { MaterialJSON, LightJSON } from './state';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { Zippable } from 'fflate';
-import { Color3, PBRMaterial, Quaternion, StandardMaterial, Vector3 } from '@babylonjs/core';
-import type { AssetContainer, Material, PointLight, SpotLight } from '@babylonjs/core';
+import { Quaternion, Vector3 } from '@babylonjs/core';
+import type { AssetContainer } from '@babylonjs/core';
 import { tr } from './i18n';
 import type { ToolsJSON } from '../tools/tools';
 import { forgetHumanoid, jointNodes } from '../rigging/humanoid';
@@ -12,7 +14,7 @@ import type { OptimizeSettings } from '../optimize/optimizer';
 import type { TextureSettings } from '../optimize/textures';
 import { captureJoints } from '../animation/pose';
 import { ANIMATION_SOURCE } from './presets';
-import type { AssetRef, Editor, Entity, EnvSettings, LightType, ModelSource, PhotoSettings, PrimitiveType } from './editor';
+import type { AssetRef, Editor, Entity, EnvSettings, ModelSource, PhotoSettings, PrimitiveType } from './editor';
 
 /** Project file: a .zip with project.json + the original model files in assets/. */
 export const PROJECT_EXT = '.babalon';
@@ -23,25 +25,6 @@ interface TransformJSON {
   p: number[];
   q: number[];
   s: number[];
-}
-
-interface MaterialJSON {
-  type: 'pbr' | 'standard' | 'other';
-  alpha: number;
-  backFaceCulling: boolean;
-  wireframe: boolean;
-  albedo?: string;
-  metallic?: number;
-  roughness?: number;
-  clearCoat?: boolean;
-  clearCoatIntensity?: number;
-  unlit?: boolean;
-  emissive?: string;
-  emissiveIntensity?: number;
-  textureHidden?: boolean;
-  diffuse?: string;
-  specular?: string;
-  specularPower?: number;
 }
 
 interface EntityJSON {
@@ -55,7 +38,7 @@ interface EntityJSON {
   materials?: MaterialJSON[];
   /** Clip state; `loop` and `frame` are missing in older projects. */
   animation?: { index: number; playing: boolean; speed: number; loop?: boolean; frame?: number };
-  light?: { type: LightType; color: string; intensity: number; shadows: boolean; angle?: number; exponent?: number; range?: number };
+  light?: LightJSON;
   /** Humanoid bones mapped by hand (canonical bone → joint name). */
   boneMap?: Partial<Record<HumanBone, string>>;
   /** Clips retargeted from the built-in library or an imported file (recomputed on open). */
@@ -197,46 +180,8 @@ function entityToJSON(editor: Editor, e: Entity, files: Record<string, Blob>, in
     json.animation = clip;
   }
   if (e.posed) json.pose = captureJoints(jointNodes(e)).map((j) => [...j.q.asArray(), ...j.p.asArray()].map((v) => +v.toFixed(6)));
-  if (e.light) {
-    const l = e.light;
-    json.light = { type: e.lightType!, color: l.diffuse.toHexString(), intensity: l.intensity, shadows: !!e.shadowGen };
-    if (e.lightType === 'spot') {
-      json.light.angle = (l as SpotLight).angle;
-      json.light.exponent = (l as SpotLight).exponent;
-    }
-    if (e.lightType !== 'directional') json.light.range = (l as PointLight).range;
-  }
+  if (e.light) json.light = lightToJSON(e);
   return json;
-}
-
-function materialToJSON(m: Material): MaterialJSON {
-  const base = { alpha: m.alpha, backFaceCulling: m.backFaceCulling, wireframe: m.wireframe };
-  if (m instanceof PBRMaterial) {
-    return {
-      ...base,
-      type: 'pbr',
-      albedo: m.albedoColor.toHexString(),
-      metallic: m.metallic ?? undefined,
-      roughness: m.roughness ?? undefined,
-      clearCoat: m.clearCoat.isEnabled,
-      clearCoatIntensity: m.clearCoat.intensity,
-      unlit: m.unlit,
-      emissive: m.emissiveColor.toHexString(),
-      emissiveIntensity: m.emissiveIntensity,
-      textureHidden: !!m.metadata?.stashedAlbedo,
-    };
-  }
-  if (m instanceof StandardMaterial) {
-    return {
-      ...base,
-      type: 'standard',
-      diffuse: m.diffuseColor.toHexString(),
-      specular: m.specularColor.toHexString(),
-      specularPower: m.specularPower,
-      emissive: m.emissiveColor.toHexString(),
-    };
-  }
-  return { ...base, type: 'other' };
 }
 
 export async function toZip(snap: ProjectSnapshot): Promise<Blob> {
@@ -321,8 +266,7 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
     } else if (ej.light) {
       const l = ej.light;
       entity = editor.addLight(l.type, { ...quiet, color: l.color, intensity: l.intensity, shadows: l.shadows, angle: l.angle });
-      if (l.exponent !== undefined) (entity.light as SpotLight).exponent = l.exponent;
-      if (l.range !== undefined) (entity.light as PointLight).range = l.range;
+      applyLight(editor, entity, l);
     }
     if (!entity) continue;
     byIndex[byIndex.length - 1] = entity;
@@ -401,32 +345,6 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
   editor.camera.beta = c.beta;
   editor.camera.radius = c.radius;
   return [...missing];
-}
-
-function applyMaterial(m: Material, j: MaterialJSON) {
-  m.alpha = j.alpha;
-  if (j.alpha < 1) m.transparencyMode = 2; // MATERIAL_ALPHABLEND
-  m.backFaceCulling = j.backFaceCulling;
-  m.wireframe = j.wireframe;
-  if (m instanceof PBRMaterial && j.type === 'pbr') {
-    m.albedoColor = Color3.FromHexString(j.albedo!);
-    if (j.metallic !== undefined) m.metallic = j.metallic;
-    if (j.roughness !== undefined) m.roughness = j.roughness;
-    m.clearCoat.isEnabled = !!j.clearCoat;
-    m.clearCoat.intensity = j.clearCoatIntensity ?? 1;
-    m.unlit = !!j.unlit;
-    m.emissiveColor = Color3.FromHexString(j.emissive!);
-    m.emissiveIntensity = j.emissiveIntensity ?? 1;
-    if (j.textureHidden && m.albedoTexture) {
-      (m.metadata ??= {}).stashedAlbedo = m.albedoTexture;
-      m.albedoTexture = null;
-    }
-  } else if (m instanceof StandardMaterial && j.type === 'standard') {
-    m.diffuseColor = Color3.FromHexString(j.diffuse!);
-    m.specularColor = Color3.FromHexString(j.specular!);
-    m.specularPower = j.specularPower ?? 64;
-    m.emissiveColor = Color3.FromHexString(j.emissive!);
-  }
 }
 
 // ---------- Autosave (IndexedDB) ----------

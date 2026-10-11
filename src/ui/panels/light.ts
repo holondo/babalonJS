@@ -1,3 +1,5 @@
+import { editControls } from '../editControls';
+import { lightToJSON, applyLight } from '../../core/state';
 import { Crosshair, Lightbulb, Sun, Trash2 } from 'lucide';
 import { Color3, StandardMaterial } from '@babylonjs/core';
 import type { SpotLight, PointLight } from '@babylonjs/core';
@@ -5,7 +7,7 @@ import { ENV_PRESETS } from '../../core/editor';
 import type { Entity, GroundMode } from '../../core/editor';
 import { LIGHT_PRESETS } from '../../core/presets';
 import { tr } from '../../core/i18n';
-import { button, chips, colorInput, h, hint, icon, row, section, select, slider, toggle } from '../dom';
+import { button, h, hint, icon, row, section, select } from '../dom';
 import type { UI } from '../ui';
 import { deg, rad } from '../shared';
 
@@ -55,6 +57,7 @@ export class LightPanel {
 
   lightControls(e: Entity) {
     const ed = this.ui.editor;
+    const { slider, colorInput, toggle } = editControls(this.ui, () => lightToJSON(e), (s) => applyLight(ed, e, s));
     const light = e.light!;
     const max = e.lightType === 'directional' ? 10 : 300;
     const targets = ed.entities.filter((x) => x.kind !== 'light');
@@ -89,6 +92,7 @@ export class LightPanel {
 
   envPanel() {
     const ed = this.ui.editor;
+    const { slider, colorInput, toggle, chips } = editControls(this.ui, () => ({ ...ed.env }), (s) => ed.applyEnv(s));
     const env = ed.env;
     const set = (p: Partial<typeof env>) => this.ui.quiet(() => ed.applyEnv(p));
     return [

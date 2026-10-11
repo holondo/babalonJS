@@ -1,6 +1,8 @@
+import { editControls } from '../editControls';
+import { materialToJSON, applyMaterial } from '../../core/state';
 import { Color3, Material, PBRMaterial, StandardMaterial } from '@babylonjs/core';
 import { tr } from '../../core/i18n';
-import { colorInput, hint, section, select, slider, toggle } from '../dom';
+import { hint, section, select } from '../dom';
 import type { UI } from '../ui';
 
 /** Objects → Material: Sketchfab-style material editing. */
@@ -35,6 +37,7 @@ export class MaterialPanel {
   }
 
   materialControls(mat: Material): (Node | null)[] {
+    const { slider, colorInput, toggle } = editControls(this.ui, () => materialToJSON(mat), (s) => applyMaterial(mat, s));
     const q = (fn: () => void) => this.ui.quiet(fn);
     const common = [
       slider(tr('Opacity'), mat.alpha, { min: 0, max: 1, step: 0.01 }, (v) => {

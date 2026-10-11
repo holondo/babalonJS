@@ -1,10 +1,11 @@
+import { editControls } from './editControls';
 import { Camera, EyeOff, RotateCcw, Scan, SlidersHorizontal, X } from 'lucide';
 import { ASPECTS, DEFAULT_PHOTO, aspectRect } from '../core/editor';
 import type { PhotoSettings } from '../core/editor';
 import { timestampedName } from '../core/files';
 import { PHOTO_FILTERS } from '../core/presets';
 import { tr } from '../core/i18n';
-import { button, chips, flashScreen, h, hint, iconButton, row, section, shutterButton, slider, toggle } from './dom';
+import { button, flashScreen, h, hint, iconButton, row, section, shutterButton } from './dom';
 import type { UI } from './ui';
 import { errorMessage } from './shared';
 
@@ -18,6 +19,7 @@ export class PhotoMode {
 
   photoPanelContent() {
     const ed = this.ui.editor;
+    const { slider, toggle, chips, action } = editControls(this.ui, () => ({ ...ed.photo }), (s) => ed.setPhoto(s));
     const p = ed.photo;
     const set = (v: Partial<PhotoSettings>) => this.ui.quiet(() => ed.setPhoto(v));
     const pct = (v: number) => `${Math.round(v)}`;
@@ -52,12 +54,13 @@ export class PhotoMode {
         p.dof ? slider(tr('Focus distance'), p.focusDistance, { min: 0.2, max: 50, step: 0.05, format: (v) => `${v.toFixed(2)} m` }, (v) => set({ focusDistance: v })) : null,
         p.dof ? hint(tr('In photo mode, tap an object to focus on it.')) : null,
       ),
-      row(button(tr('Reset to defaults'), () => ed.setPhoto({ ...DEFAULT_PHOTO }), { icon: RotateCcw, cls: 'ghost' })),
+      row(button(tr('Reset to defaults'), () => action(() => ed.setPhoto({ ...DEFAULT_PHOTO })), { icon: RotateCcw, cls: 'ghost' })),
     ];
   }
 
   renderPhotoHud() {
     const ed = this.ui.editor;
+    const { chips } = editControls(this.ui, () => ({ ...ed.photo }), (s) => ed.setPhoto(s));
     if (!ed.photoMode) return this.ui.photoHud.replaceChildren();
     this.ui.photoHud.replaceChildren(
       iconButton(X, tr('Exit photo mode'), () => ed.setPhotoMode(false), { cls: 'round hud-exit' }),

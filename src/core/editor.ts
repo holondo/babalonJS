@@ -609,6 +609,31 @@ export class Editor {
     this.push(cmd);
   }
 
+  private edits = new Map<unknown, () => void>();
+
+  /** Capture once per gesture; callers commit on change, not on every input. */
+  beginEdit<T>(key: unknown, capture: () => T, apply: (state: T) => void) {
+    if (this.edits.has(key)) return;
+    this.commitEdits();
+    const before = capture();
+    this.edits.set(key, () => {
+      const after = capture();
+      if (JSON.stringify(before) === JSON.stringify(after)) return;
+      const restore = (state: T) => { apply(state); this.invalidate(); this.emit('transform'); };
+      this.push({ undo: () => restore(before), redo: () => restore(after) });
+    });
+  }
+
+  endEdit(key: unknown) {
+    const commit = this.edits.get(key);
+    this.edits.delete(key);
+    commit?.();
+  }
+
+  commitEdits() {
+    for (const key of this.edits.keys()) this.endEdit(key);
+  }
+
   private batch: Command[] | null = null;
 
   /** Groups several changes into a single undo step. */
@@ -650,6 +675,7 @@ export class Editor {
   }
 
   undo() {
+    this.commitEdits();
     // While placing a rig's joints, undo/redo step through the joint moves
     if (this.rigger.active) return this.rigger.undo();
     const cmd = this.undoStack.pop();
@@ -661,6 +687,7 @@ export class Editor {
   }
 
   redo() {
+    this.commitEdits();
     if (this.rigger.active) return this.rigger.redo();
     const cmd = this.redoStack.pop();
     if (!cmd) return;
@@ -1177,6 +1204,7 @@ export class Editor {
 
   /** Really deletes everything (including what the undo history holds) to start/open another project. */
   resetScene() {
+    this.edits.clear();
     this.select(null);
     this.tools.clear();
     const all = new Set<Entity>(this.entities);
@@ -1559,7 +1587,14 @@ export class Editor {
 
   /** Ready-made light setups, photo mode style. They replace the current lights. */
   applyLightPreset(id: string) {
-    this.group(() => this.applyLightPresetInner(id));
+    this.group(() => {
+      this.beginEdit('lighting', () => ({ env: { ...this.env }, photo: { ...this.photo } }), (s) => {
+        this.applyEnv(s.env);
+        this.setPhoto(s.photo);
+      });
+      this.applyLightPresetInner(id);
+      this.endEdit('lighting');
+    });
   }
 
   private applyLightPresetInner(id: string) {
@@ -1632,7 +1667,9 @@ export class Editor {
   focusAt(x: number, y: number) {
     const pick = this.scene.pick(x, y, (m) => this.pickable(m) && !this.helpers.has(m));
     if (!pick?.hit || !pick.pickedPoint) return;
+    this.beginEdit('focus', () => ({ ...this.photo }), (s) => this.setPhoto(s));
     this.setPhoto({ focusDistance: Vector3.Distance(this.camera.position, pick.pickedPoint) });
+    this.endEdit('focus');
   }
 
   setPhotoMode(on: boolean) {

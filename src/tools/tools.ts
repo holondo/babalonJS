@@ -149,6 +149,30 @@ export class Tools {
     this.changed.notifyObservers();
   }
 
+  private editDepth = 0;
+  private loading = false;
+
+  beginEdit() {
+    if (this.loading) return;
+    const entities = [...this.editor.entities];
+    this.editor.beginEdit(this, () => ({ ...this.toJSON(entities), snapVertices: this.snapVertices, surfaceDefault: this.surfaceDefault }), (state) => {
+      const unit = this.unit;
+      this.load({ ...state, unit }, entities);
+      this.snapVertices = state.snapVertices;
+      this.surfaceDefault = state.surfaceDefault;
+    });
+  }
+
+  endEdit() { this.editor.endEdit(this); }
+
+  edit<T>(fn: () => T): T {
+    if (this.loading || this.editDepth) return fn();
+    this.beginEdit();
+    this.editDepth++;
+    try { return fn(); }
+    finally { this.editDepth--; this.endEdit(); }
+  }
+
   // ---------- Measure mode ----------
 
   setMeasureMode(on: boolean) {
@@ -174,6 +198,7 @@ export class Tools {
         if (!hit?.pickedMesh) return false;
         const m = this.measurements.find((mm) => mm.id === hit.pickedMesh!.metadata.measureId);
         if (!m) return false;
+        this.beginEdit();
         this.dragging = { m, end: hit.pickedMesh.metadata.end };
         this.setActive(m);
         this.editor.camera.detachControl();
@@ -194,6 +219,7 @@ export class Tools {
         this.dragging = null;
         this.editor.camera.attachControl(true);
         this.computeSurface(m);
+        this.endEdit();
         this.changed.notifyObservers();
         return true;
       }
@@ -287,6 +313,7 @@ export class Tools {
   // ---------- Measurements ----------
 
   addMeasurement(a: Anchor, b: Anchor, surface: boolean) {
+    return this.edit(() => {
     const id = this.nextId++;
     const line = this.screenLine(`measure${id}`, [this.worldOf(a), this.worldOf(b)], MEASURE_COLOR, 3, true);
     const markers: [Mesh, Mesh] = [this.createMarker(), this.createMarker()];
@@ -298,6 +325,7 @@ export class Tools {
     this.applyVisibility();
     this.changed.notifyObservers();
     return m;
+    });
   }
 
   private createMarker() {
@@ -309,6 +337,7 @@ export class Tools {
   }
 
   removeMeasurement(m: Measurement) {
+    return this.edit(() => {
     m.line.dispose();
     m.markers.forEach((mk) => {
       this.editor.overlays.delete(mk);
@@ -318,11 +347,14 @@ export class Tools {
     this.measurements = this.measurements.filter((x) => x !== m);
     if (this.active === m) this.active = null;
     this.changed.notifyObservers();
+    });
   }
 
   clearMeasurements() {
+    return this.edit(() => {
     for (const m of [...this.measurements]) this.removeMeasurement(m);
     this.cancelPending();
+    });
   }
 
   setActive(m: Measurement | null) {
@@ -331,9 +363,11 @@ export class Tools {
   }
 
   setSurface(m: Measurement, on: boolean) {
+    return this.edit(() => {
     m.surface = on;
     this.computeSurface(m);
     this.changed.notifyObservers();
+    });
   }
 
   private computeSurface(m: Measurement) {
@@ -450,6 +484,7 @@ export class Tools {
   // ---------- Guides ----------
 
   addGuide(axis: Axis, value?: number) {
+    return this.edit(() => {
     const sel = this.editor.selected;
     if (value === undefined) {
       if (sel && sel.kind !== 'light') value = this.editor.boundsOf(sel)[axis === 'y' ? 'max' : 'center'][axis];
@@ -462,6 +497,7 @@ export class Tools {
     this.applyVisibility();
     this.changed.notifyObservers();
     return g;
+    });
   }
 
   /** Guide geometry is built at unit size and scaled to the scene in setGuideValue(). */
@@ -581,18 +617,22 @@ export class Tools {
 
   /** Puts the guide at the bottom, center or top (min/center/max) of the selected object. */
   guideToSelection(g: Guide, edge: Edge) {
+    return this.edit(() => {
     const sel = this.editor.selected;
     if (!sel || sel.kind === 'light') return;
     this.setGuideValue(g, this.editor.boundsOf(sel)[edge][g.axis]);
     this.changed.notifyObservers();
+    });
   }
 
   removeGuide(g: Guide) {
+    return this.edit(() => {
     for (const m of g.node.getChildMeshes()) this.editor.overlays.delete(m);
     g.node.dispose();
     this.guides = this.guides.filter((x) => x !== g);
     if (this.activeGuide === g) this.activeGuide = null;
     this.changed.notifyObservers();
+    });
   }
 
   clearGuides() {
@@ -600,9 +640,11 @@ export class Tools {
   }
 
   setSmartGuides(on: boolean) {
+    return this.edit(() => {
     this.smartGuides = on;
     if (!on) this.clearSmartLines();
     this.changed.notifyObservers();
+    });
   }
 
   // ---------- Smart guides (snapping while moving) ----------
@@ -752,6 +794,9 @@ export class Tools {
   }
 
   load(json: ToolsJSON | undefined, entities: (Entity | null)[]) {
+    const wasLoading = this.loading;
+    this.loading = true;
+    try {
     this.clear();
     if (!json) return;
     this.unit = json.unit ?? 'm';
@@ -769,13 +814,18 @@ export class Tools {
     }
     this.active = null;
     this.changed.notifyObservers();
+    } finally { this.loading = wasLoading; }
   }
 
   clear() {
+    const wasLoading = this.loading;
+    this.loading = true;
+    try {
     this.clearMeasurements();
     this.clearGuides();
     this.clearSmartLines();
     this.measureMode = false;
+    } finally { this.loading = wasLoading; }
   }
 }
 
