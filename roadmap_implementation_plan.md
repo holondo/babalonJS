@@ -390,7 +390,7 @@ A scene can look exactly as intended with presets, advanced materials, the user'
 
 ### P06 - Detect heavy models and protect phones
 
-**Status:** TODO
+**Status:** SUPERSEDED by `model_optimization_implementation_plan.md` (O01–O05).
 
 **Objective**
 
@@ -432,7 +432,7 @@ Import a heavy glTF (≥1 M triangles or 8K textures) on desktop and the S24 and
 
 ### P07 - Optimize heavy models on import
 
-**Status:** TODO
+**Status:** SUPERSEDED by `model_optimization_implementation_plan.md` (O01–O05).
 
 **Objective**
 
@@ -956,8 +956,8 @@ The app is usable beyond touch and mouse, and installable from the Play Store.
 | P03 | TODO | | [ ] | Material presets + advanced PBR |
 | P04 | TODO | | [ ] | Own textures |
 | P05 | TODO | | [ ] | Own HDR environments — Milestone M2 |
-| P06 | TODO | | [ ] | Heavy model detection |
-| P07 | TODO | | [ ] | Model optimization — needs D2 |
+| P06 | SUPERSEDED | | [ ] | Heavy model detection — see model_optimization_implementation_plan.md (O01) |
+| P07 | SUPERSEDED | | [ ] | Model optimization — see model_optimization_implementation_plan.md (O02–O05, D1) |
 | P08 | TODO | | [ ] | Smaller startup |
 | P09 | TODO | | [ ] | Video export — Milestone M3, needs D1 |
 | P10 | TODO | | [ ] | Poly Haven library — needs D3, D4 |

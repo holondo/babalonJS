@@ -80,7 +80,8 @@ GLTF2Export.GLBAsync=async (...args)=>{
 original.visible=false;original.meshes.forEach(m=>m.isVisible=false);
 try {
   await Editor.prototype.exportGLB.call({scene,entities:[original,restored,legacy,independent],helpers:new Set(),overlays:new Set(),
-    pose:{ikTarget:new TransformNode('ikTarget',scene)},rigger:{handle:new TransformNode('rigHandle',scene),difference:rigger.difference}});
+    pose:{ikTarget:new TransformNode('ikTarget',scene)},rigger:{handle:new TransformNode('rigHandle',scene),difference:rigger.difference},
+    optimizer:{preview(){}},textureOptimizer:{forExport:()=>({ktx2:[],restore(){}})},invalidate(){}});
 } finally {GLTF2Export.GLBAsync=actualExport;}
 const filteredBytes=Buffer.from(await filteredFile.glTFFiles['scene.glb'].arrayBuffer());
 const filtered=JSON.parse(filteredBytes.subarray(20,20+filteredBytes.readUInt32LE(12)).toString());

@@ -83,21 +83,29 @@ export function envelopeWeights(input: SkinInput, onProgress: (p: number) => voi
   const distances = new Float64Array(B);
   const distanceAt = visibleBoneDistances(points, welded);
   onProgress(0.1);
-  const dense = new Float32Array(n * B);
-  for (let i = 0; i < n; i++) {
-    if (i % 8192 === 0) onProgress(0.1 + 0.75 * i / n);
-    const x = points[i * 3];
-    const y = points[i * 3 + 1];
-    const z = points[i * 3 + 2];
+  // Dense meshes are sampled once per small surface cell (twice as fine as the smoothing below,
+  // so the result is the same): the visibility query is the expensive part.
+  const samples = n > ENVELOPE_SAMPLES ? sampleCells(points, normals, welded, height * 0.006) : null;
+  const m = samples ? samples.count : n;
+  const P = samples ? samples.points : points;
+  const N = samples ? samples.normals : normals;
+  const sampled = new Float32Array(m * B);
+  for (let i = 0; i < m; i++) {
+    if (i % 8192 === 0) onProgress(0.1 + 0.75 * i / m);
     let sum = 0;
-    distanceAt(x, y, z, normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2], bones, input.limbRoots, distances);
+    distanceAt(P[i * 3], P[i * 3 + 1], P[i * 3 + 2], N[i * 3], N[i * 3 + 1], N[i * 3 + 2], bones, input.limbRoots, distances);
     for (let k = 0; k < B; k++) {
       const d = distances[k];
       const w = 1 / Math.pow(d * d + 1e-8, 2);
-      dense[i * B + k] = w;
+      sampled[i * B + k] = w;
       sum += w;
     }
-    for (let k = 0; k < B; k++) dense[i * B + k] /= sum;
+    for (let k = 0; k < B; k++) sampled[i * B + k] /= sum;
+  }
+  let dense = sampled;
+  if (samples) {
+    dense = new Float32Array(n * B);
+    for (let i = 0; i < n; i++) dense.set(sampled.subarray(samples.cluster[i] * B, samples.cluster[i] * B + B), i * B);
   }
   onProgress(0.85);
   const smoothed = smoothOnProxy(dense, points, normals, input.triangles, map, B, height * 0.012, 16);
@@ -177,6 +185,40 @@ function smoothOnProxy(dense: Float32Array, points: Float32Array, normals: Float
   const out = new Float32Array(n * B);
   for (let i = 0; i < n; i++) out.set(w.subarray(cluster[i] * B, cluster[i] * B + B), i * B);
   return out;
+}
+
+/** Above this many vertices, envelope distances are sampled per surface cell. */
+const ENVELOPE_SAMPLES = 60000;
+
+/** One surface vertex per cell, the one closest to the cell's center (always on the surface). */
+function sampleCells(points: Float32Array, normals: Float32Array, triangles: Uint32Array, cell: number) {
+  const n = points.length / 3;
+  const { cluster, count } = surfaceClusters(points, normals, triangles, cell);
+  const center = new Float32Array(count * 3);
+  const size = new Float32Array(count);
+  for (let i = 0; i < n; i++) {
+    const c = cluster[i];
+    size[c]++;
+    for (let k = 0; k < 3; k++) center[c * 3 + k] += points[i * 3 + k];
+  }
+  for (let c = 0; c < count; c++) for (let k = 0; k < 3; k++) center[c * 3 + k] /= size[c];
+  const pick = new Int32Array(count).fill(-1);
+  const best = new Float32Array(count).fill(Infinity);
+  for (let i = 0; i < n; i++) {
+    const c = cluster[i];
+    const d = (points[i * 3] - center[c * 3]) ** 2 + (points[i * 3 + 1] - center[c * 3 + 1]) ** 2 + (points[i * 3 + 2] - center[c * 3 + 2]) ** 2;
+    if (d < best[c]) {
+      best[c] = d;
+      pick[c] = i;
+    }
+  }
+  const P = new Float32Array(count * 3);
+  const N = new Float32Array(count * 3);
+  for (let c = 0; c < count; c++) {
+    P.set(points.subarray(pick[c] * 3, pick[c] * 3 + 3), c * 3);
+    N.set(normals.subarray(pick[c] * 3, pick[c] * 3 + 3), c * 3);
+  }
+  return { cluster, count, points: P, normals: N };
 }
 
 /** Keeps the 4 strongest bones of each original vertex (dense weights are per welded vertex). */

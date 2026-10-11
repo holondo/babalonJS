@@ -8,6 +8,8 @@ import { forgetHumanoid, jointNodes } from '../rigging/humanoid';
 import type { HumanBone } from '../rigging/humanoid';
 import type { MotionSettings } from '../animation/motion';
 import type { RigData } from '../rigging/rigging';
+import type { OptimizeSettings } from '../optimize/optimizer';
+import type { TextureSettings } from '../optimize/textures';
 import { captureJoints } from '../animation/pose';
 import { ANIMATION_SOURCE } from './presets';
 import type { AssetRef, Editor, Entity, EnvSettings, LightType, ModelSource, PhotoSettings, PrimitiveType } from './editor';
@@ -64,6 +66,10 @@ interface EntityJSON {
   motion?: MotionSettings;
   /** Skeleton given in the app; `weights` is the path of its skin weights in the project. */
   rig?: RigData & { weights?: string };
+  /** Optimized variant; `data` is the path of the kept triangles in the project. */
+  optimization?: { settings: OptimizeSettings; error: number; meshes: number[]; data: string; bakes?: { mesh: number; size: number; path: string }[] };
+  /** Compressed or downscaled textures, stored in the project (no re-encoding on open). */
+  textureOptimization?: { settings: TextureSettings; textures: { index: number; format: 'ktx2' | 'png'; width: number; height: number; path: string }[] };
 }
 
 interface AssetJSON {
@@ -146,6 +152,33 @@ function entityToJSON(editor: Editor, e: Entity, files: Record<string, Blob>, in
   if (e.kind !== 'light') json.materials = editor.materialsOf(e).map(materialToJSON);
   if (e.boneMap) json.boneMap = { ...e.boneMap };
   if (e.motion) json.motion = { ...e.motion };
+  const optimized = editor.optimizer.serialize(e);
+  if (optimized) {
+    const path = `optimized/${index}.bin`;
+    files[path] = new Blob([optimized.data as Uint8Array<ArrayBuffer>]);
+    json.optimization = {
+      settings: optimized.settings,
+      error: optimized.error,
+      meshes: optimized.meshes,
+      data: path,
+      bakes: optimized.bakes.map((b, k) => {
+        const png = `optimized/${index}-normals-${k}.png`;
+        files[png] = new Blob([b.png as Uint8Array<ArrayBuffer>]);
+        return { mesh: b.mesh, size: b.size, path: png };
+      }),
+    };
+  }
+  const textures = editor.textureOptimizer.serialize(e);
+  if (textures) {
+    json.textureOptimization = {
+      settings: textures.settings,
+      textures: textures.textures.map((t, k) => {
+        const path = `optimized/${index}-texture-${k}.${t.format}`;
+        files[path] = new Blob([t.data as Uint8Array<ArrayBuffer>]);
+        return { index: t.index, format: t.format, width: t.width, height: t.height, path };
+      }),
+    };
+  }
   const rig = editor.rigger.serialize(e);
   if (rig) {
     const path = `rigs/${index}.bin`;
@@ -210,7 +243,8 @@ export async function toZip(snap: ProjectSnapshot): Promise<Blob> {
   const entries: Zippable = { 'project.json': [strToU8(JSON.stringify(snap.json, null, 2)), { level: 6 }] };
   for (const [path, blob] of Object.entries(snap.files)) {
     // Models and textures are usually compressed already: storing without recompressing is much faster
-    entries[path] = [new Uint8Array(await blob.arrayBuffer()), { level: 0 }];
+    // Data the app writes (rig weights, optimized triangles) compresses well; models and textures don't
+    entries[path] = [new Uint8Array(await blob.arrayBuffer()), { level: /^(rigs|optimized)\/.*\.bin$/.test(path) ? 6 : 0 }];
   }
   const data = zipSync(entries);
   return new Blob([data], { type: 'application/zip' });
@@ -300,6 +334,22 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
     if (ej.materials) {
       const mats = editor.materialsOf(entity);
       ej.materials.forEach((mj, i) => mats[i] && applyMaterial(mats[i], mj));
+    }
+    if (ej.optimization) {
+      const blob = files[ej.optimization.data];
+      const bakes = [];
+      for (const b of ej.optimization.bakes ?? []) if (files[b.path]) bakes.push({ mesh: b.mesh, size: b.size, png: new Uint8Array(await files[b.path].arrayBuffer()) });
+      const ok = blob ? editor.optimizer.restore(entity, ej.optimization, new Uint8Array(await blob.arrayBuffer()), bakes) : false;
+      if (!ok) missing.add(tr('Optimized version of {name}', { name: ej.name }));
+    }
+    if (ej.textureOptimization) {
+      const list = [];
+      for (const t of ej.textureOptimization.textures) {
+        const blob = files[t.path];
+        if (blob) list.push({ ...t, data: new Uint8Array(await blob.arrayBuffer()) });
+      }
+      if (list.length === ej.textureOptimization.textures.length) editor.textureOptimizer.restore(entity, ej.textureOptimization.settings, list);
+      else missing.add(tr('Optimized textures of {name}', { name: ej.name }));
     }
     if (ej.rig) {
       try {

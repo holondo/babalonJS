@@ -67,6 +67,8 @@ export default defineConfig({
       workbox: {
         importScripts: ['share-target.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,webp,svg,wasm}'],
+        // The texture encoder (3 MB) is only needed when optimizing textures: cached on first use
+        globIgnores: ['**/basis_encoder*.wasm'],
         // Babylon.js is one big chunk; precache it so the app works offline
         maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
         navigateFallback: 'index.html',
@@ -90,6 +92,11 @@ export default defineConfig({
               expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 60 },
               cacheableResponse: { statuses: [0, 200] },
             },
+          },
+          {
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/basis_encoder[^/]*\.wasm$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: { cacheName: 'encoders', expiration: { maxEntries: 4 }, cacheableResponse: { statuses: [200] } },
           },
           {
             // Built-in animation clips and the Mannequin sample: downloaded on first use, then offline

@@ -45,7 +45,7 @@ import { JointOverlay } from './jointOverlay';
 import { skeletonsOf } from '../rigging/humanoid';
 import type { ARMode } from '../ar/ar';
 import type { GyroControl } from '../device/gyro';
-import { saveAndOfferShare } from '../core/files';
+import { saveAndOfferShare, timestampedName } from '../core/files';
 import { LANGS, getLang, locale, setLang, tr } from '../core/i18n';
 import type { Lang } from '../core/i18n';
 import { button, chips, h, icon, iconButton, menuItem, segmented } from './dom';
@@ -56,6 +56,10 @@ import { AnimatePanel } from './panels/animate';
 import { PosePanel } from './panels/pose';
 import { RigPanel } from './panels/rig';
 import { ToolsPanel } from './panels/tools';
+import { OptimizePanel } from './panels/optimize';
+import { analyzeScene, deviceBudget, formatBytes, overBudget } from '../optimize/analysis';
+import { DEFAULT_OPTIMIZE } from '../optimize/optimizer';
+import type { Observer } from '@babylonjs/core';
 import { LightPanel } from './panels/light';
 import { PhotoMode } from './photo';
 import { MeasureLabels } from './measureLabels';
@@ -82,6 +86,7 @@ export class UI {
   readonly rigUI = new RigPanel(this);
   readonly toolsUI = new ToolsPanel(this);
   readonly lightUI = new LightPanel(this);
+  readonly optimizeUI = new OptimizePanel(this);
   readonly photoUI = new PhotoMode(this);
   readonly labelsUI = new MeasureLabels(this);
 
@@ -172,6 +177,10 @@ export class UI {
         return this.renderAll();
       }
       if (kind === 'tool') return this.renderSelbar();
+      if (kind === 'optimize') {
+        if (this.tab === 'objects') this.renderPanel();
+        return;
+      }
       if (kind === 'animation' || kind === 'pose' || kind === 'rig') {
         if (editor.rigger.fellBack) {
           editor.rigger.fellBack = false;
@@ -280,11 +289,52 @@ export class UI {
 
   private async enterAR() {
     if (!this.ar || !this.arOverlay) return;
+    if (!this.arRestore && (await this.lightenForAR())) return;
     try {
       await this.ar.enter(this.arOverlay);
     } catch (e) {
       this.toast(tr('Could not start AR: {error}', { error: errorMessage(e) }), 'error');
     }
+  }
+
+  /** Puts back the models lightened for the current AR session. */
+  private arRestore: (() => void) | null = null;
+
+  /**
+   * A scene too heavy for this device is offered a lighter copy for AR (the project isn't
+   * changed). True when the user must tap again to start AR: the browser asks for a fresh tap.
+   */
+  private async lightenForAR() {
+    const ed = this.editor;
+    const cost = analyzeScene(ed);
+    const budget = deviceBudget();
+    if (!overBudget(cost, budget)) return false;
+    const models = ed.entities.filter((e) => e.kind === 'model' && e.visible && !e.optimization && !ed.optimizer.blocker(e));
+    if (!models.length || !confirm(tr('This scene is heavy for this device and AR may stutter. Use a lighter copy in AR? Your project stays as it is.'))) return false;
+    const ratio = Math.min(0.5, Math.max(0.02, (budget.triangles / Math.max(1, cost.triangles)) * 0.9));
+    let restore: (() => void) | null = null;
+    await this.run(async () => {
+      restore = await ed.optimizer.applyForSession(models, { ...DEFAULT_OPTIMIZE, ratio });
+    });
+    if (!restore) return false;
+    this.arRestore = restore;
+    let entered = false;
+    const watch = this.ar!.changed.add(() => {
+      if (this.ar!.active) entered = true;
+      else if (entered) this.endLightAR(watch);
+    });
+    this.toast(tr('Lighter copy ready.'), 'info', { label: tr('Start AR'), run: () => this.enterAR() }, 15000);
+    // Not entered after all: back to the full models
+    setTimeout(() => {
+      if (!entered) this.endLightAR(watch);
+    }, 16000);
+    return true;
+  }
+
+  private endLightAR(watch: Observer<void> | null) {
+    this.ar?.changed.remove(watch);
+    this.arRestore?.();
+    this.arRestore = null;
   }
 
   /** Install prompt saved from `beforeinstallprompt` (Chrome/Edge/Android). */
@@ -300,6 +350,7 @@ export class UI {
     if (project) return this.openProjectFile(project);
     try {
       await this.editor.addFiles(files);
+      this.optimizeUI.checkHeavy(this.editor.selected);
     } catch (e) {
       this.toast(errorMessage(e), 'error');
     }
@@ -446,7 +497,8 @@ export class UI {
       item(FilePlus, tr('New project'), '', () => this.newProject()),
       item(FolderOpen, tr('Open project…'), 'Ctrl+O', () => this.projectInput.click()),
       item(Save, tr('Save project'), 'Ctrl+S', () => this.saveProject()),
-      item(Download, tr('Export scene .glb'), '', () => this.exportGLB()),
+      item(Download, tr('Export scene .glb'), '', () => this.exportGLB(false)),
+      item(Download, tr('Export compact .glb'), '', () => this.exportGLB(true)),
       ...(this.installPrompt
         ? [
             item(MonitorDown, tr('Install app'), '', () => {
@@ -511,7 +563,7 @@ export class UI {
 
   private setupAutosave() {
     this.editor.changed.add((kind) => {
-      if (kind === 'entities' || kind === 'transform' || kind === 'env' || kind === 'history' || kind === 'animation' || kind === 'pose' || kind === 'rig') this.scheduleAutosave();
+      if (kind === 'entities' || kind === 'transform' || kind === 'env' || kind === 'history' || kind === 'animation' || kind === 'pose' || kind === 'rig' || kind === 'optimize') this.scheduleAutosave();
     });
     // Material tweaks and the like don't emit editor events: save when a control is released
     this.panel.addEventListener('change', () => this.scheduleAutosave());
@@ -549,16 +601,16 @@ export class UI {
     this.toast(message, 'info', share ? { label: tr('Share'), run: share } : undefined, 7000);
   }
 
-  private async exportGLB() {
-    try {
-      await this.editor.exportGLB();
-      this.toast(tr('Scene exported as scene.glb'));
-    } catch (e) {
-      this.toast(errorMessage(e), 'error');
-    }
+  /** Compact: optimized models, compressed geometry and textures (smaller file, same look). */
+  private async exportGLB(compact: boolean) {
+    await this.run(async () => {
+      const blob = await this.editor.exportGLB(compact);
+      const name = timestampedName(compact ? 'scene-compact' : 'scene', 'glb');
+      this.deliver(blob, name, tr('Scene exported as {name} ({size})', { name, size: formatBytes(blob.size) }));
+    });
   }
 
-  private openTab(tab: Tab | null) {
+  openTab(tab: Tab | null) {
     this.tab = this.tab === tab ? null : tab;
     this.renderDock();
     this.renderPanel();
@@ -725,6 +777,7 @@ export class UI {
           ...(this.editor.rigger.active && this.editor.rigger.entity === e
             ? [{ id: 'rig', label: tr('Rig') }]
             : skeletonsOf(e).length ? [{ id: 'pose', label: tr('Pose') }] : this.editor.rigger.canRig(e) ? [{ id: 'rig', label: tr('Rig') }] : []),
+          ...(e.kind === 'model' ? [{ id: 'optimize', label: tr('Optimize') }] : []),
         ];
       }
       case 'light':
@@ -756,6 +809,7 @@ export class UI {
         if (part === 'animate') return this.animateUI.animatePanel();
         if (part === 'pose') return this.poseUI.posePanel();
         if (part === 'rig') return this.rigUI.rigPanel();
+        if (part === 'optimize') return this.optimizeUI.optimizePanel();
         return this.objectsUI.scenePanel();
       case 'light':
         return part === 'environment' ? this.lightUI.envPanel() : this.lightUI.lightsPanel();

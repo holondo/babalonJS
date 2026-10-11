@@ -51,6 +51,10 @@ import { Animator } from '../animation/animation';
 import { Poser, captureJoints, restoreJoints } from '../animation/pose';
 import { Motion } from '../animation/motion';
 import { Rigger, updateHelperBones } from '../rigging/rigging';
+import { ModelOptimizer } from '../optimize/optimizer';
+import type { Optimization } from '../optimize/optimizer';
+import { TextureOptimizer } from '../optimize/textures';
+import type { TextureOptimization } from '../optimize/textures';
 import type { RigState } from '../rigging/rigging';
 import type { MotionSettings } from '../animation/motion';
 import type { ClipState } from '../animation/animation';
@@ -68,7 +72,7 @@ export type Tool = 'move' | 'rotate' | 'scale';
 export type LightType = 'point' | 'spot' | 'directional';
 export type PrimitiveType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | 'plane';
 export type GroundMode = 'shadow' | 'solid' | 'none';
-export type ChangeKind = 'selection' | 'entities' | 'transform' | 'history' | 'env' | 'photo' | 'tool' | 'animation' | 'pose' | 'rig';
+export type ChangeKind = 'selection' | 'entities' | 'transform' | 'history' | 'env' | 'photo' | 'tool' | 'animation' | 'pose' | 'rig' | 'optimize';
 
 export interface Entity {
   id: number;
@@ -89,6 +93,10 @@ export interface Entity {
   motion?: MotionSettings;
   /** Skeleton given in the app (manual rigging). */
   rig?: RigState;
+  /** Optimized variant (fewer triangles), reversible. */
+  optimization?: Optimization;
+  /** Compressed or downscaled textures, reversible. */
+  textureOptimization?: TextureOptimization;
   castShadows: boolean;
   visible: boolean;
   light?: ShadowLight;
@@ -307,6 +315,9 @@ export class Editor {
   readonly motions = new Motion(this);
   /** Manual rigging of static humanoids. */
   readonly rigger = new Rigger(this);
+  /** Optimized variants of heavy models. */
+  readonly optimizer = new ModelOptimizer(this);
+  readonly textureOptimizer = new TextureOptimizer(this);
   /** Other selected objects besides `selected` (which is the reference for alignment). */
   extra: Entity[] = [];
   /** Touch: taps add to / remove from the selection instead of replacing it. */
@@ -1069,6 +1080,8 @@ export class Editor {
         select: false,
       });
     } else return;
+    if (entity.optimization && !entity.optimization.session) this.optimizer.copy(entity, copy);
+    if (entity.textureOptimization) this.textureOptimizer.copy(entity, copy);
     if (entity.rig) this.rigger.copy(entity, copy);
     if (entity.addedClips?.length) this.clips.copy(entity, copy);
     if (entity.motion) this.motions.set(copy, { ...entity.motion }, false);
@@ -1712,24 +1725,45 @@ export class Editor {
     }
   }
 
-  async exportGLB() {
+  /**
+   * The scene as a GLB. Compact: optimized geometry and textures where the user optimized,
+   * meshopt-compressed (loaded on demand); otherwise the original models, as they were loaded.
+   */
+  async exportGLB(compact = false): Promise<Blob> {
     this.rigger.difference.clear();
     for (const e of this.entities) if (e.rig) updateHelperBones(e.rig);
     const exclude = new Set<Node>([this.ground, this.grid, ...this.helpers, ...this.overlays]);
-    for (const e of this.entities) if (!e.visible) {
-      exclude.add(e.root);
-      for (const node of e.root.getDescendants()) exclude.add(node);
+    for (const e of this.entities) {
+      if (!e.visible) {
+        exclude.add(e.root);
+        for (const node of e.root.getDescendants()) exclude.add(node);
+      }
+      // Levels of detail are chosen by the viewer from the distance: not part of the file
+      for (const v of e.optimization?.meshes ?? []) for (const lod of v.lodMeshes) exclude.add(lod);
     }
     if (this.skybox) exclude.add(this.skybox);
     exclude.add(this.pose.ikTarget);
     exclude.add(this.rigger.handle);
-    const data = await GLTF2Export.GLBAsync(this.scene, 'scene', {
-      shouldExportNode: (node) => {
-        if (exclude.has(node) || node.name === 'ambient') return false;
-        return node.isEnabled();
-      },
-    });
-    data.downloadFiles();
+    const original = compact ? [] : this.entities.filter((e) => e.optimization);
+    for (const e of original) this.optimizer.preview(e, true);
+    const textures = this.textureOptimizer.forExport(compact);
+    let glb: Blob;
+    try {
+      const data = await GLTF2Export.GLBAsync(this.scene, 'scene', {
+        shouldExportNode: (node) => {
+          if (exclude.has(node) || node.name === 'ambient') return false;
+          return node.isEnabled();
+        },
+      });
+      glb = data.files['scene.glb'] as Blob;
+    } finally {
+      textures.restore();
+      for (const e of original) this.optimizer.preview(e, false);
+      this.invalidate();
+    }
+    if (!compact) return glb;
+    const { compactGLB } = await import('../optimize/export');
+    return new Blob([(await compactGLB(new Uint8Array(await glb.arrayBuffer()), textures.ktx2)) as Uint8Array<ArrayBuffer>], { type: 'model/gltf-binary' });
   }
 }
 

@@ -12,7 +12,7 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 ```
 
 - There is no test runner. Verify every change with `npm run build` and in a browser (see [Verifying changes](#verifying-changes)).
-- Rigging has focused checks (Node, no browser): `node scripts/check-leg-junction.mjs`, `check-skin-treatments.mjs`, `check-helper-bones.mjs`, `check-skin-visibility.mjs`. `node scripts/check-rig-deformation.mjs <model.glb> <envelope|heat> [comparison]` audits final deformation on a model you provide (meshopt-compressed GLB); no model is bundled for it.
+- Rigging has focused checks (Node, no browser): `node scripts/check-leg-junction.mjs`, `check-skin-treatments.mjs`, `check-helper-bones.mjs`, `check-skin-visibility.mjs`. Optimization: `node scripts/check-simplify.mjs`. `node scripts/check-rig-deformation.mjs <model.glb> <envelope|heat> [comparison]` audits final deformation on a model you provide (meshopt-compressed GLB); no model is bundled for it.
 - GitHub Pages deploys on every push to `main` (`.github/workflows/deploy.yml`). The build runs with `BASE_PATH=/<repo>/`.
 
 ## Code map
@@ -27,7 +27,7 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | | `files.ts` | Saving, sharing and receiving files (share target) |
 | | `i18n.ts` | Translations |
 | `ui/` | `ui.ts` | The shell: top bar, dock, selection bar, menus, view controls, panel frame, project actions, autosave, keys |
-| | `panels/*.ts` | One class per panel: `add`, `objects`, `material`, `animate`, `pose`, `rig`, `tools`, `light` |
+| | `panels/*.ts` | One class per panel: `add`, `objects`, `material`, `animate`, `pose`, `rig`, `optimize`, `tools`, `light` |
 | | `photo.ts` | Photo mode: its panel, on-screen controls, aspect frame and capture |
 | | `measureLabels.ts` | Measurement and guide labels over the 3D view |
 | | `jointOverlay.ts` | Joint handles over the 3D view (posing, rigging) |
@@ -44,11 +44,16 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | | `weights.ts`, `weights.worker.ts`, `skinMath.ts`, `skinVisibility.ts` | Skin weights: envelope and heat diffusion (in a Web Worker) |
 | | `skinTreatments.ts` | Optional treatments where limbs meet the trunk (direct, trunk protection, helper bones) |
 | | `deformationMap.ts` | Difference map between rig treatments (final skinned positions) |
+| `optimize/` | `analysis.ts` | Model and scene cost (triangles, texture memory) and device budgets |
+| | `optimizer.ts`, `simplify.ts`, `simplify.worker.ts` | Triangle reduction (meshoptimizer, in a Web Worker), non-destructive variants, levels of detail, AR session copies (`ModelOptimizer`) |
+| | `bake.ts`, `bake.worker.ts` | Normal map baked from the original onto the optimized mesh |
+| | `textures.ts`, `textures.worker.ts` | KTX2 compression / downscaling of a model's textures (`TextureOptimizer`) |
+| | `export.ts` | Compact GLB export (glTF-Transform, loaded on demand) |
 | `ar/` | `ar.ts`, `arHud.ts` | WebXR AR session / its on-camera overlay |
 | `tools/` | `tools.ts` | Measurements (incl. along-the-surface path), guides, smart guides, alignment |
 | `device/` | `gyro.ts`, `systemBars.ts` | Gyro mode; status bar / title bar color, desktop title-bar overlay |
 
-Outside `src/`: `vite.config.ts` and `public/share-target.js` (PWA manifest, offline cache, file handlers, share target); `design/` (full-size source artwork, not shipped; `public/icons` and `public/brand` are generated from it); `public/animations`, `public/models` and `scripts/build-animation-library.mjs` (bundled CC0 clips and Mannequins, see `docs/animation_sources.md` and `THIRD_PARTY_LICENSES.md`); `scripts/check-*.mjs` (focused rigging checks).
+Outside `src/`: `vite.config.ts` and `public/share-target.js` (PWA manifest, offline cache, file handlers, share target); `design/` (full-size source artwork, not shipped; `public/icons` and `public/brand` are generated from it); `public/animations`, `public/models` and `scripts/build-animation-library.mjs` (bundled CC0 clips and Mannequins, see `docs/animation_sources.md` and `THIRD_PARTY_LICENSES.md`); `scripts/check-*.mjs` (focused rigging and simplification checks).
 
 Keep these splits:
 - `core/editor.ts` must not touch the DOM UI; the UI talks to the editor through its methods and the `changed` observable. Domain modules (`animation/`, `rigging/`, `tools/`, `ar/ar.ts`) follow the same rule.

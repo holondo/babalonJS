@@ -87,6 +87,7 @@ Camera: drag to orbit, pinch or scroll to zoom, two fingers (or right mouse butt
 - `core/`: the editor core with no UI (scene, camera, loading, selection, gizmos, lights, shadows, environment, post-processing, capture, export, history), projects and autosave, shared presets, files and translations.
 - `ui/`: the interface in plain DOM. `ui.ts` is the shell (bars, dock, menus); each panel is in `ui/panels/`; `photo.ts` is photo mode; `dom.ts` has the reusable components; `style.css` is the dark glass theme with the phone layout below 760px.
 - `animation/`: clip playback, simple motion, posing (FK, IK, mirror, presets) and playing clips made for other skeletons.
+- `optimize/`: model optimization: cost and budgets, triangle reduction (meshoptimizer, in a Web Worker), levels of detail, baked normal maps, KTX2 texture compression and the compact GLB export (see [docs/model_optimization.md](docs/model_optimization.md)).
 - `rigging/`: humanoid bone detection, the standard skeleton, manual rigging, joint finding and skin weights (heat diffusion in a Web Worker).
 - `ar/`: augmented reality with WebXR and its on-camera controls.
 - `tools/`: measurements (including the along-the-surface path), guides, smart guides and alignment.
@@ -104,4 +105,4 @@ Copyright (C) 2026 Guilherme Holanda Sanches
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE).
 
-Third-party libraries keep their own licenses: Babylon.js (Apache-2.0), fflate (MIT), Lucide icons (ISC). The bundled animations and Mannequin models are CC0 (Universal Animation Library by Quaternius), listed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Other sample models and HDR environments are loaded at runtime from the Babylon.js asset CDN and are not distributed with this repository.
+Third-party libraries keep their own licenses: Babylon.js (Apache-2.0), fflate (MIT), Lucide icons (ISC), meshoptimizer (MIT), ktx2-encoder (MIT) with the Basis Universal encoder (Apache-2.0), ktx-parse (MIT) and glTF-Transform (MIT). The bundled animations and Mannequin models are CC0 (Universal Animation Library by Quaternius), listed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Other sample models and HDR environments are loaded at runtime from the Babylon.js asset CDN and are not distributed with this repository.
