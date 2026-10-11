@@ -1,20 +1,21 @@
-import {
-  Color3,
-  CreateScreenshotUsingRenderTargetAsync,
-  RenderTargetTexture,
-  ShadowGenerator,
-  Mesh,
-  MeshBuilder,
-  Observable,
-  Quaternion,
-  StandardMaterial,
-  TransformNode,
-  Vector3,
-  WebXRDefaultExperience,
-  WebXRFeatureName,
-  WebXRSessionManager,
-} from '@babylonjs/core';
-import type { BaseTexture, IWebXRHitResult, Node, ShadowLight, WebXRHitTest, WebXRRawCameraAccess } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color.js';
+import { CreateScreenshotUsingRenderTargetAsync } from '@babylonjs/core/Misc/screenshotTools.js';
+import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTargetTexture.js';
+import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.js';
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
+import { Observable } from '@babylonjs/core/Misc/observable.js';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
+import { WebXRDefaultExperience } from '@babylonjs/core/XR/webXRDefaultExperience.js';
+import { WebXRFeatureName } from '@babylonjs/core/XR/webXRFeaturesManager.js';
+import { WebXRSessionManager } from '@babylonjs/core/XR/webXRSessionManager.js';
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
+import type { IWebXRHitResult, WebXRHitTest } from '@babylonjs/core/XR/features/WebXRHitTest.js';
+import type { Node } from '@babylonjs/core/node.js';
+import type { ShadowLight } from '@babylonjs/core/Lights/shadowLight.js';
+import type { WebXRRawCameraAccess } from '@babylonjs/core/XR/features/WebXRRawCameraAccess.js';
 import { createLight, createShadowGenerator } from '../core/editor';
 import type { Editor } from '../core/editor';
 import { PHOTO_FILTERS, filterToCanvas, findLightPreset, presetIntensity } from '../core/presets';

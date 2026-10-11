@@ -1,5 +1,7 @@
-import { Texture } from '@babylonjs/core';
-import type { BaseTexture, Material, Scene } from '@babylonjs/core';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture.js';
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
+import type { Material } from '@babylonjs/core/Materials/material.js';
+import type { Scene } from '@babylonjs/core/scene.js';
 import type { Editor, Entity } from '../core/editor';
 import { tr } from '../core/i18n';
 import { textureBytes } from './analysis';

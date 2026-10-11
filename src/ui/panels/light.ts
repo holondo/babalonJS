@@ -1,8 +1,10 @@
 import { editControls } from '../editControls';
 import { lightToJSON, applyLight } from '../../core/state';
 import { Crosshair, Lightbulb, Sun, Trash2 } from 'lucide';
-import { Color3, StandardMaterial } from '@babylonjs/core';
-import type { SpotLight, PointLight } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color.js';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
+import type { SpotLight } from '@babylonjs/core/Lights/spotLight.js';
+import type { PointLight } from '@babylonjs/core/Lights/pointLight.js';
 import { ENV_PRESETS } from '../../core/editor';
 import type { Entity, GroundMode } from '../../core/editor';
 import { LIGHT_PRESETS } from '../../core/presets';

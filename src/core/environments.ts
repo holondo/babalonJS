@@ -1,5 +1,6 @@
 import { CubeTexture } from '@babylonjs/core/Materials/Textures/cubeTexture.js';
-import type { BaseTexture, Scene } from '@babylonjs/core';
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
+import type { Scene } from '@babylonjs/core/scene.js';
 import { tr } from './i18n';
 
 export interface EnvironmentAsset { file: File; texture: BaseTexture }

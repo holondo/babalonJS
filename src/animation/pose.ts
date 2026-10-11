@@ -1,4 +1,5 @@
-import { Matrix, Quaternion, TransformNode, Vector3 } from '@babylonjs/core';
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import { BONE_PARENT, HUMAN_BONES, boneDirection, humanoidOf, jointNodes, jointPosition, mirrorBone, skeletonsOf, worldMatrix } from '../rigging/humanoid';
 import type { HumanBone, HumanoidMap } from '../rigging/humanoid';
 import type { Editor, Entity } from '../core/editor';

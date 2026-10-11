@@ -1,5 +1,8 @@
-import { Geometry, Mesh, VertexData } from '@babylonjs/core';
-import type { BaseTexture, Material } from '@babylonjs/core';
+import { Geometry } from '@babylonjs/core/Meshes/geometry.js';
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js';
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
+import type { Material } from '@babylonjs/core/Materials/material.js';
 import type { Editor, Entity } from '../core/editor';
 import { tr } from '../core/i18n';
 import { simplifyMeshes } from './simplify';

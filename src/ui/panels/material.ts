@@ -2,7 +2,10 @@ import { USER_TEXTURE_SLOTS, textureStates, applyTextureStates, userTextureFile 
 import { MATERIAL_PRESETS } from '../../core/presets';
 import { editControls } from '../editControls';
 import { materialToJSON, applyMaterial } from '../../core/state';
-import { Color3, Material, PBRMaterial, StandardMaterial } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color.js';
+import { Material } from '@babylonjs/core/Materials/material.js';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial.js';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { tr } from '../../core/i18n';
 import { button, h, hint, row, section, select } from '../dom';
 import type { UI } from '../ui';

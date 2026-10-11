@@ -1,5 +1,6 @@
-import { Animation, TransformNode } from '@babylonjs/core';
-import type { Animatable } from '@babylonjs/core';
+import { Animation } from '@babylonjs/core/Animations/animation.js';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
+import type { Animatable } from '@babylonjs/core/Animations/animatable.core.js';
 import type { Editor, Entity } from '../core/editor';
 
 /**

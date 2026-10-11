@@ -1,7 +1,11 @@
 import { textureStates, applyTextureStates } from './materialTextures';
 import type { TextureStates } from './materialTextures';
-import { Color3, Material, PBRMaterial, StandardMaterial } from '@babylonjs/core';
-import type { PointLight, SpotLight } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color.js';
+import { Material } from '@babylonjs/core/Materials/material.js';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial.js';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
+import type { PointLight } from '@babylonjs/core/Lights/pointLight.js';
+import type { SpotLight } from '@babylonjs/core/Lights/spotLight.js';
 import type { Editor, Entity, LightType } from './editor';
 
 export interface MaterialJSON {

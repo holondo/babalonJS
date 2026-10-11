@@ -1,5 +1,5 @@
 import { ArrowDownToLine, Eye, EyeOff, RotateCcw, Trash2 } from 'lucide';
-import { Quaternion, Vector3 } from '@babylonjs/core';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { Entity } from '../../core/editor';
 import { locale, tr } from '../../core/i18n';
 import { button, h, hint, icon, iconButton, numberInput, row, section, slider, toggle } from '../dom';

@@ -1,5 +1,10 @@
-import { Color3, Mesh, ShaderMaterial, Vector3, VertexBuffer } from '@babylonjs/core';
-import type { AbstractMesh, Material } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color.js';
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial.js';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js';
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
+import type { Material } from '@babylonjs/core/Materials/material.js';
 import type { Editor, Entity } from '../core/editor';
 import { worldMatrix } from './humanoid';
 import { tr } from '../core/i18n';

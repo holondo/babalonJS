@@ -1,19 +1,18 @@
-import {
-  Color3,
-  CreateGreasedLine,
-  GreasedLineMeshMaterialType,
-  Matrix,
-  Mesh,
-  MeshBuilder,
-  Observable,
-  Plane,
-  PointerEventTypes,
-  StandardMaterial,
-  TransformNode,
-  Vector3,
-  VertexBuffer,
-} from '@babylonjs/core';
-import type { AbstractMesh, GreasedLineBaseMesh, PointerInfo } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color.js';
+import { CreateGreasedLine } from '@babylonjs/core/Meshes/Builders/greasedLineBuilder.js';
+import { GreasedLineMeshMaterialType } from '@babylonjs/core/Materials/GreasedLine/greasedLineMaterialInterfaces.js';
+import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
+import { Observable } from '@babylonjs/core/Misc/observable.js';
+import { Plane } from '@babylonjs/core/Maths/math.plane.js';
+import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js';
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
+import type { GreasedLineBaseMesh } from '@babylonjs/core/Meshes/GreasedLine/greasedLineBaseMesh.js';
+import type { PointerInfo } from '@babylonjs/core/Events/pointerEvents.js';
 import type { Editor, Entity } from '../core/editor';
 
 export type Unit = 'm' | 'cm' | 'mm' | 'in' | 'ft';

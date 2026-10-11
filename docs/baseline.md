@@ -12,3 +12,7 @@ Reference: c959902, before roadmap implementation. Windows desktop, installed de
 | S24 heavy-model FPS / memory / 100 MB glTF survival | Pending representative model and physical device |
 
 Desktop/headless timings are not a substitute for phone measurements. No resolution or quality reductions were applied. Run the published build cold and cached on the S24, orbit the same heavy model, and record its source, size and triangle count when collecting device results.
+
+## After P08
+
+Main entry: 1,077.92 kB (278.16 kB gzip). PWA precache: 515 entries, 7,433.53 KiB. Deep Babylon imports and lazy AR/GLB export preserve their registrations. Headless production Edge loaded and animated the bundled Mannequin, captured a PNG, exported GLB, then reloaded offline successfully after service-worker activation. Phone first-frame timing remains pending.

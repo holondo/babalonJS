@@ -3,52 +3,47 @@ import type { EnvironmentAsset } from './environments';
 import { loadUserTexture, textureStates, applyTextureStates, copyUserTextures, clearUserTextures } from './materialTextures';
 import type { TextureSlot } from './materialTextures';
 import { materialToJSON, applyMaterial } from './state';
-import {
-  AbstractMesh,
-  AnimationGroup,
-  ArcRotateCamera,
-  AssetContainer,
-  BackgroundMaterial,
-  BoundingBox,
-  Color3,
-  Color4,
-  CubeTexture,
-  DefaultRenderingPipeline,
-  DirectionalLight,
-  Engine,
-  FilesInputStore,
-  Frustum,
-  GizmoManager,
-  HemisphericLight,
-  ImageProcessingConfiguration,
-  LoadAssetContainerAsync,
-  Material,
-  Matrix,
-  Mesh,
-  MeshBuilder,
-  MultiMaterial,
-  Observable,
-  Plane,
-  PBRMaterial,
-  PointLight,
-  PointerDragBehavior,
-  PointerEventTypes,
-  Quaternion,
-  Scene,
-  SelectionOutlineLayer,
-  ShadowGenerator,
-  ShadowLight,
-  SpotLight,
-  StandardMaterial,
-  TransformNode,
-  Vector3,
-  Viewport,
-} from '@babylonjs/core';
-import type { BaseTexture, Node } from '@babylonjs/core';
+import { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
+import { AnimationGroup } from '@babylonjs/core/Animations/animationGroup.js';
+import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js';
+import { AssetContainer } from '@babylonjs/core/assetContainer.js';
+import { BackgroundMaterial } from '@babylonjs/core/Materials/Background/backgroundMaterial.js';
+import { BoundingBox } from '@babylonjs/core/Culling/boundingBox.js';
+import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js';
+import { CubeTexture } from '@babylonjs/core/Materials/Textures/cubeTexture.js';
+import { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline.js';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight.js';
+import { Engine } from '@babylonjs/core/Engines/engine.js';
+import { FilesInputStore } from '@babylonjs/core/Misc/filesInputStore.js';
+import { Frustum } from '@babylonjs/core/Maths/math.frustum.js';
+import { GizmoManager } from '@babylonjs/core/Gizmos/gizmoManager.js';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js';
+import { ImageProcessingConfiguration } from '@babylonjs/core/Materials/imageProcessingConfiguration.js';
+import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader.js';
+import { Material } from '@babylonjs/core/Materials/material.js';
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
+import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js';
+import { Observable } from '@babylonjs/core/Misc/observable.js';
+import { Plane } from '@babylonjs/core/Maths/math.plane.js';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial.js';
+import { PointLight } from '@babylonjs/core/Lights/pointLight.js';
+import { PointerDragBehavior } from '@babylonjs/core/Behaviors/Meshes/pointerDragBehavior.js';
+import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
+import { Scene } from '@babylonjs/core/scene.js';
+import { SelectionOutlineLayer } from '@babylonjs/core/Layers/selectionOutlineLayer.js';
+import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.js';
+import { ShadowLight } from '@babylonjs/core/Lights/shadowLight.js';
+import { SpotLight } from '@babylonjs/core/Lights/spotLight.js';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
+import { Viewport } from '@babylonjs/core/Maths/math.viewport.js';
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
+import type { Node } from '@babylonjs/core/node.js';
 import { registerBuiltInLoaders } from '@babylonjs/loaders/dynamic.js';
 import { GridMaterial } from '@babylonjs/materials/grid/gridMaterial.js';
 import { ShadowOnlyMaterial } from '@babylonjs/materials/shadowOnly/shadowOnlyMaterial.js';
-import { GLTF2Export } from '@babylonjs/serializers/glTF/2.0/glTFSerializer.js';
 import { tr } from './i18n';
 import { Tools } from '../tools/tools';
 import { findLightPreset, presetIntensity } from './presets';
@@ -1852,6 +1847,7 @@ export class Editor {
     const textures = this.textureOptimizer.forExport(compact);
     let glb: Blob;
     try {
+      const { GLTF2Export } = await import('@babylonjs/serializers/glTF/2.0/glTFSerializer.js');
       const data = await GLTF2Export.GLBAsync(this.scene, 'scene', {
         shouldExportNode: (node) => {
           if (exclude.has(node) || node.name === 'ambient') return false;

@@ -59,7 +59,7 @@ import { ToolsPanel } from './panels/tools';
 import { OptimizePanel } from './panels/optimize';
 import { analyzeScene, deviceBudget, formatBytes, overBudget } from '../optimize/analysis';
 import { DEFAULT_OPTIMIZE } from '../optimize/optimizer';
-import type { Observer } from '@babylonjs/core';
+import type { Observer } from '@babylonjs/core/Misc/observable.js';
 import { LightPanel } from './panels/light';
 import { PhotoMode } from './photo';
 import { MeasureLabels } from './measureLabels';

@@ -1,5 +1,8 @@
-import { AnimationGroup, AnimatorAvatar, Matrix, Quaternion, Vector3 } from '@babylonjs/core';
-import type { AssetContainer, TransformNode } from '@babylonjs/core';
+import { AnimationGroup } from '@babylonjs/core/Animations/animationGroup.js';
+import { AnimatorAvatar } from '@babylonjs/core/Animations/animatorAvatar.js';
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import type { AssetContainer } from '@babylonjs/core/assetContainer.js';
+import type { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import { BONE_TIP, detectHumanoid, humanoidOf, jointNodes, jointPosition, skeletonsOf, worldMatrix } from '../rigging/humanoid';
 import type { Detection, HumanBone, HumanoidMap } from '../rigging/humanoid';
 import { aimBone, bonesTopDown, captureJoints, characterFrame, restoreJoints, rotateJointWorld } from './pose';

@@ -3,8 +3,8 @@ import { materialToJSON, applyMaterial, lightToJSON, applyLight } from './state'
 import type { MaterialJSON, LightJSON } from './state';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { Zippable } from 'fflate';
-import { Quaternion, Vector3 } from '@babylonjs/core';
-import type { AssetContainer } from '@babylonjs/core';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import type { AssetContainer } from '@babylonjs/core/assetContainer.js';
 import { tr } from './i18n';
 import type { ToolsJSON } from '../tools/tools';
 import { forgetHumanoid, jointNodes } from '../rigging/humanoid';
