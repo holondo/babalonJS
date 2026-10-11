@@ -282,8 +282,9 @@ export class Editor {
   private arSaved: EnvSettings | null = null;
 
   /** No editing helpers on screen (photo mode or AR). */
+  private thumbnailMode = false;
   get cleanView() {
-    return this.photoMode || this.arMode;
+    return this.photoMode || this.arMode || this.thumbnailMode;
   }
 
   get groundMesh() {
@@ -1731,6 +1732,24 @@ export class Editor {
     }
     this.applyCleanView();
     this.emit('photo');
+  }
+
+  async captureThumbnail(size = 240): Promise<Blob> {
+    const { CreateScreenshotUsingRenderTargetAsync } = await import('@babylonjs/core/Misc/screenshotTools.js');
+    this.thumbnailMode = true;
+    this.applyCleanView();
+    const overlays = [...this.overlays].map((mesh) => ({ mesh, enabled: mesh.isEnabled(false) }));
+    overlays.forEach(({ mesh }) => mesh.setEnabled(false));
+    try {
+      this.invalidate();
+      const data = await CreateScreenshotUsingRenderTargetAsync(this.engine, this.camera, { width: size, height: Math.round(size * 2 / 3) }, 'image/png');
+      return await (await fetch(data)).blob();
+    } finally {
+      overlays.forEach(({ mesh, enabled }) => mesh.setEnabled(enabled));
+      this.thumbnailMode = false;
+      this.applyCleanView();
+      this.invalidate();
+    }
   }
 
   /** Renders the scene without helpers (gizmos, grid, outline) and returns the image cropped to the chosen aspect. */

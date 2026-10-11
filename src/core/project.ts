@@ -347,46 +347,103 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
   return [...missing];
 }
 
-// ---------- Autosave (IndexedDB) ----------
+// ---------- Browser project library (IndexedDB) ----------
 
 const DB = 'babalon-js';
 const STORE = 'projects';
-const AUTOSAVE_KEY = 'autosave';
+const META = 'project-info';
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  updatedAt: string;
+  thumbnail?: Blob;
+}
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
+    const req = indexedDB.open(DB, 2);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      const store = db.objectStoreNames.contains(STORE) ? req.transaction!.objectStore(STORE) : db.createObjectStore(STORE);
+      const meta = db.createObjectStore(META, { keyPath: 'id' });
+      const legacy = store.get('autosave');
+      legacy.onsuccess = () => {
+        const snap = legacy.result as ProjectSnapshot | undefined;
+        if (!snap) return;
+        const id = crypto.randomUUID();
+        store.put(snap, id);
+        meta.put({ id, name: snap.json.name, updatedAt: snap.json.savedAt });
+        store.delete('autosave');
+      };
+    };
+    req.onsuccess = () => { req.result.onversionchange = () => req.result.close(); resolve(req.result); };
     req.onerror = () => reject(req.error);
+    req.onblocked = () => reject(new Error(tr('Close other babalon tabs and try again.')));
   });
 }
 
-async function tx<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+/** Resolve only after commit; a successful request can still fail with a quota error. */
+async function transaction<T>(mode: IDBTransactionMode, run: (tx: IDBTransaction, result: (value: T) => void) => void): Promise<T> {
   const db = await openDB();
   try {
     return await new Promise<T>((resolve, reject) => {
-      const req = fn(db.transaction(STORE, mode).objectStore(STORE));
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      const tx = db.transaction([STORE, META], mode);
+      let value: T;
+      tx.oncomplete = () => resolve(value);
+      tx.onabort = () => reject(tx.error ?? new Error(tr('Could not save in this browser. Export your project to keep it.')));
+      tx.onerror = () => reject(tx.error);
+      run(tx, (v) => { value = v; });
     });
-  } finally {
-    db.close();
-  }
+  } finally { db.close(); }
 }
 
-export async function saveAutosave(snap: ProjectSnapshot) {
-  await tx('readwrite', (s) => s.put(snap, AUTOSAVE_KEY));
+export function listProjects(): Promise<ProjectInfo[]> {
+  return transaction('readonly', (tx, result) => {
+    const req = tx.objectStore(META).getAll();
+    req.onsuccess = () => result((req.result as ProjectInfo[]).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+  });
 }
 
-export async function loadAutosave(): Promise<ProjectSnapshot | null> {
-  try {
-    return ((await tx('readonly', (s) => s.get(AUTOSAVE_KEY))) as ProjectSnapshot | undefined) ?? null;
-  } catch {
-    return null;
-  }
+export function saveProject(id: string, snap: ProjectSnapshot, thumbnail?: Blob): Promise<void> {
+  return transaction('readwrite', (tx) => {
+    tx.objectStore(STORE).put(snap, id);
+    const meta = tx.objectStore(META);
+    const req = meta.get(id);
+    req.onsuccess = () => meta.put({ id, name: snap.json.name, updatedAt: snap.json.savedAt, thumbnail: thumbnail ?? req.result?.thumbnail });
+  });
 }
 
-export async function clearAutosave() {
-  await tx('readwrite', (s) => s.delete(AUTOSAVE_KEY));
+export function loadProject(id: string): Promise<ProjectSnapshot | null> {
+  return transaction('readonly', (tx, result) => {
+    const req = tx.objectStore(STORE).get(id);
+    req.onsuccess = () => result(req.result ?? null);
+  });
+}
+
+export function deleteProject(id: string): Promise<void> {
+  return transaction('readwrite', (tx) => { tx.objectStore(STORE).delete(id); tx.objectStore(META).delete(id); });
+}
+
+export function renameProject(id: string, name: string): Promise<void> {
+  return transaction('readwrite', (tx) => {
+    const req = tx.objectStore(STORE).get(id);
+    req.onsuccess = () => {
+      if (!req.result) return;
+      req.result.json.name = name;
+      tx.objectStore(STORE).put(req.result, id);
+      const meta = tx.objectStore(META).get(id);
+      meta.onsuccess = () => { if (meta.result) tx.objectStore(META).put({ ...meta.result, name }); };
+    };
+  });
+}
+
+export async function duplicateProject(id: string): Promise<string> {
+  const snap = await loadProject(id);
+  if (!snap) throw new Error(tr('Project no longer exists.'));
+  const copy = crypto.randomUUID();
+  snap.json.name = tr('{name} copy', { name: snap.json.name });
+  snap.json.savedAt = new Date().toISOString();
+  const source = (await listProjects()).find((p) => p.id === id);
+  await saveProject(copy, snap, source?.thumbnail);
+  return copy;
 }

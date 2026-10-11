@@ -1,3 +1,4 @@
+import { ProjectGallery } from './projectGallery';
 import {
   Camera,
   ChevronDown,
@@ -25,7 +26,6 @@ import {
   Plus,
   Redo2,
   Rotate3d,
-  RotateCcw,
   Scale3d,
   Shrink,
   Smartphone,
@@ -39,14 +39,14 @@ import {
 import type { IconNode } from 'lucide';
 import { MODEL_EXTENSIONS } from '../core/editor';
 import type { Editor, Tool } from '../core/editor';
-import { PROJECT_EXT, fromZip, loadAutosave, restore, saveAutosave, snapshot, toZip } from '../core/project';
+import { PROJECT_EXT, fromZip, listProjects, loadProject, restore, saveProject, snapshot, toZip } from '../core/project';
 import type { ProjectSnapshot } from '../core/project';
 import { JointOverlay } from './jointOverlay';
 import { skeletonsOf } from '../rigging/humanoid';
 import type { ARMode } from '../ar/ar';
 import type { GyroControl } from '../device/gyro';
 import { saveAndOfferShare, timestampedName } from '../core/files';
-import { LANGS, getLang, locale, setLang, tr } from '../core/i18n';
+import { LANGS, getLang, setLang, tr } from '../core/i18n';
 import type { Lang } from '../core/i18n';
 import { button, chips, h, icon, iconButton, menuItem, segmented } from './dom';
 import { AddPanel } from './panels/add';
@@ -98,7 +98,10 @@ export class UI {
   private projectName = tr('my-scene');
   private menuOpen = false;
   /** Autosaved session found when the app opens (offered to continue). */
-  private autosaved: ProjectSnapshot | null = null;
+  private projectId: string | null = null;
+  private lastThumbnail = -Infinity;
+  private writeQueue: Promise<void> = Promise.resolve();
+  private gallery!: ProjectGallery;
   private autosaveTimer = 0;
   private restoring = false;
   private readonly menu = h('div', { class: 'menu' });
@@ -158,6 +161,7 @@ export class UI {
       if (this.menuOpen && !this.menu.contains(e.target as Node) && !(e.target as Element).closest?.('.project-btn')) this.toggleMenu(false);
       if (this.selMenuOpen && !this.selMenu.contains(e.target as Node) && !(e.target as Element).closest?.('.more-btn')) this.toggleSelMenu(false);
     });
+    this.gallery = new ProjectGallery(this);
     this.setupAutosave();
     document.addEventListener('fullscreenchange', () => this.renderViewStack());
     root.append(this.clipInput);
@@ -429,15 +433,10 @@ export class UI {
     this.uiRestore.title = this.uiRestore.ariaLabel = tr('Show interface');
     const hasObjects = this.editor.entities.some((e) => e.kind !== 'light');
     this.empty.classList.toggle('show', !hasObjects && !this.editor.photoMode);
-    const saved = this.autosaved;
+    const saved = false;
     this.empty.replaceChildren(
       h('h2', {}, tr('Build your scene')),
-      ...(saved
-        ? [
-            button(tr('Continue where you left off'), () => this.loadSnapshot(saved), { icon: RotateCcw, cls: 'primary' }),
-            h('small', { class: 'saved-at' }, tr('Last edited {date}', { date: new Date(saved.json.savedAt).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' }) })),
-          ]
-        : []),
+      button(tr('All projects'), () => this.run(() => this.gallery.show()), { icon: FolderOpen, cls: 'primary' }),
       h('p', {}, tr('Drag GLB, glTF, OBJ, FBX, STL… files here or')),
       button(tr('Choose files'), () => this.fileInput.click(), { icon: Upload, cls: saved ? '' : 'primary' }),
       button(tr('Open project'), () => this.projectInput.click(), { icon: FolderOpen, cls: 'ghost' }),
@@ -489,12 +488,13 @@ export class UI {
     this.renderTopbar();
     if (!open) return;
     const name = h('input', { type: 'text', class: 'name', value: this.projectName, 'aria-label': tr('Project name') });
-    name.addEventListener('change', () => (this.projectName = name.value.trim() || tr('my-scene')));
+    name.addEventListener('change', () => { this.projectName = name.value.trim() || tr('my-scene'); this.scheduleAutosave(); });
     const item = (node: IconNode, label: string, kbd: string, fn: () => void) => menuItem(node, label, () => (this.toggleMenu(false), fn()), { kbd: kbd || undefined });
     this.menu.replaceChildren(
       h('label', { class: 'menu-name' }, h('span', {}, tr('Project name')), name),
       h('div', { class: 'menu-name' }, h('span', {}, getLang() === 'en' ? 'Language' : `${tr('Language')} · Language`), chips(LANGS, getLang(), (v) => this.setLanguage(v))),
-      item(FilePlus, tr('New project'), '', () => this.newProject()),
+      item(FolderOpen, tr('All projects'), '', () => this.run(() => this.gallery.show())),
+      item(FilePlus, tr('New project'), '', () => this.run(() => this.newProject())),
       item(FolderOpen, tr('Open project…'), 'Ctrl+O', () => this.projectInput.click()),
       item(Save, tr('Save project'), 'Ctrl+S', () => this.saveProject()),
       item(Download, tr('Export scene .glb'), '', () => this.exportGLB(false)),
@@ -537,8 +537,11 @@ export class UI {
     }
   }
 
-  private async loadSnapshot(snap: ProjectSnapshot) {
+  private async loadSnapshot(snap: ProjectSnapshot, id: string = crypto.randomUUID()) {
+    await this.flushProject();
     this.restoring = true;
+    this.projectId = id;
+    this.lastThumbnail = -Infinity;
     clearTimeout(this.autosaveTimer);
     try {
       const missing = await restore(this.editor, snap);
@@ -547,18 +550,44 @@ export class UI {
       else this.toast(tr('Project opened'));
     } finally {
       this.restoring = false;
-      this.autosaved = null;
       this.renderAll();
       this.scheduleAutosave();
     }
   }
 
-  private newProject() {
-    if (this.hasContent() && !confirm(tr('Start a new project? The current scene will be discarded.'))) return;
-    this.editor.newScene();
-    this.projectName = tr('my-scene');
-    this.autosaved = null;
+  async newProject() {
+    await this.flushProject();
+    this.restoring = true;
+    try {
+      this.editor.newScene();
+      this.projectName = tr('my-scene');
+      this.projectId = crypto.randomUUID();
+      this.lastThumbnail = -Infinity;
+    } finally { this.restoring = false; }
     this.scheduleAutosave();
+  }
+
+  async openStoredProject(id: string) {
+    const snap = await loadProject(id);
+    if (!snap) throw new Error(tr('Project no longer exists.'));
+    await this.loadSnapshot(snap, id);
+  }
+
+  projectRenamed(id: string, name: string) { if (this.projectId === id) this.projectName = name; }
+  projectDeleted(id: string) {
+    if (this.projectId !== id) return;
+    clearTimeout(this.autosaveTimer);
+    this.autosaveTimer = 0;
+    this.projectId = null;
+    this.restoring = true;
+    try { this.editor.newScene(); this.projectName = tr('my-scene'); }
+    finally { this.restoring = false; }
+  }
+
+  async flushProject() {
+    this.editor.commitEdits();
+    if (this.projectId || this.hasContent()) await this.autosaveNow();
+    else await this.writeQueue;
   }
 
   private setupAutosave() {
@@ -568,30 +597,37 @@ export class UI {
     // Material tweaks and the like don't emit editor events: save when a control is released
     this.panel.addEventListener('change', () => this.scheduleAutosave());
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && this.autosaveTimer) this.autosaveNow();
+      if (document.visibilityState === 'hidden' && this.autosaveTimer) this.autosaveNow().catch((e) => this.toast(errorMessage(e), 'error'));
     });
-    loadAutosave().then((snap) => {
-      if (snap && !this.hasContent() && snap.json.entities.some((e) => e.kind !== 'light')) {
-        this.autosaved = snap;
-        this.renderAll();
-      }
-    });
+    listProjects().then((projects) => {
+      if (projects.length && !this.hasContent() && !this.projectId) return this.gallery.show();
+    }).catch((e) => this.toast(errorMessage(e), 'error'));
   }
 
   private scheduleAutosave() {
     // During AR the environment is temporarily changed: don't save that state
     if (this.restoring || this.editor.arMode) return;
     clearTimeout(this.autosaveTimer);
-    this.autosaveTimer = window.setTimeout(() => this.autosaveNow(), 1500);
+    this.autosaveTimer = window.setTimeout(() => this.autosaveNow().catch(() => this.toast(tr('Could not save in this browser. Export your project to keep it.'), 'error')), 1500);
   }
 
-  private autosaveNow() {
+  private async autosaveNow() {
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = 0;
-    if (this.restoring) return;
-    // The first write replaces the previous session, so it is no longer offered
-    this.autosaved = null;
-    saveAutosave(snapshot(this.editor, this.projectName)).catch((e) => console.warn('Autosave failed', e));
+    if (this.restoring || this.editor.arMode) return;
+    const id = this.projectId ??= crypto.randomUUID();
+    const snap = snapshot(this.editor, this.projectName);
+    // Serialize writes so a slow thumbnail never overwrites a newer snapshot or another project.
+    const write = this.writeQueue.catch(() => {}).then(async () => {
+      let thumbnail: Blob | undefined;
+      if (id === this.projectId && performance.now() - this.lastThumbnail > 30000) {
+        try { thumbnail = await this.editor.captureThumbnail(); this.lastThumbnail = performance.now(); }
+        catch { /* A thumbnail failure must not lose the scene. */ }
+      }
+      await saveProject(id, snap, thumbnail);
+    });
+    this.writeQueue = write;
+    await write;
   }
 
   /** Hands a file to the user: share sheet on phones (when possible) or download. */
