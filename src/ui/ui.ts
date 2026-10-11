@@ -1,6 +1,9 @@
+import type { LibraryAttribution, LibraryKind } from '../library/polyhaven';
+import type { LibraryPanel } from './panels/library';
 import { ProjectGallery } from './projectGallery';
 import {
   Camera,
+  Scissors,
   ChevronDown,
   Copy,
   Ellipsis,
@@ -39,7 +42,7 @@ import {
 import type { IconNode } from 'lucide';
 import { MODEL_EXTENSIONS } from '../core/editor';
 import type { Editor, Tool } from '../core/editor';
-import { PROJECT_EXT, fromZip, listProjects, loadProject, restore, saveProject, snapshot, toZip } from '../core/project';
+import { PROJECT_EXT, fromZip, loadProject, restore, saveProject, snapshot, toZip } from '../core/project';
 import type { ProjectSnapshot } from '../core/project';
 import { JointOverlay } from './jointOverlay';
 import { skeletonsOf } from '../rigging/humanoid';
@@ -57,6 +60,7 @@ import { PosePanel } from './panels/pose';
 import { RigPanel } from './panels/rig';
 import { ToolsPanel } from './panels/tools';
 import { OptimizePanel } from './panels/optimize';
+import { SeparatePanel } from './panels/separate';
 import { analyzeScene, deviceBudget, formatBytes, overBudget } from '../optimize/analysis';
 import { DEFAULT_OPTIMIZE } from '../optimize/optimizer';
 import type { Observer } from '@babylonjs/core/Misc/observable.js';
@@ -87,6 +91,7 @@ export class UI {
   readonly toolsUI = new ToolsPanel(this);
   readonly lightUI = new LightPanel(this);
   readonly optimizeUI = new OptimizePanel(this);
+  readonly separateUI = new SeparatePanel(this);
   readonly photoUI = new PhotoMode(this);
   readonly labelsUI = new MeasureLabels(this);
 
@@ -175,12 +180,19 @@ export class UI {
     this.setupKeys();
 
     editor.changed.add((kind) => {
+      // Separate mode belongs to one model: leave it if that model is no longer the selection
+      const separating = editor.separator.selection?.entity;
+      if (separating && (kind === 'selection' || kind === 'entities' || kind === 'photo') && (editor.selected !== separating || !editor.entities.includes(separating) || editor.photoMode)) this.separateUI.cancel();
       if (kind === 'history') return this.renderTopbar();
       if (kind === 'photo') {
         this.labelsUI.buildLabels();
         return this.renderAll();
       }
-      if (kind === 'tool') return this.renderSelbar();
+      if (kind === 'tool') {
+        this.renderSelbar();
+        if (editor.separator.active && this.tab === 'objects' && !this.busy) this.renderPanel();
+        return;
+      }
       if (kind === 'optimize') {
         if (this.tab === 'objects') this.renderPanel();
         return;
@@ -250,8 +262,14 @@ export class UI {
   }
 
   /** Files opened from outside: the OS ("Open with" on an installed PWA) or drag and drop. */
-  openFiles(files: File[]) {
-    if (files.length) this.loadFiles(files);
+  async openFiles(files: File[], attribution?: LibraryAttribution) {
+    const environment = files.find((f) => /\.(hdr|exr|env)$/i.test(f.name));
+    if (environment) {
+      await this.editor.importEnvironment(environment);
+      if (attribution) this.editor.applyEnv({ attribution });
+      return;
+    }
+    if (files.length) await this.loadFiles(files, attribution);
   }
 
   private gyro: GyroControl | null = null;
@@ -293,6 +311,7 @@ export class UI {
 
   private async enterAR() {
     if (!this.ar || !this.arOverlay) return;
+    if (this.editor.separator.active) this.separateUI.cancel();
     if (!this.arRestore && (await this.lightenForAR())) return;
     try {
       await this.ar.enter(this.arOverlay);
@@ -349,11 +368,11 @@ export class UI {
     if (this.menuOpen) this.toggleMenu(true);
   }
 
-  private async loadFiles(files: File[]) {
+  private async loadFiles(files: File[], attribution?: LibraryAttribution) {
     const project = files.find((f) => f.name.toLowerCase().endsWith(PROJECT_EXT));
     if (project) return this.openProjectFile(project);
     try {
-      await this.editor.addFiles(files);
+      await this.editor.addFiles(files, attribution);
       this.optimizeUI.checkHeavy(this.editor.selected);
     } catch (e) {
       this.toast(errorMessage(e), 'error');
@@ -421,7 +440,7 @@ export class UI {
     });
   }
 
-  private renderAll() {
+  renderAll() {
     document.body.classList.toggle('photo', this.editor.photoMode);
     this.renderTopbar();
     this.renderDock();
@@ -434,14 +453,15 @@ export class UI {
     this.uiRestore.title = this.uiRestore.ariaLabel = tr('Show interface');
     const hasObjects = this.editor.entities.some((e) => e.kind !== 'light');
     this.empty.classList.toggle('show', !hasObjects && !this.editor.photoMode);
-    const saved = false;
+    // Start card: add something right away, or continue a recent project (the canvas stays usable)
     this.empty.replaceChildren(
       h('h2', {}, tr('Build your scene')),
-      button(tr('All projects'), () => this.run(() => this.gallery.show()), { icon: FolderOpen, cls: 'primary' }),
       h('p', {}, tr('Drag GLB, glTF, OBJ, FBX, STL… files here or')),
-      button(tr('Choose files'), () => this.fileInput.click(), { icon: Upload, cls: saved ? '' : 'primary' }),
-      button(tr('Open project'), () => this.projectInput.click(), { icon: FolderOpen, cls: 'ghost' }),
-      button(tr('Browse sample models'), () => this.openTab('add'), { cls: 'ghost' }),
+      button(tr('Choose files'), () => this.fileInput.click(), { icon: Upload, cls: 'primary' }),
+      h('div', { class: 'empty-row' },
+        button(tr('Samples'), () => this.openTab('add'), { cls: 'ghost' }),
+        button(tr('Projects'), () => this.run(() => this.gallery.show()), { icon: FolderOpen, cls: 'ghost' })),
+      ...[this.gallery?.recentList()].filter((n): n is HTMLElement => !!n),
     );
   }
 
@@ -566,6 +586,7 @@ export class UI {
       this.lastThumbnail = -Infinity;
     } finally { this.restoring = false; }
     this.scheduleAutosave();
+    await this.gallery.refresh();
   }
 
   async openStoredProject(id: string) {
@@ -573,6 +594,9 @@ export class UI {
     if (!snap) throw new Error(tr('Project no longer exists.'));
     await this.loadSnapshot(snap, id);
   }
+
+  get currentProjectId() { return this.projectId; }
+  openProjectPicker() { this.projectInput.click(); }
 
   projectRenamed(id: string, name: string) { if (this.projectId === id) this.projectName = name; }
   projectDeleted(id: string) {
@@ -583,6 +607,7 @@ export class UI {
     this.restoring = true;
     try { this.editor.newScene(); this.projectName = tr('my-scene'); }
     finally { this.restoring = false; }
+    void this.gallery.refresh();
   }
 
   async flushProject() {
@@ -600,22 +625,25 @@ export class UI {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.autosaveTimer) this.autosaveNow().catch((e) => this.toast(errorMessage(e), 'error'));
     });
-    listProjects().then((projects) => {
-      if (projects.length && !this.hasContent() && !this.projectId) return this.gallery.show();
-    }).catch((e) => this.toast(errorMessage(e), 'error'));
+    // The canvas is ready right away: saved projects are offered on the start card, not in a dialog
+    this.gallery.refresh().catch((e) => this.toast(errorMessage(e), 'error'));
   }
 
   private scheduleAutosave() {
     // During AR the environment is temporarily changed: don't save that state
-    if (this.restoring || this.editor.arMode || this.editor.recording) return;
+    if (this.restoring || this.editor.arMode || this.editor.recording || this.editor.cameraBackground) return;
     clearTimeout(this.autosaveTimer);
-    this.autosaveTimer = window.setTimeout(() => this.autosaveNow().catch(() => this.toast(tr('Could not save in this browser. Export your project to keep it.'), 'error')), 1500);
+    this.autosaveTimer = window.setTimeout(() => this.autosaveNow().catch((e) => {
+      // The reason (quota, private window, blocked storage…) is what tells the user and us what to do
+      console.error('Autosave failed', e);
+      this.toast(`${tr('Could not save in this browser. Export your project to keep it.')} (${e instanceof DOMException ? e.name : errorMessage(e)})`, 'error');
+    }), 1500);
   }
 
   private async autosaveNow() {
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = 0;
-    if (this.restoring || this.editor.arMode || this.editor.recording) return;
+    if (this.restoring || this.editor.arMode || this.editor.recording || this.editor.cameraBackground) return;
     const id = this.projectId ??= crypto.randomUUID();
     const snap = snapshot(this.editor, this.projectName);
     // Serialize writes so a slow thumbnail never overwrites a newer snapshot or another project.
@@ -677,6 +705,7 @@ export class UI {
         h('div', { class: 'sel-tools' }, button(tr('Done'), () => ed.tools.setMeasureMode(false), { cls: 'small primary' })),
       );
     }
+    if (ed.separator.active && !ed.photoMode) return this.separateUI.bar();
     if (ed.rigger.active && !ed.photoMode) return this.rigUI.renderRigBar();
     if (ed.pose.active && !ed.photoMode) return this.poseUI.renderPoseBar();
     const multi = iconButton(Group, tr('Multi-select (or Shift+click)'), () => ed.setMultiSelect(!ed.multiSelect), { active: ed.multiSelect });
@@ -729,6 +758,7 @@ export class UI {
         ? [ed.anim.isPlaying(e) ? item(Pause, tr('Pause animation'), () => ed.anim.pause(e)) : item(Play, tr('Play animation'), () => ed.anim.play(e))]
         : []),
       ...(skeletonsOf(e).length ? [item(PersonStanding, tr('Pose joints'), () => this.poseUI.startPosing(e))] : []),
+      ...(e.kind === 'model' && ed.selection.length === 1 ? [item(Scissors, tr('Separate parts…'), () => this.separateUI.start(e))] : []),
       item(Group, tr('Multi-select'), () => (ed.setMultiSelect(!ed.multiSelect), this.toggleSelMenu(true)), { on: ed.multiSelect, keep: true }),
       item(Magnet, tr('Snap to grid'), () => (ed.setSnap(!ed.snap), this.toggleSelMenu(true)), { on: ed.snap, keep: true }),
     );
@@ -804,9 +834,11 @@ export class UI {
   /** Parts of a panel, switched at its top (one level: no nested menus). */
   private panelParts(tab: Tab): { id: string; label: string }[] | null {
     switch (tab) {
+      case 'add': return [{ id: 'add', label: tr('Add') }, { id: 'library', label: tr('Library') }];
       case 'objects': {
         const e = this.editor.selected;
         if (!e || e.kind === 'light') return null;
+        if (this.editor.separator.active) return [{ id: 'separate', label: tr('Separate') }];
         return [
           { id: 'object', label: tr('Object') },
           ...(this.editor.materialsOf(e).length ? [{ id: 'material', label: tr('Material') }] : []),
@@ -821,6 +853,7 @@ export class UI {
         return [
           { id: 'lights', label: tr('Lights') },
           { id: 'environment', label: tr('Environment') },
+          { id: 'library', label: tr('Library') },
         ];
       case 'tools':
         return [
@@ -837,23 +870,35 @@ export class UI {
     return null;
   }
 
+  private library: LibraryPanel | null = null;
+  private libraryLoading: Promise<void> | null = null;
+  private libraryContent(kind: LibraryKind): Node[] {
+    if (this.library) return [this.library.content(kind)];
+    this.libraryLoading ??= import('./panels/library').then(({ LibraryPanel }) => {
+      this.library = new LibraryPanel(this);
+      this.renderPanel();
+    }).catch((e) => { this.libraryLoading = null; this.toast(errorMessage(e), 'error'); });
+    return [h('p', { role: 'status' }, tr('Loading…'))];
+  }
+
   private panelContent(tab: Tab, part: string): (Node | null)[] {
     switch (tab) {
       case 'add':
-        return this.addUI.addPanel();
+        return part === 'library' ? this.libraryContent('model') : this.addUI.addPanel();
       case 'objects':
         if (part === 'material') return this.materialUI.materialPanel();
         if (part === 'animate') return this.animateUI.animatePanel();
         if (part === 'pose') return this.poseUI.posePanel();
         if (part === 'rig') return this.rigUI.rigPanel();
         if (part === 'optimize') return this.optimizeUI.optimizePanel();
+        if (part === 'separate') return this.separateUI.panel();
         return this.objectsUI.scenePanel();
       case 'light':
-        return part === 'environment' ? this.lightUI.envPanel() : this.lightUI.lightsPanel();
+        return part === 'library' ? this.libraryContent('hdri') : part === 'environment' ? this.lightUI.envPanel() : this.lightUI.lightsPanel();
       case 'photo': {
         // [enter, filters, camera, light & color, effects, depth of field, reset]
         const all = this.photoUI.photoPanelContent();
-        return part === 'camera' ? [all[2], all[5]] : [all[0], all[1], all[3], all[4], all[6]];
+        return part === 'camera' ? [all[2], all[5], all[6]] : [all[0], all[1], all[3], all[4], all[7]];
       }
       case 'tools': {
         const [measure, guides, align] = this.toolsUI.toolsPanel();

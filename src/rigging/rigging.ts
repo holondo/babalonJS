@@ -936,6 +936,7 @@ export class Rigger {
   }
 
   private applyWeights(st: RigState, w: SkinWeights) {
+    this.savedWeights.delete(st);
     let v = 0;
     for (const { mesh } of st.backups) {
       const n = mesh.getTotalVertices();
@@ -996,9 +997,15 @@ export class Rigger {
   // ---------- Projects and copies ----------
 
   /** Saved form of a rig: joints and the skin weights (4 bone indices + 4 weights per vertex, bytes). */
+  /** Saved weight bytes per rig state (rebuilt only after the weights change). */
+  private readonly savedWeights = new WeakMap<RigState, Uint8Array>();
+
   serialize(e: Entity): { data: RigData; weights: Uint8Array } | null {
     const st = e.rig;
     if (!st) return null;
+    // Weights only change in applyWeights: reuse the bytes (autosave then skips writing them)
+    const cached = this.savedWeights.get(st);
+    if (cached) return { data: { ...st.data, joints: { ...st.data.joints } }, weights: cached };
     const meshes = st.backups.map((b) => b.mesh);
     const total = meshes.reduce((n, m) => n + m.getTotalVertices(), 0);
     const out = new Uint8Array(total * INFLUENCES * 2);
@@ -1012,6 +1019,7 @@ export class Rigger {
       }
       v += m.getTotalVertices();
     }
+    this.savedWeights.set(st, out);
     return { data: { ...st.data, joints: { ...st.data.joints } }, weights: out };
   }
 

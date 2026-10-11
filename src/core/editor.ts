@@ -1,8 +1,16 @@
+import type { LibraryAttribution } from '../library/polyhaven';
+import { Separator } from '../edit/separate';
+import type { SeparationState } from '../edit/separate';
 import { loadEnvironment } from './environments';
 import type { EnvironmentAsset } from './environments';
 import { loadUserTexture, textureStates, applyTextureStates, copyUserTextures, clearUserTextures } from './materialTextures';
 import type { TextureSlot } from './materialTextures';
 import { materialToJSON, applyMaterial } from './state';
+// Focused imports skip Babylon's side effects; without these, the methods below are silent stubs:
+// scene picking (taps, measurements, rig, separate) and beginDirectAnimation (simple motions).
+// The skybox is built by `createSkybox` below instead of Babylon's scene helpers (≈420 KB).
+import '@babylonjs/core/Culling/ray.js';
+import '@babylonjs/core/Animations/animatable.js';
 import { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
 import { AnimationGroup } from '@babylonjs/core/Animations/animationGroup.js';
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js';
@@ -23,6 +31,7 @@ import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader.js'
 import { Material } from '@babylonjs/core/Materials/material.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture.js';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
 import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js';
 import { Observable } from '@babylonjs/core/Misc/observable.js';
@@ -97,6 +106,8 @@ export interface Entity {
   optimization?: Optimization;
   /** Compressed or downscaled textures, reversible. */
   textureOptimization?: TextureOptimization;
+  /** Part of a model separated from the rest (triangle subsets or cut geometry). */
+  separation?: SeparationState;
   castShadows: boolean;
   visible: boolean;
   light?: ShadowLight;
@@ -115,6 +126,7 @@ export interface ModelSource {
 
 /** Where a model came from: user files (main + dependencies) or a URL. Used when saving the project. */
 export interface AssetRef {
+  attribution?: LibraryAttribution;
   id: number;
   name: string;
   url?: string;
@@ -161,6 +173,7 @@ export const SAMPLE_MODELS = [
 ];
 
 export interface EnvSettings {
+  attribution?: LibraryAttribution;
   custom?: string;
   preset: string;
   intensity: number;
@@ -279,6 +292,7 @@ export class Editor {
   snap = false;
   photoMode = false;
   recording = false;
+  cameraBackground = false;
   /** In an AR session: helpers hidden, no sky/background, floor becomes a shadow catcher. */
   arMode = false;
   private arSaved: EnvSettings | null = null;
@@ -306,7 +320,7 @@ export class Editor {
   private environmentSource = '';
   readonly environments = new Map<string, EnvironmentAsset>();
   private skybox: Mesh | null = null;
-  private readonly helpers = new Set<AbstractMesh>();
+  readonly helpers = new Set<AbstractMesh>();
   /** Measurement/guide visuals: never selected, exported or shown in photos. */
   readonly overlays = new Set<AbstractMesh>();
   readonly tools: Tools;
@@ -322,6 +336,7 @@ export class Editor {
   readonly rigger = new Rigger(this);
   /** Optimized variants of heavy models. */
   readonly optimizer = new ModelOptimizer(this);
+  readonly separator = new Separator(this);
   readonly textureOptimizer = new TextureOptimizer(this);
   /** Other selected objects besides `selected` (which is the reference for alignment). */
   extra: Entity[] = [];
@@ -475,6 +490,11 @@ export class Editor {
         return;
       }
       if (this.tools.handlePointer(info)) return;
+      // Separate mode: taps select faces of the model being separated
+      if (this.separator.active) {
+        if (info.type === PointerEventTypes.POINTERTAP) this.separator.tap(scene.pointerX, scene.pointerY);
+        return;
+      }
       // Rigging: a missed tap must not drop the joints being placed
       if (this.rigger.active) {
         // Tapping away from the joints (and the gizmo) drops the joint selection
@@ -577,7 +597,7 @@ export class Editor {
   /** True while something is moving or loading; otherwise the last frame stays on screen. */
   private needsRender() {
     // An AR session shows the camera feed: every frame must be drawn
-    if (this.arMode || this.recording) return true;
+    if (this.arMode || this.recording || this.cameraBackground) return true;
     if (performance.now() < this.activeUntil) return true;
     const c = this.camera;
     if (c.inertialAlphaOffset || c.inertialBetaOffset || c.inertialRadiusOffset || c.inertialPanningX || c.inertialPanningY) return true;
@@ -851,7 +871,7 @@ export class Editor {
     return { min, max, center: min.add(max).scale(0.5), size: max.subtract(min) };
   }
 
-  async addFiles(files: File[]) {
+  async addFiles(files: File[], attribution?: LibraryAttribution) {
     const mains = files.filter((f) => MODEL_EXTENSIONS.includes(ext(f.name)));
     if (!mains.length) throw new Error(tr('No supported 3D file. Use: {list}', { list: MODEL_EXTENSIONS.join(', ') }));
     const others = files.filter((f) => !mains.includes(f));
@@ -859,7 +879,7 @@ export class Editor {
     for (const f of mains) {
       // .gltf and .obj may reference external files (.bin, textures, .mtl)
       const deps = ['gltf', 'obj'].includes(ext(f.name)) ? others : [];
-      const asset: AssetRef = { id: this.nextAssetId++, name: f.name.replace(/\.[^.]+$/, ''), main: f, deps };
+      const asset: AssetRef = { attribution, id: this.nextAssetId++, name: f.name.replace(/\.[^.]+$/, ''), main: f, deps };
       await this.loadModel(asset, i++);
     }
   }
@@ -1128,6 +1148,7 @@ export class Editor {
     this.materialsOf(copy).forEach((m, i) => {
       if (sourceMaterials[i]) { copyUserTextures(sourceMaterials[i], m); applyMaterial(m, materialToJSON(sourceMaterials[i])); }
     });
+    if (entity.separation) this.separator.copy(entity, copy);
     if (entity.optimization && !entity.optimization.session) this.optimizer.copy(entity, copy);
     if (entity.textureOptimization) this.textureOptimizer.copy(entity, copy);
     if (entity.rig) this.rigger.copy(entity, copy);
@@ -1157,6 +1178,11 @@ export class Editor {
     copy.root.position.copyFrom(entity.root.position);
     copy.root.setEnabled(false);
     return copy;
+  }
+
+  /** Adds the part made by separating a model (inside the separation's undo group). */
+  publishSeparated(copy: Entity) {
+    this.register(copy, true, false);
   }
 
   /** Publish prepared copies together; undo removes the complete comparison. */
@@ -1360,7 +1386,7 @@ export class Editor {
       return;
     }
     const tool = e?.kind === 'light' && this.tool === 'scale' ? 'move' : this.tool;
-    const show = !!e && !this.cleanView && !this.tools?.measureMode;
+    const show = !!e && !this.cleanView && !this.tools?.measureMode && !this.separator?.active;
     this.gizmos.positionGizmoEnabled = show && tool === 'move';
     this.gizmos.rotationGizmoEnabled = show && tool === 'rotate';
     this.gizmos.scaleGizmoEnabled = show && tool === 'scale';
@@ -1570,7 +1596,7 @@ export class Editor {
       assets.set(path, asset);
       if (activate) {
         this.beginEdit('environment', () => ({ ...this.env }), (s) => this.applyEnv(s));
-        this.applyEnv({ custom: path });
+        this.applyEnv({ custom: path, attribution: undefined });
         this.endEdit('environment');
       }
       return path;
@@ -1579,7 +1605,7 @@ export class Editor {
 
   applyEnv(partial: Partial<EnvSettings> = {}) {
     if (partial.custom && !this.environments.has(partial.custom)) throw new Error(tr('Could not load environment.'));
-    if (partial.preset !== undefined && !('custom' in partial)) partial = { ...partial, custom: undefined };
+    if (partial.preset !== undefined && !('custom' in partial)) partial = { ...partial, custom: undefined, attribution: undefined };
     Object.assign(this.env, partial);
     const env = this.env;
     const scene = this.scene;
@@ -1592,8 +1618,7 @@ export class Editor {
       this.envTexture = tex;
       scene.environmentTexture = tex;
       this.skybox?.dispose(false, true);
-      this.skybox = scene.createDefaultSkybox(tex, true, 1000, env.skyboxBlur, true);
-      if (this.skybox) this.skybox.isPickable = false;
+      this.skybox = createSkybox(scene, tex, env.skyboxBlur);
       if (old && ![...this.environments.values()].some((a) => a.texture === old)) old.dispose();
     }
     scene.environmentIntensity = env.intensity;
@@ -1865,6 +1890,23 @@ export class Editor {
     const { compactGLB } = await import('../optimize/export');
     return new Blob([(await compactGLB(new Uint8Array(await glb.arrayBuffer()), textures.ktx2)) as Uint8Array<ArrayBuffer>], { type: 'model/gltf-binary' });
   }
+}
+
+/** The environment as a background (same as Babylon's default PBR skybox, without its ≈420 KB scene helpers). */
+function createSkybox(scene: Scene, environment: BaseTexture, blur: number) {
+  const box = MeshBuilder.CreateBox('hdrSkyBox', { size: 1000 }, scene);
+  const material = new PBRMaterial('skyBox', scene);
+  material.backFaceCulling = false;
+  material.reflectionTexture = environment.clone();
+  if (material.reflectionTexture) material.reflectionTexture.coordinatesMode = Texture.SKYBOX_MODE;
+  material.microSurface = 1 - blur;
+  material.disableLighting = true;
+  material.twoSidedLighting = true;
+  box.material = material;
+  box.isPickable = false;
+  box.infiniteDistance = true;
+  box.ignoreCameraMaxZ = true;
+  return box;
 }
 
 export function ext(name: string) {
