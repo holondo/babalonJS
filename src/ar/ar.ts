@@ -5,17 +5,26 @@ import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
 import { Observable } from '@babylonjs/core/Misc/observable.js';
-import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import { WebXRDefaultExperience } from '@babylonjs/core/XR/webXRDefaultExperience.js';
 import { WebXRFeatureName } from '@babylonjs/core/XR/webXRFeaturesManager.js';
 import { WebXRSessionManager } from '@babylonjs/core/XR/webXRSessionManager.js';
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
-import type { IWebXRHitResult, WebXRHitTest } from '@babylonjs/core/XR/features/WebXRHitTest.js';
+import { type IWebXRHitResult, WebXRHitTest } from '@babylonjs/core/XR/features/WebXRHitTest.js';
 import type { Node } from '@babylonjs/core/node.js';
 import type { ShadowLight } from '@babylonjs/core/Lights/shadowLight.js';
-import type { WebXRRawCameraAccess } from '@babylonjs/core/XR/features/WebXRRawCameraAccess.js';
+import { WebXRRawCameraAccess } from '@babylonjs/core/XR/features/WebXRRawCameraAccess.js';
+import '@babylonjs/core/XR/features/WebXRDOMOverlay.js';
+import '@babylonjs/core/XR/features/WebXRLightEstimation.js';
+import { WebXRAnchorSystem, type IWebXRAnchor } from '@babylonjs/core/XR/features/WebXRAnchorSystem.js';
+import { WebXRDepthSensing } from '@babylonjs/core/XR/features/WebXRDepthSensing.js';
+import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js';
+import type { Material } from '@babylonjs/core/Materials/material.js';
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
+import type { Measurement } from '../tools/tools';
+import { tr } from '../core/i18n';
 import { createLight, createShadowGenerator } from '../core/editor';
 import type { Editor } from '../core/editor';
 import { PHOTO_FILTERS, filterToCanvas, findLightPreset, presetIntensity } from '../core/presets';
@@ -57,6 +66,26 @@ export class ARMode {
   private lastHit: IWebXRHitResult | null = null;
   private saved: Saved[] = [];
   /** Orientation offset so the scene faces the user like it did in the editor. */
+  private anchors: WebXRAnchorSystem | null = null;
+  private sceneAnchor: IWebXRAnchor | null = null;
+  private placementGeneration = 0;
+  private sessionGeneration = 0;
+  private pointAnchors = new Map<IWebXRAnchor, Vector3>();
+  private pendingPoint: Vector3 | null = null;
+  private pendingPreview: Measurement | null = null;
+  private pendingAnchor: IWebXRAnchor | null = null;
+  private pendingGeneration = 0;
+  private depth: WebXRDepthSensing | null = null;
+  private depthMaterials: { mesh: AbstractMesh; original: Material | null }[] = [];
+  private depthClones: Material[] = [];
+  requestDepthOnNextSession = false;
+  depthSupported = false;
+  depthRequested = false;
+  occlusion = false;
+  measuring = false;
+  get measurementPending() { return !!this.pendingPoint; }
+  get measurements() { return this.editor.tools.sessionMeasurements.filter((m) => m !== this.pendingPreview); }
+  get anchored() { return !!this.sceneAnchor; }
   private baseYaw = 0;
   private yaw = 0;
 
@@ -226,13 +255,24 @@ export class ARMode {
       });
       const fm = this.xr.baseExperience.featuresManager;
       // All optional: if the phone lacks one, the others still work
-      this.hitTest = fm.enableFeature(WebXRFeatureName.HIT_TEST, 'latest', {}, true, false) as WebXRHitTest;
+      this.hitTest = fm.enableFeature(WebXRHitTest.Name, 'latest', {}, true, false) as WebXRHitTest;
       fm.enableFeature(WebXRFeatureName.DOM_OVERLAY, 'latest', { element: overlay, supressXRSelectEvents: true }, true, false);
       // Expensive features are requested with the session but stay detached: AR starts as cheap
       // as possible and the user turns them on (room lighting) or they run only when needed (photo).
       fm.enableFeature(WebXRFeatureName.LIGHT_ESTIMATION, 'latest', { setSceneEnvironmentTexture: true, createDirectionalLightSource: false }, false, false);
-      this.cameraAccess = fm.enableFeature(WebXRFeatureName.RAW_CAMERA_ACCESS, 'latest', {}, false, false) as WebXRRawCameraAccess;
+      this.cameraAccess = fm.enableFeature(WebXRRawCameraAccess.Name, 'latest', {}, false, false) as WebXRRawCameraAccess;
 
+      try {
+        this.anchors = fm.enableFeature(WebXRAnchorSystem.Name, 'latest', {}, false, false) as WebXRAnchorSystem;
+        this.anchors.onAnchorUpdatedObservable.add((anchor) => {
+          if (anchor === this.sceneAnchor && this.anchor) {
+            anchor.transformationMatrix.getTranslationToRef(this.anchor.position);
+            this.applyTransform();
+          }
+          const point = this.pointAnchors.get(anchor);
+          if (point) anchor.transformationMatrix.getTranslationToRef(point);
+        });
+      } catch { /* Optional: ordinary placement remains available. */ }
       this.hitTest.onHitTestResultObservable.add((results) => this.onHit(results));
       this.cameraAccess.onTexturesUpdatedObservable.add((t) => {
         if (t.length && !this.cameraImage) {
@@ -255,6 +295,22 @@ export class ARMode {
       this.reticle.setEnabled(false);
     }
 
+    const fm = this.xr.baseExperience.featuresManager;
+    this.depthRequested = this.requestDepthOnNextSession;
+    this.depthSupported = false;
+    this.occlusion = false;
+    if (this.depthRequested && !this.depth) {
+      try {
+        this.depth = fm.enableFeature(WebXRDepthSensing.Name, 'latest', {
+          usagePreference: ['gpu'], dataFormatPreference: ['float', 'ushort', 'luminance-alpha'],
+          useToleranceFactorForDepthSensing: false,
+        }, false, false) as WebXRDepthSensing;
+      } catch { /* Depth support is optional. */ }
+    } else if (!this.depthRequested && this.depth) {
+      fm.disableFeature(WebXRDepthSensing.Name);
+      this.depth = null;
+    }
+    this.sessionGeneration++;
     this.editor.setARMode(true);
     this.wrapScene();
     this.status = 'searching';
@@ -273,6 +329,10 @@ export class ARMode {
     this.changed.notifyObservers();
     try {
       await this.xr.baseExperience.enterXRAsync('immersive-ar', 'local-floor', this.xr.renderTarget);
+      const session = this.xr.baseExperience.sessionManager.session;
+      this.depthSupported = !!this.depth && session.depthUsage === 'gpu-optimized' && !!session.depthDataFormat;
+      this.setHitTest(true);
+      this.changed.notifyObservers();
     } catch (e) {
       this.cleanup();
       throw e;
@@ -316,6 +376,12 @@ export class ARMode {
   /** Puts everything back exactly where it was in the editor. */
   private cleanup() {
     if (!this.active) return;
+    this.sessionGeneration++;
+    this.clearSceneAnchor();
+    this.clearMeasurements();
+    this.setOcclusion(false);
+    this.measuring = false;
+    this.depthSupported = false;
     this.clearRig();
     for (const s of this.sceneLights) {
       s.light.intensity = s.base;
@@ -353,7 +419,7 @@ export class ARMode {
     if (!this.reticle) return;
     const hit = results[0] ?? null;
     this.lastHit = hit;
-    const showReticle = !!hit && this.status !== 'placed';
+    const showReticle = !!hit && (this.measuring || this.status !== 'placed');
     this.reticle.setEnabled(showReticle);
     if (hit) {
       this.reticle.position.copyFrom(hit.position);
@@ -370,7 +436,7 @@ export class ARMode {
 
   /** Tap: places (or moves) the scene where the marker is. */
   place() {
-    if (!this.lastHit) return false;
+    if (!this.lastHit || this.measuring) return false;
     return this.placeAt(this.lastHit.position);
   }
 
@@ -394,6 +460,7 @@ export class ARMode {
 
   private placeAt(point: Vector3) {
     if (!this.anchor || !this.xr) return false;
+    this.clearSceneAnchor();
     this.anchor.position.copyFrom(point);
     const cam = this.xr.baseExperience.camera.globalPosition;
     const toUser = cam.subtract(point);
@@ -403,7 +470,14 @@ export class ARMode {
     this.status = 'placed';
     this.reticle?.setEnabled(false);
     // Surface detection runs every frame; it's only needed while looking for a spot
-    this.setHitTest(false);
+    this.setHitTest(this.measuring);
+    const generation = this.placementGeneration;
+    void this.createTrackedPoint(point).then((anchor) => {
+      if (!anchor) return;
+      if (generation !== this.placementGeneration || !this.active) { anchor.remove(); return; }
+      this.sceneAnchor = anchor;
+      this.changed.notifyObservers();
+    });
     this.updateShadowRefresh();
     this.changed.notifyObservers();
     return true;
@@ -411,10 +485,165 @@ export class ARMode {
 
   /** Shows the marker again so the scene can be moved to another spot. */
   replace() {
+    this.setMeasuring(false);
+    this.clearSceneAnchor();
     this.lastHit = null;
     this.setHitTest(true);
     this.status = 'searching';
     this.changed.notifyObservers();
+  }
+
+  private clearSceneAnchor() {
+    this.placementGeneration++;
+    this.sceneAnchor?.remove();
+    this.sceneAnchor = null;
+  }
+
+  /** Queue creation for the next XR frame: UI taps do not run inside a native XR frame. */
+  private async createTrackedPoint(point: Vector3) {
+    const feature = this.anchors;
+    if (!feature || !this.xr || !this.active) return null;
+    const session = this.sessionGeneration;
+    try {
+      if (!feature.attached && !feature.attach()) return null;
+      const anchor = await feature.addAnchorAtPositionAndRotationAsync(point.clone(), Quaternion.Identity());
+      if (!this.active || session !== this.sessionGeneration) { anchor.remove(); return null; }
+      return anchor;
+    } catch { return null; }
+  }
+
+  setMeasuring(on: boolean) {
+    this.measuring = on;
+    this.cancelMeasurementPoint();
+    this.lastHit = null;
+    this.reticle?.setEnabled(false);
+    this.setHitTest(on || this.status !== 'placed');
+    this.changed.notifyObservers();
+  }
+
+  cancelMeasurementPoint() {
+    this.pendingGeneration++;
+    if (this.pendingAnchor) {
+      this.pointAnchors.delete(this.pendingAnchor);
+      this.pendingAnchor.remove();
+    }
+    if (this.pendingPreview) this.editor.tools.removeSessionMeasurement(this.pendingPreview);
+    this.pendingPreview = null;
+    this.pendingPoint = null;
+    this.pendingAnchor = null;
+  }
+
+  measurePoint() {
+    if (!this.measuring || !this.lastHit) return false;
+    const point = this.lastHit.position.clone();
+    if (!this.pendingPoint) {
+      this.pendingPreview = this.editor.tools.addSessionMeasurement(point, point);
+      this.pendingPoint = this.pendingPreview.a.local;
+      const generation = ++this.pendingGeneration;
+      void this.createTrackedPoint(point).then((anchor) => {
+        if (!anchor) return;
+        if (generation !== this.pendingGeneration) { anchor.remove(); return; }
+        this.pendingAnchor = anchor;
+        this.pointAnchors.set(anchor, this.pendingPoint!);
+      });
+    } else {
+      const first = this.pendingPoint;
+      const firstAnchor = this.pendingAnchor;
+      if (this.pendingPreview) this.editor.tools.removeSessionMeasurement(this.pendingPreview);
+      this.pendingPreview = null;
+      this.pendingGeneration++;
+      this.pendingPoint = null;
+      this.pendingAnchor = null;
+      const measurement = this.editor.tools.addSessionMeasurement(first, point);
+      if (firstAnchor) this.pointAnchors.set(firstAnchor, measurement.a.local);
+      else this.trackMeasurementPoint(measurement, measurement.a.local);
+      this.trackMeasurementPoint(measurement, measurement.b.local);
+    }
+    this.changed.notifyObservers();
+    return true;
+  }
+
+  private trackMeasurementPoint(measurement: Measurement, point: Vector3) {
+    void this.createTrackedPoint(point).then((anchor) => {
+      if (!anchor) return;
+      if (!this.measurements.includes(measurement)) { anchor.remove(); return; }
+      this.pointAnchors.set(anchor, point);
+    });
+  }
+
+  clearMeasurements() {
+    this.cancelMeasurementPoint();
+    for (const anchor of this.pointAnchors.keys()) anchor.remove();
+    this.pointAnchors.clear();
+    for (const m of [...this.measurements]) this.editor.tools.removeSessionMeasurement(m);
+    this.changed.notifyObservers();
+  }
+
+  measurementLabel(m: Measurement, width: number, height: number) {
+    const camera = this.xr?.baseExperience.camera;
+    if (!camera) return null;
+    const view = camera.rigCameras[0] ?? camera;
+    const point = this.editor.tools.labelPoint(m);
+    const screen = Vector3.Project(point, Matrix.Identity(), view.getTransformationMatrix(), view.viewport.toGlobal(width, height));
+    const visible = screen.z >= 0 && screen.z <= 1 && screen.x >= 0 && screen.x <= width && screen.y >= 0 && screen.y <= height;
+    return { x: screen.x, y: screen.y, visible, text: this.editor.tools.format(m.length) };
+  }
+
+  onFrame(update: () => void) {
+    this.editor.scene.onAfterRenderObservable.add(update);
+  }
+
+  setDepthRequest(on: boolean) {
+    this.requestDepthOnNextSession = on;
+    this.changed.notifyObservers();
+  }
+
+  /** GPU occlusion uses temporary materials because Babylon registers plugins on material creation. */
+  setOcclusion(on: boolean) {
+    if (on === this.occlusion) return;
+    if (on && (!this.depthSupported || !this.depth || !this.active)) return;
+    if (on) {
+      try {
+        const clones = new Map<Material, Material>();
+        const cloneMaterial = (original: Material): Material => {
+          const existing = clones.get(original);
+          if (existing) return existing;
+          const clone = original.clone(`${original.name}-arDepth`);
+          if (!clone) throw new Error(tr('Depth occlusion is unavailable for this material.'));
+          clones.set(original, clone);
+          this.depthClones.push(clone);
+          if (original instanceof MultiMaterial && clone instanceof MultiMaterial) {
+            clone.subMaterials = original.subMaterials.map((material) => material ? cloneMaterial(material) : null);
+          }
+          return clone;
+        };
+        for (const entity of this.editor.entities) for (const mesh of entity.meshes) {
+          const original = mesh.material;
+          if (!original) continue;
+          const clone = cloneMaterial(original);
+          this.depthMaterials.push({ mesh, original });
+          mesh.material = clone;
+        }
+        if (!this.depth!.attach()) throw new Error(tr('Depth occlusion is unavailable in this session.'));
+        this.occlusion = true;
+      } catch (error) {
+        this.restoreDepthMaterials();
+        this.depth?.detach();
+        this.reportError(error instanceof Error ? error.message : String(error));
+      }
+    } else {
+      this.depth?.detach();
+      this.restoreDepthMaterials();
+      this.occlusion = false;
+    }
+    this.changed.notifyObservers();
+  }
+
+  private restoreDepthMaterials() {
+    for (const { mesh, original } of this.depthMaterials) if (!mesh.isDisposed()) mesh.material = original;
+    this.depthMaterials = [];
+    for (const clone of this.depthClones) clone.dispose(false, false);
+    this.depthClones = [];
   }
 
   private setHitTest(on: boolean) {

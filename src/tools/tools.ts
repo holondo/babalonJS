@@ -80,6 +80,8 @@ export class Tools {
   readonly changed = new Observable<void>();
   measureMode = false;
   measurements: Measurement[] = [];
+  /** Ephemeral XR geometry: never enters editor history or project serialization. */
+  readonly sessionMeasurements: Measurement[] = [];
   guides: Guide[] = [];
   active: Measurement | null = null;
   /** Guide whose chip is expanded (shows the delete button). */
@@ -313,18 +315,38 @@ export class Tools {
 
   addMeasurement(a: Anchor, b: Anchor, surface: boolean) {
     return this.edit(() => {
-    const id = this.nextId++;
-    const line = this.screenLine(`measure${id}`, [this.worldOf(a), this.worldOf(b)], MEASURE_COLOR, 3, true);
-    const markers: [Mesh, Mesh] = [this.createMarker(), this.createMarker()];
-    markers[0].metadata = { measureId: id, end: 'a' };
-    markers[1].metadata = { measureId: id, end: 'b' };
-    const m: Measurement = { id, a, b, surface, path: null, surfaceFailed: false, length: 0, line, markers };
+    const m = this.createMeasurement(a, b, surface, this.nextId++);
     this.measurements.push(m);
     this.computeSurface(m);
     this.applyVisibility();
     this.changed.notifyObservers();
     return m;
     });
+  }
+
+  private createMeasurement(a: Anchor, b: Anchor, surface: boolean, id: number) {
+    const line = this.screenLine(`measure${id}`, [this.worldOf(a), this.worldOf(b)], MEASURE_COLOR, 3, true);
+    const markers: [Mesh, Mesh] = [this.createMarker(), this.createMarker()];
+    markers[0].metadata = { measureId: id, end: 'a' };
+    markers[1].metadata = { measureId: id, end: 'b' };
+    const m: Measurement = { id, a, b, surface, path: null, surfaceFailed: false, length: 0, line, markers };
+    return m;
+  }
+
+  addSessionMeasurement(a: Vector3, b: Vector3) {
+    const point = (v: Vector3): Anchor => ({ entity: null, local: v.clone(), normal: Vector3.Up() });
+    const m = this.createMeasurement(point(a), point(b), false, -(this.sessionMeasurements.length + 1));
+    m.markers.forEach((marker) => { marker.isPickable = false; });
+    this.sessionMeasurements.push(m);
+    this.updateMeasurement(m, true, true);
+    return m;
+  }
+
+  removeSessionMeasurement(m: Measurement) {
+    const index = this.sessionMeasurements.indexOf(m);
+    if (index < 0) return;
+    this.sessionMeasurements.splice(index, 1);
+    this.disposeMeasurement(m);
   }
 
   private createMarker() {
@@ -337,16 +359,17 @@ export class Tools {
 
   removeMeasurement(m: Measurement) {
     return this.edit(() => {
-    m.line.dispose();
-    m.markers.forEach((mk) => {
-      this.editor.overlays.delete(mk);
-      mk.dispose();
-    });
-    this.editor.overlays.delete(m.line);
+    this.disposeMeasurement(m);
     this.measurements = this.measurements.filter((x) => x !== m);
     if (this.active === m) this.active = null;
     this.changed.notifyObservers();
     });
+  }
+
+  private disposeMeasurement(m: Measurement) {
+    m.line.dispose();
+    m.markers.forEach((mk) => { this.editor.overlays.delete(mk); mk.dispose(); });
+    this.editor.overlays.delete(m.line);
   }
 
   clearMeasurements() {
@@ -422,11 +445,16 @@ export class Tools {
 
   private update() {
     const visible = !this.editor.cleanView;
-    for (const m of this.measurements) {
+    for (const m of this.measurements) this.updateMeasurement(m, visible);
+    for (const m of this.sessionMeasurements) this.updateMeasurement(m, this.editor.arMode, true);
+    if (this.pending && visible) this.placeMarker(this.pendingMarker, this.worldOf(this.pending), 14);
+  }
+
+  private updateMeasurement(m: Measurement, visible: boolean, xr = false) {
       const on = visible && this.alive(m.a) && this.alive(m.b);
       m.line.setEnabled(on);
       m.markers.forEach((mk) => mk.setEnabled(on));
-      if (!on) continue;
+      if (!on) return;
       const pts = this.linePoints(m);
       if (m.line.metadata?.points !== pts.length) {
         // An updatable line can't change its point count: rebuild it
@@ -441,10 +469,8 @@ export class Tools {
       let length = 0;
       for (let i = 1; i < pts.length; i++) length += Vector3.Distance(pts[i - 1], pts[i]);
       m.length = length;
-      this.placeMarker(m.markers[0], this.worldOf(m.a), m === this.active ? 14 : 11);
-      this.placeMarker(m.markers[1], this.worldOf(m.b), m === this.active ? 14 : 11);
-    }
-    if (this.pending) this.placeMarker(this.pendingMarker, this.worldOf(this.pending), 14);
+      this.placeMarker(m.markers[0], this.worldOf(m.a), m === this.active ? 14 : 11, xr);
+      this.placeMarker(m.markers[1], this.worldOf(m.b), m === this.active ? 14 : 11, xr);
   }
 
   /**
@@ -467,9 +493,11 @@ export class Tools {
   }
 
   /** Keeps a marker at a constant size on screen. */
-  private placeMarker(marker: Mesh, pos: Vector3, pixels: number) {
+  private placeMarker(marker: Mesh, pos: Vector3, pixels: number, xr = false) {
     marker.position.copyFrom(pos);
-    marker.scaling.setAll(this.editor.worldPerPixel(pos) * pixels);
+    const camera = xr ? this.scene.activeCamera : null;
+    const size = camera ? 2 * Math.max(Vector3.Distance(camera.globalPosition, pos), camera.minZ) * Math.tan(camera.fov / 2) / (this.editor.engine.getRenderingCanvas()?.clientHeight || 1) : this.editor.worldPerPixel(pos);
+    marker.scaling.setAll(size * pixels);
   }
 
   private applyVisibility() {
