@@ -9,7 +9,8 @@ function moduleUrl(url) {
   if(modules.has(url.href)) return modules.get(url.href);
   let source=ts.transpileModule(fs.readFileSync(url,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2023,module:ts.ModuleKind.ESNext}}).outputText;
   source=source.replaceAll('import.meta.env.BASE_URL', JSON.stringify('/'));
-  source=source.replace(/from ['"]([^'"]+)['"]/g,(_,name)=>`from ${JSON.stringify(name.startsWith('.')?moduleUrl(new URL(name+'.ts',url)):import.meta.resolve(name))}`);
+  source=source.replace(/import\(['"]([^'"]+)['"]\)/g,(_,name)=>`import(${JSON.stringify(name.startsWith('.')?moduleUrl(new URL(name+'.ts',url)):import.meta.resolve(name))})`);
+  source=source.replace(/(from|import) ['"]([^'"]+)['"]/g,(_,kw,name)=>`${kw} ${JSON.stringify(name.startsWith('.')?moduleUrl(new URL(name+'.ts',url)):import.meta.resolve(name))}`);
   const encoded=`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
   modules.set(url.href,encoded); return encoded;
 }
