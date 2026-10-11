@@ -1,3 +1,6 @@
+import { loadUserTexture, textureStates, applyTextureStates, copyUserTextures, clearUserTextures } from './materialTextures';
+import type { TextureSlot } from './materialTextures';
+import { materialToJSON, applyMaterial } from './state';
 import {
   AbstractMesh,
   AnimationGroup,
@@ -1079,6 +1082,18 @@ export class Editor {
     }
   }
 
+  async setMaterialTexture(material: Material, slot: TextureSlot, file: File | null) {
+    const path = file ? await loadUserTexture(this.scene, file) : null;
+    if (!this.scene.materials.includes(material)) return;
+    this.beginEdit(material, () => materialToJSON(material), (s) => applyMaterial(material, s));
+    const state = textureStates(material);
+    if (path) state[slot] = { path, u: 1, v: 1, rotation: 0 };
+    else delete state[slot];
+    applyTextureStates(material, state);
+    this.endEdit(material);
+    this.notify('transform');
+  }
+
   duplicate(entity?: Entity) {
     if (!entity) {
       const items = this.selection;
@@ -1108,6 +1123,10 @@ export class Editor {
         select: false,
       });
     } else return;
+    const sourceMaterials = this.materialsOf(entity);
+    this.materialsOf(copy).forEach((m, i) => {
+      if (sourceMaterials[i]) { copyUserTextures(sourceMaterials[i], m); applyMaterial(m, materialToJSON(sourceMaterials[i])); }
+    });
     if (entity.optimization && !entity.optimization.session) this.optimizer.copy(entity, copy);
     if (entity.textureOptimization) this.textureOptimizer.copy(entity, copy);
     if (entity.rig) this.rigger.copy(entity, copy);
@@ -1223,6 +1242,7 @@ export class Editor {
       if (e.source) containers.add(e.source.container);
     }
     containers.forEach((c) => c.dispose());
+    clearUserTextures(this.scene);
     this.entities = [];
     this.undoStack = [];
     this.redoStack = [];

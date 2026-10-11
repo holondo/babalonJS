@@ -1,8 +1,11 @@
+import { textureStates, applyTextureStates } from './materialTextures';
+import type { TextureStates } from './materialTextures';
 import { Color3, Material, PBRMaterial, StandardMaterial } from '@babylonjs/core';
 import type { PointLight, SpotLight } from '@babylonjs/core';
 import type { Editor, Entity, LightType } from './editor';
 
 export interface MaterialJSON {
+  textures?: TextureStates;
   type: 'pbr' | 'standard' | 'other';
   alpha: number;
   transparencyMode?: number | null;
@@ -17,6 +20,7 @@ export interface MaterialJSON {
   emissive?: string;
   emissiveIntensity?: number;
   textureHidden?: boolean;
+  metallicChannels?: [boolean, boolean, boolean];
   advanced?: {
     refraction: boolean; transmission: number; ior: number; linkTransparency: boolean;
     sheen: boolean; sheenIntensity: number; sheenColor: string; sheenRoughness: number | null;
@@ -29,7 +33,7 @@ export interface MaterialJSON {
 }
 
 export function materialToJSON(m: Material): MaterialJSON {
-  const base = { alpha: m.alpha, transparencyMode: m.transparencyMode, backFaceCulling: m.backFaceCulling, wireframe: m.wireframe };
+  const base = { textures: textureStates(m), alpha: m.alpha, transparencyMode: m.transparencyMode, backFaceCulling: m.backFaceCulling, wireframe: m.wireframe };
   if (m instanceof PBRMaterial) {
     return {
       ...base,
@@ -42,6 +46,7 @@ export function materialToJSON(m: Material): MaterialJSON {
       unlit: m.unlit,
       emissive: m.emissiveColor.toHexString(),
       emissiveIntensity: m.emissiveIntensity,
+      metallicChannels: [m.useRoughnessFromMetallicTextureAlpha, m.useRoughnessFromMetallicTextureGreen, m.useMetallnessFromMetallicTextureBlue],
       textureHidden: !!m.metadata?.stashedAlbedo,
       advanced: {
         refraction: m.subSurface.isRefractionEnabled, transmission: m.subSurface.refractionIntensity,
@@ -67,11 +72,13 @@ export function materialToJSON(m: Material): MaterialJSON {
 }
 
 export function applyMaterial(m: Material, j: MaterialJSON) {
+  if (j.textures) applyTextureStates(m, j.textures);
   m.alpha = j.alpha;
   m.transparencyMode = j.transparencyMode === undefined ? (j.alpha < 1 ? Material.MATERIAL_ALPHABLEND : null) : j.transparencyMode;
   m.backFaceCulling = j.backFaceCulling;
   m.wireframe = j.wireframe;
   if (m instanceof PBRMaterial && j.type === 'pbr') {
+    if (j.metallicChannels) [m.useRoughnessFromMetallicTextureAlpha, m.useRoughnessFromMetallicTextureGreen, m.useMetallnessFromMetallicTextureBlue] = j.metallicChannels;
     m.albedoColor = Color3.FromHexString(j.albedo!);
     if (j.metallic !== undefined) m.metallic = j.metallic;
     if (j.roughness !== undefined) m.roughness = j.roughness;

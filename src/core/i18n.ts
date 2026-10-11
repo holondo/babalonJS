@@ -48,6 +48,18 @@ export function tr(key: string, vars?: Record<string, string | number>) {
 }
 
 const PT: Record<string, string> = {
+  "Scene changed while loading.": "A cena mudou durante o carregamento.",
+  "Could not load texture.": "Não foi possível carregar a textura.",
+  "Choose a PNG, JPEG, WebP or KTX2 image.": "Escolha uma imagem PNG, JPEG, WebP ou KTX2.",
+  "Packed map: roughness in green, metal in blue.": "Mapa combinado: rugosidade no verde, metal no azul.",
+  "Texture rotation": "Rotação da textura",
+  "Tiling V": "Repetição V",
+  "Tiling U": "Repetição U",
+  "Roughness / metal": "Rugosidade / metal",
+  "Normal map": "Mapa normal",
+  "Restore original": "Restaurar original",
+  "Replace texture": "Substituir textura",
+  "Choose texture": "Escolher textura",
   "Anisotropy intensity": "Intensidade da anisotropia",
   "Anisotropy": "Anisotropia",
   "Film thickness (nm)": "Espessura da película (nm)",

@@ -1,9 +1,10 @@
+import { USER_TEXTURE_SLOTS, textureStates, applyTextureStates, userTextureFile } from '../../core/materialTextures';
 import { MATERIAL_PRESETS } from '../../core/presets';
 import { editControls } from '../editControls';
 import { materialToJSON, applyMaterial } from '../../core/state';
 import { Color3, Material, PBRMaterial, StandardMaterial } from '@babylonjs/core';
 import { tr } from '../../core/i18n';
-import { h, hint, section, select } from '../dom';
+import { button, h, hint, row, section, select } from '../dom';
 import type { UI } from '../ui';
 
 /** Objects → Material: Sketchfab-style material editing. */
@@ -99,6 +100,7 @@ export class MaterialPanel {
           colorInput(tr('Emissive color'), mat.emissiveColor.toHexString(), (v) => (mat.emissiveColor = Color3.FromHexString(v))),
           slider(tr('Intensity'), mat.emissiveIntensity, { min: 0, max: 10, step: 0.05 }, (v) => (mat.emissiveIntensity = v)),
         ),
+        ...this.textureControls(mat),
         section(tr('General'), ...common),
       ];
     }
@@ -111,9 +113,42 @@ export class MaterialPanel {
           slider(tr('Glossiness'), mat.specularPower, { min: 1, max: 256, step: 1 }, (v) => (mat.specularPower = v)),
           colorInput(tr('Emissive'), mat.emissiveColor.toHexString(), (v) => (mat.emissiveColor = Color3.FromHexString(v))),
         ),
+        ...this.textureControls(mat),
         section(tr('General'), ...common),
       ];
     }
     return [section(tr('General'), ...common)];
   }
+  private textureControls(mat: Material) {
+    const ed = this.ui.editor;
+    const { slider } = editControls(this.ui, () => materialToJSON(mat), (s) => applyMaterial(mat, s));
+    return [section(tr('Textures'), ...USER_TEXTURE_SLOTS.filter((s) => s.slot !== 'metal' || mat instanceof PBRMaterial).map(({ slot, label }) => {
+      const state = textureStates(mat)[slot];
+      const file = state ? userTextureFile(ed.scene, state.path) : null;
+      const input = h('input', { type: 'file', accept: '.png,.jpg,.jpeg,.webp,.ktx2', hidden: true });
+      input.addEventListener('change', () => {
+        const chosen = input.files?.[0];
+        if (chosen) this.ui.run(() => ed.setMaterialTexture(mat, slot, chosen));
+      });
+      const set = (patch: Partial<NonNullable<typeof state>>) => {
+        const states = textureStates(mat);
+        if (states[slot]) { states[slot] = { ...states[slot]!, ...patch }; applyTextureStates(mat, states); }
+      };
+      let image: HTMLImageElement | null = null;
+      if (file && file.type.startsWith('image/') && !file.name.endsWith('.ktx2')) {
+        const url = URL.createObjectURL(file);
+        image = h('img', { src: url, alt: file.name, width: 48, height: 48 });
+        image.onload = image.onerror = () => URL.revokeObjectURL(url);
+      }
+      return h('div', { class: 'texture-slot' }, h('h4', {}, tr(label)), input,
+        row(image, button(state ? tr('Replace texture') : tr('Choose texture'), () => input.click(), { cls: 'small' }),
+          state ? button(tr('Restore original'), () => this.ui.run(() => ed.setMaterialTexture(mat, slot, null)), { cls: 'small ghost' }) : null),
+        slot === 'metal' ? hint(tr('Packed map: roughness in green, metal in blue.')) : null,
+        state ? slider(tr('Tiling U'), state.u, { min: .1, max: 20, step: .1 }, (v) => set({ u: v })) : null,
+        state ? slider(tr('Tiling V'), state.v, { min: .1, max: 20, step: .1 }, (v) => set({ v })) : null,
+        state ? slider(tr('Texture rotation'), state.rotation * 180 / Math.PI, { min: 0, max: 360, step: 1 }, (v) => set({ rotation: v * Math.PI / 180 })) : null,
+      );
+    }))];
+  }
+
 }

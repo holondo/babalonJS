@@ -1,3 +1,4 @@
+import { userTextureFiles, loadUserTexture } from './materialTextures';
 import { materialToJSON, applyMaterial, lightToJSON, applyLight } from './state';
 import type { MaterialJSON, LightJSON } from './state';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
@@ -132,7 +133,11 @@ function entityToJSON(editor: Editor, e: Entity, files: Record<string, Blob>, in
   };
   if (e.kind === 'model') json.asset = e.source!.asset.id;
   if (e.kind === 'primitive') json.primitive = e.primitive;
-  if (e.kind !== 'light') json.materials = editor.materialsOf(e).map(materialToJSON);
+  if (e.kind !== 'light') json.materials = editor.materialsOf(e).map((m) => {
+    const state = materialToJSON(m);
+    userTextureFiles(editor.scene, state.textures ?? {}, files);
+    return state;
+  });
   if (e.boneMap) json.boneMap = { ...e.boneMap };
   if (e.motion) json.motion = { ...e.motion };
   const optimized = editor.optimizer.serialize(e);
@@ -224,6 +229,7 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
   };
 
   editor.resetScene();
+  for (const [path] of Object.entries(files)) if (path.startsWith('textures/')) await loadUserTexture(editor.scene, toFile(path), path);
   editor.applyEnv({ ...json.env });
   editor.setPhoto({ ...json.photo });
 
