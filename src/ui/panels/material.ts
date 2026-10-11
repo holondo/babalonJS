@@ -1,4 +1,8 @@
-import { USER_TEXTURE_SLOTS, textureStates, applyTextureStates, userTextureFile } from '../../core/materialTextures';
+import { USER_TEXTURE_SLOTS, textureStates, applyTextureStates, slotTexture, textureImage } from '../../core/materialTextures';
+import type { TextureSlot } from '../../core/materialTextures';
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
+import { Download, Layers, Upload, X } from 'lucide';
+import { saveAndOfferShare } from '../../core/files';
 import { MATERIAL_PRESETS } from '../../core/presets';
 import { editControls } from '../editControls';
 import { materialToJSON, applyMaterial } from '../../core/state';
@@ -7,8 +11,11 @@ import { Material } from '@babylonjs/core/Materials/material.js';
 import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { tr } from '../../core/i18n';
-import { button, h, hint, row, section, select } from '../dom';
+import { button, h, hint, iconButton, section, select } from '../dom';
 import type { UI } from '../ui';
+
+/** "Bar Chair (Base Color).jpg" → "Bar-Chair-Base-Color" (safe file name, no extension). */
+const fileBase = (name: string) => name.replace(/\.\w+$/, '').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'texture';
 
 /** Objects → Material: Sketchfab-style material editing. */
 export class MaterialPanel {
@@ -19,6 +26,62 @@ export class MaterialPanel {
   }
 
   materialIndex = 0;
+  /** The Textures block was opened by the user (it starts collapsed). */
+  private texturesOpen = false;
+  /** Slot whose "from another object" picker is open. */
+  private pickerFor: { material: Material; slot: TextureSlot } | null = null;
+  /** Small previews of textures, made once per texture (read back from the GPU). */
+  private readonly thumbs = new WeakMap<BaseTexture, Promise<string>>();
+
+  private thumb(texture: BaseTexture) {
+    let url = this.thumbs.get(texture);
+    if (!url) {
+      url = textureImage(texture, 96).then((b) => URL.createObjectURL(b));
+      this.thumbs.set(texture, url);
+    }
+    const img = h('img', { alt: '', width: 48, height: 48, class: 'texture-thumb' });
+    url.then((u) => (img.src = u)).catch(() => img.classList.add('unreadable'));
+    return img;
+  }
+
+  /** Every texture in the scene (other objects first), for "from another object". */
+  private sceneTextures(target: Material) {
+    const ed = this.ui.editor;
+    const seen = new Set<BaseTexture>();
+    const out: { texture: BaseTexture; label: string; own: boolean }[] = [];
+    for (const e of ed.entities) {
+      for (const m of ed.materialsOf(e)) {
+        for (const { slot, label } of USER_TEXTURE_SLOTS) {
+          const t = slotTexture(m, slot);
+          if (!t || seen.has(t) || t.isCube) continue;
+          seen.add(t);
+          out.push({ texture: t, label: `${e.name} · ${tr(label)}`, own: m === target });
+        }
+      }
+    }
+    return out.sort((a, b) => Number(a.own) - Number(b.own));
+  }
+
+  /** Copies another texture into a slot (as an image, so it's saved with the project and undoable). */
+  private useTexture(mat: Material, slot: TextureSlot, texture: BaseTexture) {
+    const ed = this.ui.editor;
+    this.pickerFor = null;
+    this.ui.run(async () => {
+      const blob = await textureImage(texture);
+      const name = `${fileBase(texture.name || 'texture')}.png`;
+      await ed.setMaterialTexture(mat, slot, new File([blob], name, { type: 'image/png' }));
+      this.ui.toast(tr('Texture applied'));
+    });
+  }
+
+  private saveTexture(texture: BaseTexture, slotLabel: string) {
+    this.ui.run(async () => {
+      const blob = await textureImage(texture);
+      const name = `${fileBase(texture.name || slotLabel)}.png`;
+      const share = saveAndOfferShare(blob, name);
+      this.ui.toast(tr('Texture saved as {name}', { name }), 'info', share ? { label: tr('Share'), run: share } : undefined, 6000);
+    });
+  }
 
   materialPanel() {
     const ed = this.ui.editor;
@@ -125,9 +188,14 @@ export class MaterialPanel {
   private textureControls(mat: Material) {
     const ed = this.ui.editor;
     const { slider } = editControls(this.ui, () => materialToJSON(mat), (s) => applyMaterial(mat, s));
-    return [section(tr('Textures'), ...USER_TEXTURE_SLOTS.filter((s) => s.slot !== 'metal' || mat instanceof PBRMaterial).map(({ slot, label }) => {
+    // Advanced: collapsed by default, kept open across re-renders once the user opens it
+    const details = h('details', { class: 'sec', open: this.texturesOpen }, h('summary', {}, tr('Textures')));
+    // Slots (and their thumbnails, read back from the GPU) are only built while the block is open
+    details.addEventListener('toggle', () => { if (this.texturesOpen !== details.open) { this.texturesOpen = details.open; this.ui.renderPanel(); } });
+    if (!this.texturesOpen) return [details];
+    details.append(...USER_TEXTURE_SLOTS.filter((s) => s.slot !== 'metal' || mat instanceof PBRMaterial).map(({ slot, label }) => {
       const state = textureStates(mat)[slot];
-      const file = state ? userTextureFile(ed.scene, state.path) : null;
+      const current = slotTexture(mat, slot);
       const input = h('input', { type: 'file', accept: '.png,.jpg,.jpeg,.webp,.ktx2', hidden: true });
       input.addEventListener('change', () => {
         const chosen = input.files?.[0];
@@ -137,21 +205,34 @@ export class MaterialPanel {
         const states = textureStates(mat);
         if (states[slot]) { states[slot] = { ...states[slot]!, ...patch }; applyTextureStates(mat, states); }
       };
-      let image: HTMLImageElement | null = null;
-      if (file && file.type.startsWith('image/') && !file.name.endsWith('.ktx2')) {
-        const url = URL.createObjectURL(file);
-        image = h('img', { src: url, alt: file.name, width: 48, height: 48 });
-        image.onload = image.onerror = () => URL.revokeObjectURL(url);
-      }
-      return h('div', { class: 'texture-slot' }, h('h4', {}, tr(label)), input,
-        row(image, button(state ? tr('Replace texture') : tr('Choose texture'), () => input.click(), { cls: 'small' }),
-          state ? button(tr('Restore original'), () => this.ui.run(() => ed.setMaterialTexture(mat, slot, null)), { cls: 'small ghost' }) : null),
+      const open = this.pickerFor?.material === mat && this.pickerFor.slot === slot;
+      const togglePicker = () => { this.pickerFor = open ? null : { material: mat, slot }; this.ui.renderPanel(); };
+      const others = open ? this.sceneTextures(mat).filter((t) => t.texture !== current) : [];
+      return h('div', { class: 'texture-slot' },
+        h('div', { class: 'texture-slot-head' },
+          current ? this.thumb(current) : h('span', { class: 'texture-thumb blank' }),
+          h('div', { class: 'texture-slot-title' }, h('h4', {}, tr(label)), h('small', {}, state ? tr('Your texture') : current ? tr('From the model') : tr('None'))),
+          current ? iconButton(Download, tr('Save image'), () => this.saveTexture(current, tr(label))) : null),
+        input,
+        h('div', { class: 'texture-actions' },
+          button(state || current ? tr('Replace') : tr('Choose file'), () => input.click(), { icon: Upload, cls: 'small' }),
+          button(tr('From an object'), togglePicker, { icon: Layers, cls: `small${open ? ' active' : ''}` }),
+          state ? iconButton(X, tr('Restore original'), () => this.ui.run(() => ed.setMaterialTexture(mat, slot, null))) : null),
+        open
+          ? h('div', { class: 'texture-picker' },
+              others.length
+                ? h('div', { class: 'texture-picker-grid' }, ...others.map((t) =>
+                    h('button', { class: 'texture-pick', title: t.label, onClick: () => this.useTexture(mat, slot, t.texture) },
+                      this.thumb(t.texture), h('span', {}, t.label))))
+                : hint(tr('No other textures in the scene. Add a textured model first.')))
+          : null,
         slot === 'metal' ? hint(tr('Packed map: roughness in green, metal in blue.')) : null,
         state ? slider(tr('Tiling U'), state.u, { min: .1, max: 20, step: .1 }, (v) => set({ u: v })) : null,
         state ? slider(tr('Tiling V'), state.v, { min: .1, max: 20, step: .1 }, (v) => set({ v })) : null,
         state ? slider(tr('Texture rotation'), state.rotation * 180 / Math.PI, { min: 0, max: 360, step: 1 }, (v) => set({ rotation: v * Math.PI / 180 })) : null,
       );
-    }))];
+    }));
+    return [details];
   }
 
 }

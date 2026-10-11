@@ -102,3 +102,36 @@ export function copyUserTextures(source: Material, target: Material) {
 }
 
 export function userTextureFile(scene: Scene, path: string) { return resources.get(scene)?.get(path)?.file; }
+
+/** The texture shown in a slot now (from the model, or chosen by the user). */
+export function slotTexture(m: Material, slot: TextureSlot): BaseTexture | null {
+  if (slot === 'metal' && !(m instanceof PBRMaterial)) return null;
+  const current = slots(m)[property(m, slot)] ?? null;
+  return current ?? (slot === 'base' ? m.metadata?.stashedAlbedo ?? null : null);
+}
+
+/**
+ * A texture as an image (PNG), read back from the GPU so it works for any texture the model
+ * brought, not only files the user chose. `maxSize` makes a smaller copy (for thumbnails).
+ * Compressed textures (KTX2) can't be read back.
+ */
+export async function textureImage(texture: BaseTexture, maxSize?: number): Promise<Blob> {
+  const { width, height } = texture.getSize();
+  const data = width && height ? await texture.readPixels(0, 0, null, true)?.catch(() => null) : null;
+  if (!data) throw new Error(tr('This texture cannot be read (it may be compressed).'));
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  if (data instanceof Uint8Array) pixels.set(data.subarray(0, pixels.length));
+  else for (let i = 0; i < pixels.length; i++) pixels[i] = Math.round(Math.min(1, Math.max(0, (data as Float32Array)[i])) * 255);
+  const full = new OffscreenCanvas(width, height);
+  full.getContext('2d')!.putImageData(new ImageData(pixels, width, height), 0, 0);
+  // Textures flipped on load (invertY) come back upside down: draw them the right way up
+  const flip = (texture as Texture).invertY === true;
+  const scale = maxSize ? Math.min(1, maxSize / Math.max(width, height)) : 1;
+  const w = Math.max(1, Math.round(width * scale)), hgt = Math.max(1, Math.round(height * scale));
+  if (!flip && scale === 1) return full.convertToBlob({ type: 'image/png' });
+  const out = new OffscreenCanvas(w, hgt);
+  const ctx = out.getContext('2d')!;
+  if (flip) { ctx.translate(0, hgt); ctx.scale(1, -1); }
+  ctx.drawImage(full, 0, 0, w, hgt);
+  return out.convertToBlob({ type: 'image/png' });
+}
