@@ -682,15 +682,18 @@ input.name {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  width: min(460px, calc(100vw - 32px));
   z-index: 20;
   pointer-events: none;
 }
 .toast {
   padding: 10px 16px;
-  border-radius: 999px;
+  border-radius: 20px;
   background: var(--glass-strong);
   border: 1px solid var(--line);
-  max-width: calc(100vw - 40px);
+  max-width: 100%;
+  line-height: 1.35;
+  text-align: center;
   animation: pop 0.2s ease-out;
   transition: opacity 0.4s, transform 0.4s;
 }
@@ -1187,8 +1190,12 @@ button:disabled svg.lucide {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-right: 6px;
+  padding: 8px 8px 8px 16px;
+  text-align: left;
   pointer-events: auto;
+}
+.toast.with-action .chip {
+  flex: none;
 }
 
 /* On gold backgrounds icons switch to deep purple for contrast */
@@ -1495,9 +1502,13 @@ body.ui-hidden .ui-restore {
   padding: 3px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
+  flex: none;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .segmented button {
-  flex: 1;
+  flex: 1 0 auto;
+  padding: 0 8px;
   height: 34px;
   border-radius: 999px;
   font-size: 13px;
