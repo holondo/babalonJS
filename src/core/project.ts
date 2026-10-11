@@ -51,12 +51,15 @@ interface EntityJSON {
   /** Skeleton given in the app; `weights` is the path of its skin weights in the project. */
   rig?: RigData & { weights?: string };
   /** Optimized variant; `data` is the path of the kept triangles in the project. */
+  /** Separated part: binary triangle subsets or cut geometry. */
+  separation?: string;
   optimization?: { settings: OptimizeSettings; error: number; meshes: number[]; data: string; bakes?: { mesh: number; size: number; path: string }[] };
   /** Compressed or downscaled textures, stored in the project (no re-encoding on open). */
   textureOptimization?: { settings: TextureSettings; textures: { index: number; format: 'ktx2' | 'png'; width: number; height: number; path: string }[] };
 }
 
 interface AssetJSON {
+  attribution?: AssetRef['attribution'];
   id: number;
   name: string;
   url?: string;
@@ -86,6 +89,14 @@ export interface ProjectSnapshot {
 
 // ---------- Save ----------
 
+/** The same bytes always give the same Blob: unchanged generated files aren't written again. */
+const generatedBlobs = new WeakMap<Uint8Array, Blob>();
+function blobOf(data: Uint8Array) {
+  let blob = generatedBlobs.get(data);
+  if (!blob) generatedBlobs.set(data, (blob = new Blob([data as Uint8Array<ArrayBuffer>])));
+  return blob;
+}
+
 export function snapshot(editor: Editor, name: string): ProjectSnapshot {
   const files: Record<string, Blob> = {};
   const assets = new Map<number, AssetJSON>();
@@ -94,7 +105,7 @@ export function snapshot(editor: Editor, name: string): ProjectSnapshot {
   const used = editor.entities.flatMap((e) => [e.source?.asset, ...(e.addedClips ?? []).map((c) => ('asset' in c.from ? c.from.asset : undefined))]);
   for (const asset of used) {
     if (!asset || assets.has(asset.id)) continue;
-    const json: AssetJSON = { id: asset.id, name: asset.name };
+    const json: AssetJSON = { id: asset.id, name: asset.name, attribution: asset.attribution };
     if (asset.url) json.url = asset.url;
     if (asset.main) {
       json.main = path(asset, asset.main);
@@ -144,10 +155,15 @@ function entityToJSON(editor: Editor, e: Entity, files: Record<string, Blob>, in
   });
   if (e.boneMap) json.boneMap = { ...e.boneMap };
   if (e.motion) json.motion = { ...e.motion };
+  const separated = editor.separator.serialize(e);
+  if (separated) {
+    json.separation = `separated/${index}.bin`;
+    files[json.separation] = blobOf(separated);
+  }
   const optimized = editor.optimizer.serialize(e);
   if (optimized) {
     const path = `optimized/${index}.bin`;
-    files[path] = new Blob([optimized.data as Uint8Array<ArrayBuffer>]);
+    files[path] = blobOf(optimized.data);
     json.optimization = {
       settings: optimized.settings,
       error: optimized.error,
@@ -155,7 +171,7 @@ function entityToJSON(editor: Editor, e: Entity, files: Record<string, Blob>, in
       data: path,
       bakes: optimized.bakes.map((b, k) => {
         const png = `optimized/${index}-normals-${k}.png`;
-        files[png] = new Blob([b.png as Uint8Array<ArrayBuffer>]);
+        files[png] = blobOf(b.png);
         return { mesh: b.mesh, size: b.size, path: png };
       }),
     };
@@ -166,7 +182,7 @@ function entityToJSON(editor: Editor, e: Entity, files: Record<string, Blob>, in
       settings: textures.settings,
       textures: textures.textures.map((t, k) => {
         const path = `optimized/${index}-texture-${k}.${t.format}`;
-        files[path] = new Blob([t.data as Uint8Array<ArrayBuffer>]);
+        files[path] = blobOf(t.data);
         return { index: t.index, format: t.format, width: t.width, height: t.height, path };
       }),
     };
@@ -174,7 +190,7 @@ function entityToJSON(editor: Editor, e: Entity, files: Record<string, Blob>, in
   const rig = editor.rigger.serialize(e);
   if (rig) {
     const path = `rigs/${index}.bin`;
-    files[path] = new Blob([rig.weights as Uint8Array<ArrayBuffer>]);
+    files[path] = blobOf(rig.weights);
     json.rig = { ...rig.data, weights: path };
   }
   if (e.addedClips?.length) {
@@ -198,7 +214,7 @@ export async function toZip(snap: ProjectSnapshot): Promise<Blob> {
   for (const [path, blob] of Object.entries(snap.files)) {
     // Models and textures are usually compressed already: storing without recompressing is much faster
     // Data the app writes (rig weights, optimized triangles) compresses well; models and textures don't
-    entries[path] = [new Uint8Array(await blob.arrayBuffer()), { level: /^(rigs|optimized)\/.*\.bin$/.test(path) ? 6 : 0 }];
+    entries[path] = [new Uint8Array(await blob.arrayBuffer()), { level: /^(rigs|optimized|separated)\/.*\.bin$/.test(path) ? 6 : 0 }];
   }
   const data = zipSync(entries);
   return new Blob([data], { type: 'application/zip' });
@@ -229,7 +245,11 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
   const toFile = (path: string) => {
     const blob = files[path];
     if (!blob) throw new Error(tr('File missing from project: {path}', { path }));
-    return new File([blob], path.split('/').pop()!);
+    const file = new File([blob], path.split('/').pop()!);
+    // Same data as the stored Blob: it must not be written again (see FILES)
+    const keys = storedAs.get(blob);
+    if (keys) storedAs.set(file, new Set(keys));
+    return file;
   };
 
   editor.resetScene();
@@ -241,7 +261,7 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
   const assets = new Map<number, AssetRef>();
   for (const a of json.assets) {
     try {
-      assets.set(a.id, { id: a.id, name: a.name, url: a.url, main: a.main ? toFile(a.main) : undefined, deps: (a.deps ?? []).map(toFile) });
+      assets.set(a.id, { id: a.id, name: a.name, attribution: a.attribution, url: a.url, main: a.main ? toFile(a.main) : undefined, deps: (a.deps ?? []).map(toFile) });
     } catch {
       // The model will be reported as missing below
     }
@@ -289,6 +309,15 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
     if (ej.materials) {
       const mats = editor.materialsOf(entity);
       ej.materials.forEach((mj, i) => mats[i] && applyMaterial(mats[i], mj));
+    }
+    if (ej.separation) {
+      const blob = files[ej.separation];
+      try {
+        if (!blob) throw new Error();
+        editor.separator.restoreData(entity, new Uint8Array(await blob.arrayBuffer()));
+      } catch {
+        missing.add(tr('Separated part {name}', { name: ej.name }));
+      }
     }
     if (ej.optimization) {
       const blob = files[ej.optimization.data];
@@ -363,6 +392,29 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
 const DB = 'babalon-js';
 const STORE = 'projects';
 const META = 'project-info';
+/**
+ * Project files (models, textures, environments, generated binaries), one record each, keyed
+ * `${projectId}
+${path}`. A file is written once and only rewritten when its content changes,
+ * so autosave doesn't copy a 50 MB model on every change, and Blobs read from here stay valid
+ * (Firefox invalidates a Blob read from IndexedDB once its record is overwritten).
+ */
+const FILES = 'project-files';
+const fileKey = (id: string, path: string) => `${id}
+${path}`;
+const projectRange = (id: string) => IDBKeyRange.bound(`${id}
+`, `${id}
+￿`);
+/** Keys each Blob is known to be stored under (read from there, or written there). */
+const storedAs = new WeakMap<Blob, Set<string>>();
+const markStored = (blob: Blob, key: string) => {
+  const keys = storedAs.get(blob);
+  if (keys) keys.add(key);
+  else storedAs.set(blob, new Set([key]));
+};
+/** What STORE holds: the scene, and the paths of its files in FILES (`files` only in old projects). */
+interface StoredSnapshot extends ProjectSnapshot { paths?: string[] }
+
 export interface ProjectInfo {
   id: string;
   name: string;
@@ -372,9 +424,11 @@ export interface ProjectInfo {
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 2);
+    const req = indexedDB.open(DB, 3);
     req.onupgradeneeded = () => {
       const db = req.result;
+      if (!db.objectStoreNames.contains(FILES)) db.createObjectStore(FILES);
+      if (db.objectStoreNames.contains(META)) return;
       const store = db.objectStoreNames.contains(STORE) ? req.transaction!.objectStore(STORE) : db.createObjectStore(STORE);
       const meta = db.createObjectStore(META, { keyPath: 'id' });
       const legacy = store.get('autosave');
@@ -398,54 +452,103 @@ async function transaction<T>(mode: IDBTransactionMode, run: (tx: IDBTransaction
   const db = await openDB();
   try {
     return await new Promise<T>((resolve, reject) => {
-      const tx = db.transaction([STORE, META], mode);
+      const tx = db.transaction([STORE, META, FILES], mode);
       let value: T;
       tx.oncomplete = () => resolve(value);
       tx.onabort = () => reject(tx.error ?? new Error(tr('Could not save in this browser. Export your project to keep it.')));
-      tx.onerror = () => reject(tx.error);
+      // In Firefox tx.error is still null here: the reason is on the failed request
+      tx.onerror = (ev) => reject((ev.target as IDBRequest | null)?.error ?? tx.error);
       run(tx, (v) => { value = v; });
     });
   } finally { db.close(); }
 }
 
-export function listProjects(): Promise<ProjectInfo[]> {
-  return transaction('readonly', (tx, result) => {
+/**
+ * Firefox (and browsers based on it) back a Blob read from IndexedDB with the stored record:
+ * once that record is overwritten, the old Blob can no longer be read ("The operation was
+ * aborted"). Everything read from the database is copied into memory before it's used.
+ */
+async function inMemory<T extends Blob | undefined>(blob: T): Promise<T> {
+  if (!blob) return blob;
+  const copy = new Blob([await blob.arrayBuffer()], { type: blob.type });
+  return (blob instanceof File ? new File([copy], blob.name, { type: blob.type }) : copy) as T;
+}
+
+export async function listProjects(): Promise<ProjectInfo[]> {
+  const list = await transaction<ProjectInfo[]>('readonly', (tx, result) => {
     const req = tx.objectStore(META).getAll();
     req.onsuccess = () => result((req.result as ProjectInfo[]).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
   });
+  for (const p of list) p.thumbnail = await inMemory(p.thumbnail);
+  return list;
 }
 
 export function saveProject(id: string, snap: ProjectSnapshot, thumbnail?: Blob): Promise<void> {
   return transaction('readwrite', (tx) => {
-    tx.objectStore(STORE).put(snap, id);
+    // The scene description goes in STORE; each file in FILES, written only when it's new
+    const files = tx.objectStore(FILES);
+    const paths = Object.keys(snap.files);
+    const written: [Blob, string][] = [];
+    for (const [path, blob] of Object.entries(snap.files)) {
+      const key = fileKey(id, path);
+      if (storedAs.get(blob)?.has(key)) continue;
+      files.put(blob, key);
+      written.push([blob, key]);
+    }
+    const keys = files.getAllKeys(projectRange(id));
+    keys.onsuccess = () => {
+      const keep = new Set(paths.map((p) => fileKey(id, p)));
+      for (const key of keys.result as string[]) if (!keep.has(key)) files.delete(key);
+    };
+    tx.addEventListener('complete', () => written.forEach(([blob, key]) => markStored(blob, key)));
+    tx.objectStore(STORE).put({ json: snap.json, files: {}, paths }, id);
     const meta = tx.objectStore(META);
-    const req = meta.get(id);
-    req.onsuccess = () => meta.put({ id, name: snap.json.name, updatedAt: snap.json.savedAt, thumbnail: thumbnail ?? req.result?.thumbnail });
+    if (thumbnail) meta.put({ id, name: snap.json.name, updatedAt: snap.json.savedAt, thumbnail });
+    else {
+      // Keep the previous thumbnail without re-writing its Blob (that would break it in Firefox)
+      const req = meta.get(id);
+      req.onsuccess = () => meta.put({ id, name: snap.json.name, updatedAt: snap.json.savedAt, thumbnail: req.result?.thumbnail });
+    }
   });
 }
 
-export function loadProject(id: string): Promise<ProjectSnapshot | null> {
-  return transaction('readonly', (tx, result) => {
+export async function loadProject(id: string): Promise<ProjectSnapshot | null> {
+  const loaded = await transaction<{ snap: StoredSnapshot | null; files: Record<string, Blob> }>('readonly', (tx, result) => {
     const req = tx.objectStore(STORE).get(id);
-    req.onsuccess = () => result(req.result ?? null);
+    req.onsuccess = () => {
+      const snap = (req.result as StoredSnapshot | undefined) ?? null;
+      const files: Record<string, Blob> = {};
+      if (!snap?.paths) return result({ snap, files });
+      let pending = snap.paths.length;
+      if (!pending) return result({ snap, files });
+      for (const path of snap.paths) {
+        const get = tx.objectStore(FILES).get(fileKey(id, path));
+        get.onsuccess = () => {
+          if (get.result) { files[path] = get.result; markStored(get.result, fileKey(id, path)); }
+          if (--pending === 0) result({ snap, files });
+        };
+      }
+    };
   });
+  const { snap } = loaded;
+  if (!snap) return null;
+  if (snap.paths) return { json: snap.json, files: loaded.files };
+  // Projects saved before the file store keep their files inline; the next save moves them
+  // out, overwriting this record, so they are copied into memory first (see inMemory)
+  for (const [path, blob] of Object.entries(snap.files)) snap.files[path] = await inMemory(blob);
+  return { json: snap.json, files: snap.files };
 }
 
 export function deleteProject(id: string): Promise<void> {
-  return transaction('readwrite', (tx) => { tx.objectStore(STORE).delete(id); tx.objectStore(META).delete(id); });
+  return transaction('readwrite', (tx) => { tx.objectStore(STORE).delete(id); tx.objectStore(META).delete(id); tx.objectStore(FILES).delete(projectRange(id)); });
 }
 
-export function renameProject(id: string, name: string): Promise<void> {
-  return transaction('readwrite', (tx) => {
-    const req = tx.objectStore(STORE).get(id);
-    req.onsuccess = () => {
-      if (!req.result) return;
-      req.result.json.name = name;
-      tx.objectStore(STORE).put(req.result, id);
-      const meta = tx.objectStore(META).get(id);
-      meta.onsuccess = () => { if (meta.result) tx.objectStore(META).put({ ...meta.result, name }); };
-    };
-  });
+export async function renameProject(id: string, name: string): Promise<void> {
+  const snap = await loadProject(id);
+  if (!snap) return;
+  const info = (await listProjects()).find((p) => p.id === id);
+  snap.json.name = name;
+  await saveProject(id, snap, info?.thumbnail);
 }
 
 export async function duplicateProject(id: string): Promise<string> {
