@@ -1,3 +1,5 @@
+import { loadEnvironment } from './environments';
+import type { EnvironmentAsset } from './environments';
 import { loadUserTexture, textureStates, applyTextureStates, copyUserTextures, clearUserTextures } from './materialTextures';
 import type { TextureSlot } from './materialTextures';
 import { materialToJSON, applyMaterial } from './state';
@@ -164,6 +166,7 @@ export const SAMPLE_MODELS = [
 ];
 
 export interface EnvSettings {
+  custom?: string;
   preset: string;
   intensity: number;
   rotation: number;
@@ -304,6 +307,8 @@ export class Editor {
   private readonly ground: Mesh;
   private readonly grid: Mesh;
   private envTexture: BaseTexture | null = null;
+  private environmentSource = '';
+  readonly environments = new Map<string, EnvironmentAsset>();
   private skybox: Mesh | null = null;
   private readonly helpers = new Set<AbstractMesh>();
   /** Measurement/guide visuals: never selected, exported or shown in photos. */
@@ -1243,6 +1248,10 @@ export class Editor {
     }
     containers.forEach((c) => c.dispose());
     clearUserTextures(this.scene);
+    this.environments.forEach((asset) => asset.texture.dispose());
+    this.environments.clear();
+    this.env.custom = undefined;
+    this.environmentSource = '';
     this.entities = [];
     this.undoStack = [];
     this.redoStack = [];
@@ -1557,21 +1566,39 @@ export class Editor {
 
   // ---------- Environment ----------
 
+  async importEnvironment(file: File, size = 512, path = `environments/${crypto.randomUUID()}/${file.name}`, activate = true) {
+    const assets = this.environments;
+    this.loading.notifyObservers({ name: file.name, progress: 0 });
+    try {
+      const asset = await loadEnvironment(this.scene, file, size);
+      assets.set(path, asset);
+      if (activate) {
+        this.beginEdit('environment', () => ({ ...this.env }), (s) => this.applyEnv(s));
+        this.applyEnv({ custom: path });
+        this.endEdit('environment');
+      }
+      return path;
+    } finally { this.loading.notifyObservers(null); }
+  }
+
   applyEnv(partial: Partial<EnvSettings> = {}) {
-    const prevPreset = this.env.preset;
+    if (partial.custom && !this.environments.has(partial.custom)) throw new Error(tr('Could not load environment.'));
+    if (partial.preset !== undefined && !('custom' in partial)) partial = { ...partial, custom: undefined };
     Object.assign(this.env, partial);
     const env = this.env;
     const scene = this.scene;
 
-    if (!this.envTexture || env.preset !== prevPreset) {
+    const source = env.custom ?? env.preset;
+    if (!this.envTexture || source !== this.environmentSource) {
       const old = this.envTexture;
-      const tex = CubeTexture.CreateFromPrefilteredData(ENV_PRESETS[env.preset].url, scene);
+      const tex = env.custom ? this.environments.get(env.custom)!.texture : CubeTexture.CreateFromPrefilteredData((ENV_PRESETS[env.preset] ?? ENV_PRESETS[DEFAULT_ENV.preset]).url, scene);
+      this.environmentSource = source;
       this.envTexture = tex;
       scene.environmentTexture = tex;
       this.skybox?.dispose(false, true);
       this.skybox = scene.createDefaultSkybox(tex, true, 1000, env.skyboxBlur, true);
       if (this.skybox) this.skybox.isPickable = false;
-      old?.dispose();
+      if (old && ![...this.environments.values()].some((a) => a.texture === old)) old.dispose();
     }
     scene.environmentIntensity = env.intensity;
     (this.envTexture as CubeTexture).rotationY = env.rotation;

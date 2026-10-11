@@ -48,6 +48,10 @@ export function tr(key: string, vars?: Record<string, string | number>) {
 }
 
 const PT: Record<string, string> = {
+  "Custom environment": "Ambiente personalizado",
+  "Load environment…": "Carregar ambiente…",
+  "Could not load environment.": "Não foi possível carregar o ambiente.",
+  "Choose an HDR, EXR or ENV file.": "Escolha um arquivo HDR, EXR ou ENV.",
   "Scene changed while loading.": "A cena mudou durante o carregamento.",
   "Could not load texture.": "Não foi possível carregar a textura.",
   "Choose a PNG, JPEG, WebP or KTX2 image.": "Escolha uma imagem PNG, JPEG, WebP ou KTX2.",

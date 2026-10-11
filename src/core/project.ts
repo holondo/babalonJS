@@ -104,6 +104,10 @@ export function snapshot(editor: Editor, name: string): ProjectSnapshot {
     assets.set(asset.id, json);
   }
 
+  if (editor.env.custom) {
+    const custom = editor.environments.get(editor.env.custom);
+    if (custom) files[editor.env.custom] = custom.file;
+  }
   const cam = editor.camera;
   return {
     files,
@@ -230,6 +234,7 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
 
   editor.resetScene();
   for (const [path] of Object.entries(files)) if (path.startsWith('textures/')) await loadUserTexture(editor.scene, toFile(path), path);
+  if (json.env.custom) await editor.importEnvironment(toFile(json.env.custom), 512, json.env.custom, false);
   editor.applyEnv({ ...json.env });
   editor.setPhoto({ ...json.photo });
 
