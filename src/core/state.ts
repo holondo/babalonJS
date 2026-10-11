@@ -17,6 +17,12 @@ export interface MaterialJSON {
   emissive?: string;
   emissiveIntensity?: number;
   textureHidden?: boolean;
+  advanced?: {
+    refraction: boolean; transmission: number; ior: number; linkTransparency: boolean;
+    sheen: boolean; sheenIntensity: number; sheenColor: string; sheenRoughness: number | null;
+    iridescence: boolean; iridescenceIntensity: number; filmMin: number; filmMax: number;
+    anisotropy: boolean; anisotropyIntensity: number; anisotropyDirection: number[];
+  };
   diffuse?: string;
   specular?: string;
   specularPower?: number;
@@ -37,6 +43,14 @@ export function materialToJSON(m: Material): MaterialJSON {
       emissive: m.emissiveColor.toHexString(),
       emissiveIntensity: m.emissiveIntensity,
       textureHidden: !!m.metadata?.stashedAlbedo,
+      advanced: {
+        refraction: m.subSurface.isRefractionEnabled, transmission: m.subSurface.refractionIntensity,
+        ior: m.subSurface.indexOfRefraction, linkTransparency: m.subSurface.linkRefractionWithTransparency,
+        sheen: m.sheen.isEnabled, sheenIntensity: m.sheen.intensity, sheenColor: m.sheen.color.toHexString(), sheenRoughness: m.sheen.roughness,
+        iridescence: m.iridescence.isEnabled, iridescenceIntensity: m.iridescence.intensity,
+        filmMin: m.iridescence.minimumThickness, filmMax: m.iridescence.maximumThickness,
+        anisotropy: m.anisotropy.isEnabled, anisotropyIntensity: m.anisotropy.intensity, anisotropyDirection: m.anisotropy.direction.asArray(),
+      },
     };
   }
   if (m instanceof StandardMaterial) {
@@ -63,6 +77,15 @@ export function applyMaterial(m: Material, j: MaterialJSON) {
     if (j.roughness !== undefined) m.roughness = j.roughness;
     m.clearCoat.isEnabled = !!j.clearCoat;
     m.clearCoat.intensity = j.clearCoatIntensity ?? 1;
+    if (j.advanced) {
+      const a = j.advanced;
+      Object.assign(m.subSurface, { isRefractionEnabled: a.refraction, refractionIntensity: a.transmission, indexOfRefraction: a.ior, linkRefractionWithTransparency: a.linkTransparency });
+      Object.assign(m.sheen, { isEnabled: a.sheen, intensity: a.sheenIntensity, roughness: a.sheenRoughness });
+      m.sheen.color = Color3.FromHexString(a.sheenColor);
+      Object.assign(m.iridescence, { isEnabled: a.iridescence, intensity: a.iridescenceIntensity, minimumThickness: a.filmMin, maximumThickness: a.filmMax });
+      Object.assign(m.anisotropy, { isEnabled: a.anisotropy, intensity: a.anisotropyIntensity });
+      m.anisotropy.direction.set(a.anisotropyDirection[0], a.anisotropyDirection[1]);
+    }
     m.unlit = !!j.unlit;
     m.emissiveColor = Color3.FromHexString(j.emissive!);
     m.emissiveIntensity = j.emissiveIntensity ?? 1;

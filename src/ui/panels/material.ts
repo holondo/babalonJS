@@ -1,8 +1,9 @@
+import { MATERIAL_PRESETS } from '../../core/presets';
 import { editControls } from '../editControls';
 import { materialToJSON, applyMaterial } from '../../core/state';
 import { Color3, Material, PBRMaterial, StandardMaterial } from '@babylonjs/core';
 import { tr } from '../../core/i18n';
-import { hint, section, select } from '../dom';
+import { h, hint, section, select } from '../dom';
 import type { UI } from '../ui';
 
 /** Objects → Material: Sketchfab-style material editing. */
@@ -37,7 +38,7 @@ export class MaterialPanel {
   }
 
   materialControls(mat: Material): (Node | null)[] {
-    const { slider, colorInput, toggle } = editControls(this.ui, () => materialToJSON(mat), (s) => applyMaterial(mat, s));
+    const { slider, colorInput, toggle, chips } = editControls(this.ui, () => materialToJSON(mat), (s) => applyMaterial(mat, s));
     const q = (fn: () => void) => this.ui.quiet(fn);
     const common = [
       slider(tr('Opacity'), mat.alpha, { min: 0, max: 1, step: 0.01 }, (v) => {
@@ -51,6 +52,25 @@ export class MaterialPanel {
       const meta = (mat.metadata ??= {});
       const hasTex = !!(mat.albedoTexture || meta.stashedAlbedo);
       return [
+        section(tr('Material presets'), chips(MATERIAL_PRESETS.map((p) => ({ value: p.id, label: tr(p.label) })), '', (id) => {
+          const preset = MATERIAL_PRESETS.find((p) => p.id === id)!;
+          const state = materialToJSON(mat);
+          applyMaterial(mat, { ...state, alpha: 1, transparencyMode: null, clearCoat: false, clearCoatIntensity: 1, unlit: false, ...preset.values,
+            advanced: { ...state.advanced!, refraction: false, sheen: false, iridescence: false, anisotropy: false, linkTransparency: false, ...preset.advanced } });
+        })),
+        h('details', { class: 'sec' }, h('summary', {}, tr('Advanced material')),
+          toggle(tr('Refraction'), mat.subSurface.isRefractionEnabled, (v) => { mat.subSurface.isRefractionEnabled = v; }),
+          slider(tr('Transmission'), mat.subSurface.refractionIntensity, { min: 0, max: 1, step: .01 }, (v) => { mat.subSurface.refractionIntensity = v; }),
+          slider(tr('Index of refraction'), mat.subSurface.indexOfRefraction, { min: 1, max: 2.5, step: .01 }, (v) => { mat.subSurface.indexOfRefraction = v; }),
+          toggle(tr('Sheen'), mat.sheen.isEnabled, (v) => { mat.sheen.isEnabled = v; }),
+          slider(tr('Sheen intensity'), mat.sheen.intensity, { min: 0, max: 1, step: .01 }, (v) => { mat.sheen.intensity = v; }),
+          colorInput(tr('Sheen color'), mat.sheen.color.toHexString(), (v) => { mat.sheen.color = Color3.FromHexString(v); }),
+          toggle(tr('Iridescence'), mat.iridescence.isEnabled, (v) => { mat.iridescence.isEnabled = v; }),
+          slider(tr('Iridescence intensity'), mat.iridescence.intensity, { min: 0, max: 1, step: .01 }, (v) => { mat.iridescence.intensity = v; }),
+          slider(tr('Film thickness (nm)'), mat.iridescence.maximumThickness, { min: 100, max: 1000, step: 1 }, (v) => { mat.iridescence.maximumThickness = v; mat.iridescence.minimumThickness = Math.min(mat.iridescence.minimumThickness, v); }),
+          toggle(tr('Anisotropy'), mat.anisotropy.isEnabled, (v) => { mat.anisotropy.isEnabled = v; }),
+          slider(tr('Anisotropy intensity'), mat.anisotropy.intensity, { min: 0, max: 1, step: .01 }, (v) => { mat.anisotropy.intensity = v; }),
+        ),
         section(
           tr('Color'),
           colorInput(hasTex ? tr('Tint (multiplies texture)') : tr('Base color'), mat.albedoColor.toHexString(), (v) => q(() => (mat.albedoColor = Color3.FromHexString(v)))),
