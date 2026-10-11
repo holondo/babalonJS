@@ -48,6 +48,20 @@ export function tr(key: string, vars?: Record<string, string | number>) {
 }
 
 const PT: Record<string, string> = {
+  "Video recording failed.": "Falha na gravação do vídeo.",
+  "Select an object first.": "Selecione um objeto primeiro.",
+  "A recording is already running.": "Uma gravação já está em andamento.",
+  "Video recording is not supported by this browser.": "Este navegador não suporta gravação de vídeo.",
+  "Video saved": "Vídeo salvo",
+  "Recording…": "Gravando…",
+  "Record video": "Gravar vídeo",
+  "Video height": "Altura do vídeo",
+  "Duration": "Duração",
+  "Gentle sway": "Oscilação suave",
+  "Object turntable": "Girar objeto",
+  "Scene turntable": "Girar ao redor da cena",
+  "Movement": "Movimento",
+  "Video": "Vídeo",
   "Custom environment": "Ambiente personalizado",
   "Load environment…": "Carregar ambiente…",
   "Could not load environment.": "Não foi possível carregar o ambiente.",

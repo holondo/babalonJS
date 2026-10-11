@@ -278,6 +278,7 @@ export class Editor {
   tool: Tool = 'move';
   snap = false;
   photoMode = false;
+  recording = false;
   /** In an AR session: helpers hidden, no sky/background, floor becomes a shadow catcher. */
   arMode = false;
   private arSaved: EnvSettings | null = null;
@@ -576,7 +577,7 @@ export class Editor {
   /** True while something is moving or loading; otherwise the last frame stays on screen. */
   private needsRender() {
     // An AR session shows the camera feed: every frame must be drawn
-    if (this.arMode) return true;
+    if (this.arMode || this.recording) return true;
     if (performance.now() < this.activeUntil) return true;
     const c = this.camera;
     if (c.inertialAlphaOffset || c.inertialBetaOffset || c.inertialRadiusOffset || c.inertialPanningX || c.inertialPanningY) return true;

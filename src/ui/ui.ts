@@ -382,6 +382,7 @@ export class UI {
 
   private setupKeys() {
     window.addEventListener('keydown', (e) => {
+      if (this.editor.recording) { if (e.key === 'Escape') this.photoUI.cancelRecording(); return; }
       const target = e.target as HTMLElement;
       if (target.matches('input[type=text], input:not([type]), textarea, select')) return;
       const ed = this.editor;
@@ -606,7 +607,7 @@ export class UI {
 
   private scheduleAutosave() {
     // During AR the environment is temporarily changed: don't save that state
-    if (this.restoring || this.editor.arMode) return;
+    if (this.restoring || this.editor.arMode || this.editor.recording) return;
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = window.setTimeout(() => this.autosaveNow().catch(() => this.toast(tr('Could not save in this browser. Export your project to keep it.'), 'error')), 1500);
   }
@@ -614,7 +615,7 @@ export class UI {
   private async autosaveNow() {
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = 0;
-    if (this.restoring || this.editor.arMode) return;
+    if (this.restoring || this.editor.arMode || this.editor.recording) return;
     const id = this.projectId ??= crypto.randomUUID();
     const snap = snapshot(this.editor, this.projectName);
     // Serialize writes so a slow thumbnail never overwrites a newer snapshot or another project.

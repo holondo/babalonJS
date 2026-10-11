@@ -5,7 +5,7 @@ import type { PhotoSettings } from '../core/editor';
 import { timestampedName } from '../core/files';
 import { PHOTO_FILTERS } from '../core/presets';
 import { tr } from '../core/i18n';
-import { button, flashScreen, h, hint, iconButton, row, section, shutterButton } from './dom';
+import { button, flashScreen, h, hint, iconButton, row, section, select, shutterButton } from './dom';
 import type { UI } from './ui';
 import { errorMessage } from './shared';
 
@@ -16,6 +16,13 @@ export class PhotoMode {
   constructor(ui: UI) {
     this.ui = ui;
   }
+
+  private videoDuration = 8;
+  private videoHeight = 720;
+  private videoPath: 'scene' | 'object' | 'sway' = 'scene';
+  private videoAbort: AbortController | null = null;
+
+  cancelRecording() { this.videoAbort?.abort(); }
 
   photoPanelContent() {
     const ed = this.ui.editor;
@@ -54,6 +61,12 @@ export class PhotoMode {
         p.dof ? slider(tr('Focus distance'), p.focusDistance, { min: 0.2, max: 50, step: 0.05, format: (v) => `${v.toFixed(2)} m` }, (v) => set({ focusDistance: v })) : null,
         p.dof ? hint(tr('In photo mode, tap an object to focus on it.')) : null,
       ),
+      section(tr('Video'),
+        select(tr('Movement'), [{ value: 'scene', label: tr('Scene turntable') }, { value: 'object', label: tr('Object turntable') }, { value: 'sway', label: tr('Gentle sway') }], this.videoPath, (v) => { this.videoPath = v as typeof this.videoPath; }),
+        select(tr('Duration'), [4, 8, 12].map((v) => ({ value: String(v), label: `${v} s` })), String(this.videoDuration), (v) => { this.videoDuration = +v; }),
+        select(tr('Video height'), [720, 1080].map((v) => ({ value: String(v), label: `${v}p` })), String(this.videoHeight), (v) => { this.videoHeight = +v; }),
+        button(tr('Record video'), () => this.record(), { cls: 'primary' }),
+      ),
       row(button(tr('Reset to defaults'), () => action(() => ed.setPhoto({ ...DEFAULT_PHOTO })), { icon: RotateCcw, cls: 'ghost' })),
     ];
   }
@@ -81,6 +94,21 @@ export class PhotoMode {
         ),
       ),
     );
+  }
+
+  private async record() {
+    const controller = this.videoAbort = new AbortController();
+    const status = h('p', { role: 'status' }, tr('Recording…'));
+    const dialog = h('dialog', { class: 'project-gallery', 'aria-label': tr('Record video') }, status, button(tr('Cancel'), () => controller.abort()));
+    dialog.addEventListener('cancel', () => controller.abort());
+    this.ui.root.append(dialog);
+    dialog.showModal();
+    try {
+      const { recordVideo } = await import('../capture/video');
+      const blob = await recordVideo(this.ui.editor, { duration: this.videoDuration, height: this.videoHeight, path: this.videoPath, signal: controller.signal, progress: (v) => { status.textContent = tr('Recording…') + ` ${Math.round(v * 100)}%`; } });
+      this.ui.deliver(blob, timestampedName('babalon', blob.type.includes('mp4') ? 'mp4' : 'webm'), tr('Video saved'));
+    } catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) this.ui.toast(errorMessage(e), 'error'); }
+    finally { this.videoAbort = null; dialog.remove(); }
   }
 
   async capture() {
