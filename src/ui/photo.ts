@@ -1,3 +1,4 @@
+import type { CameraBackdrop } from '../capture/camera';
 import { editControls } from './editControls';
 import { Camera, EyeOff, RotateCcw, Scan, SlidersHorizontal, X } from 'lucide';
 import { ASPECTS, DEFAULT_PHOTO, aspectRect } from '../core/editor';
@@ -15,7 +16,12 @@ export class PhotoMode {
 
   constructor(ui: UI) {
     this.ui = ui;
+    // UI field initializers run before editor is assigned; register lazily on first camera use.
+
   }
+
+  private backdrop: CameraBackdrop | null = null;
+  private cameraObserved = false;
 
   private videoDuration = 8;
   private videoHeight = 720;
@@ -35,6 +41,10 @@ export class PhotoMode {
       section(tr('Filters'), chips(PHOTO_FILTERS.map((f) => ({ value: f.id, label: tr(f.label) })), '', (id) => ed.setPhoto({ ...DEFAULT_PHOTO, fov: p.fov, focusDistance: p.focusDistance, ...PHOTO_FILTERS.find((f) => f.id === id)!.values }))),
       section(
         tr('Camera'),
+        typeof navigator.mediaDevices !== 'undefined' ? button(this.backdrop?.active ? tr('Stop camera') : tr('Camera background'), () => this.ui.run(() => this.toggleCamera()), { cls: 'small' }) : null,
+        this.backdrop?.active ? select(tr('Camera lens'), this.backdrop.devices.map((d, i) => ({ value: d.deviceId, label: d.label || tr('Camera {n}', { n: i + 1 }) })), this.backdrop.deviceId, (id) => this.ui.run(async () => { await this.backdrop!.start(id); this.ui.renderPanel(); })) : null,
+        this.backdrop?.active && this.backdrop.zoom ? slider(tr('Camera zoom'), this.backdrop.zoomValue, { ...this.backdrop.zoom }, (v) => this.ui.run(() => this.backdrop!.setZoom(v))) : null,
+
         slider(tr('Field of view'), p.fov, { min: 10, max: 110, step: 1, format: (v) => `${Math.round(v)}°` }, (v) => set({ fov: v })),
         chips(Object.entries(ASPECTS).map(([value, a]) => ({ value, label: tr(a.label) })), p.aspect, (v) => ed.setPhoto({ aspect: v })),
       ),
@@ -94,6 +104,23 @@ export class PhotoMode {
         ),
       ),
     );
+  }
+
+  private async toggleCamera() {
+    if (!this.backdrop) {
+      const { CameraBackdrop } = await import('../capture/camera');
+      this.backdrop = new CameraBackdrop(this.ui.editor);
+    }
+    if (!this.cameraObserved) {
+      this.cameraObserved = true;
+      this.ui.editor.changed.add((kind) => {
+        if (kind === 'photo' && !this.ui.editor.photoMode) this.backdrop?.stop();
+      });
+      window.addEventListener('pagehide', () => this.backdrop?.stop());
+    }
+    if (this.backdrop.active) this.backdrop.stop();
+    else { this.ui.editor.setPhotoMode(true); await this.backdrop.start(); }
+    this.ui.renderPanel();
   }
 
   private async record() {
