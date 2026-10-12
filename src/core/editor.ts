@@ -1103,14 +1103,17 @@ export class Editor {
     }
   }
 
-  async setMaterialTexture(material: Material, slot: TextureSlot, file: File | null) {
+  async setMaterialTexture(material: Material | Material[], slot: TextureSlot, file: File | null) {
     const path = file ? await loadUserTexture(this.scene, file) : null;
-    if (!this.scene.materials.includes(material)) return;
-    this.beginEdit(material, () => materialToJSON(material), (s) => applyMaterial(material, s));
-    const state = textureStates(material);
-    if (path) state[slot] = { path, u: 1, v: 1, rotation: 0 };
-    else delete state[slot];
-    applyTextureStates(material, state);
+    const targets = (Array.isArray(material) ? material : [material]).filter((m) => this.scene.materials.includes(m));
+    if (!targets.length) return;
+    this.beginEdit(material, () => targets.map(materialToJSON), (states) => targets.forEach((m, i) => applyMaterial(m, states[i])));
+    for (const m of targets) {
+      const state = textureStates(m);
+      if (path) state[slot] = { path, u: 1, v: 1, rotation: 0 };
+      else delete state[slot];
+      applyTextureStates(m, state);
+    }
     this.endEdit(material);
     this.notify('transform');
   }

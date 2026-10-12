@@ -140,6 +140,7 @@ const PT: Record<string, string> = {
   Add: 'Adicionar',
   Scene: 'Cena',
   Material: 'Material',
+  'All materials': 'Todos os materiais',
   Lights: 'Luzes',
   Environment: 'Ambiente',
   Photo: 'Foto',

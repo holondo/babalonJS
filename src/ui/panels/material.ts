@@ -25,7 +25,7 @@ export class MaterialPanel {
     this.ui = ui;
   }
 
-  materialIndex = 0;
+  materialIndex = -1;
   /** The Textures block was opened by the user (it starts collapsed). */
   private texturesOpen = false;
   /** Slot whose "from another object" picker is open. */
@@ -63,7 +63,7 @@ export class MaterialPanel {
   }
 
   /** Copies another texture into a slot (as an image, so it's saved with the project and undoable). */
-  private useTexture(mat: Material, slot: TextureSlot, texture: BaseTexture) {
+  private useTexture(mat: Material[], slot: TextureSlot, texture: BaseTexture) {
     const ed = this.ui.editor;
     this.pickerFor = null;
     this.ui.run(async () => {
@@ -89,60 +89,73 @@ export class MaterialPanel {
     if (!e || e.kind === 'light') return [hint(tr('Select a model or shape to edit its materials.'))];
     const mats = ed.materialsOf(e);
     if (!mats.length) return [hint(tr('This object has no editable materials.'))];
-    if (this.materialIndex >= mats.length) this.materialIndex = 0;
-    const mat = mats[this.materialIndex];
+    if (this.materialIndex >= mats.length) this.materialIndex = -1;
+    const targets = this.materialIndex < 0 ? mats : [mats[this.materialIndex]];
+    const mat = targets[0];
     const out: (Node | null)[] = [];
     if (mats.length > 1) {
       out.push(
-        select(tr('Material'), mats.map((m, i) => ({ value: String(i), label: m.name || tr('Material {n}', { n: i + 1 }) })), String(this.materialIndex), (v) => {
+        select(tr('Material'), [{ value: '-1', label: tr('All materials') }, ...mats.map((m, i) => ({ value: String(i), label: m.name || tr('Material {n}', { n: i + 1 }) }))], String(this.materialIndex), (v) => {
           this.materialIndex = +v;
           this.ui.renderPanel();
         }),
       );
     }
-    out.push(...this.materialControls(mat));
+    out.push(...this.materialControls(mat, targets));
     return out;
   }
 
-  materialControls(mat: Material): (Node | null)[] {
-    const { slider, colorInput, toggle, chips } = editControls(this.ui, () => materialToJSON(mat), (s) => applyMaterial(mat, s));
+  materialControls(mat: Material, targets: Material[] = [mat]): (Node | null)[] {
+    const controls = editControls(this.ui, () => targets.map(materialToJSON), (states) => targets.forEach((m, i) => applyMaterial(m, states[i])));
+    const forMaterials = <M extends Material>(accept: (m: Material) => m is M) => {
+      const each = <V>(fn: (value: V, mat: M) => void) => (value: V) => targets.filter(accept).forEach((m) => fn(value, m));
+      return {
+        slider: (label: string, value: number, opts: Parameters<typeof controls.slider>[2], fn: (v: number, mat: M) => void) => controls.slider(label, value, opts, each(fn)),
+        colorInput: (label: string, value: string, fn: (v: string, mat: M) => void) => controls.colorInput(label, value, each(fn)),
+        toggle: (label: string, value: boolean, fn: (v: boolean, mat: M) => void) => controls.toggle(label, value, each(fn)),
+        chips: (options: { value: string; label: string }[], value: string, fn: (v: string, mat: M) => void) => controls.chips(options, value, each(fn)),
+      };
+    };
+    const { slider, toggle } = forMaterials((_m): _m is Material => true);
     const q = (fn: () => void) => this.ui.quiet(fn);
     const common = [
-      slider(tr('Opacity'), mat.alpha, { min: 0, max: 1, step: 0.01 }, (v) => {
+      slider(tr('Opacity'), mat.alpha, { min: 0, max: 1, step: 0.01 }, (v, mat) => {
         mat.alpha = v;
         if (v < 1) mat.transparencyMode = Material.MATERIAL_ALPHABLEND;
       }),
-      toggle(tr('Double-sided'), !mat.backFaceCulling, (v) => (mat.backFaceCulling = !v)),
-      toggle(tr('Wireframe'), mat.wireframe, (v) => (mat.wireframe = v)),
+      toggle(tr('Double-sided'), !mat.backFaceCulling, (v, mat) => (mat.backFaceCulling = !v)),
+      toggle(tr('Wireframe'), mat.wireframe, (v, mat) => (mat.wireframe = v)),
     ];
     if (mat instanceof PBRMaterial) {
+      const { slider, toggle, colorInput, chips } = forMaterials((m): m is PBRMaterial => m instanceof PBRMaterial);
       const meta = (mat.metadata ??= {});
       const hasTex = !!(mat.albedoTexture || meta.stashedAlbedo);
       return [
-        section(tr('Material presets'), chips(MATERIAL_PRESETS.map((p) => ({ value: p.id, label: tr(p.label) })), '', (id) => {
+        section(tr('Material presets'), chips(MATERIAL_PRESETS.map((p) => ({ value: p.id, label: tr(p.label) })), '', (id, mat) => {
           const preset = MATERIAL_PRESETS.find((p) => p.id === id)!;
           const state = materialToJSON(mat);
           applyMaterial(mat, { ...state, alpha: 1, transparencyMode: null, clearCoat: false, clearCoatIntensity: 1, unlit: false, ...preset.values,
             advanced: { ...state.advanced!, refraction: false, sheen: false, iridescence: false, anisotropy: false, linkTransparency: false, ...preset.advanced } });
         })),
         h('details', { class: 'sec' }, h('summary', {}, tr('Advanced material')),
-          toggle(tr('Refraction'), mat.subSurface.isRefractionEnabled, (v) => { mat.subSurface.isRefractionEnabled = v; }),
-          slider(tr('Transmission'), mat.subSurface.refractionIntensity, { min: 0, max: 1, step: .01 }, (v) => { mat.subSurface.refractionIntensity = v; }),
-          slider(tr('Index of refraction'), mat.subSurface.indexOfRefraction, { min: 1, max: 2.5, step: .01 }, (v) => { mat.subSurface.indexOfRefraction = v; }),
-          toggle(tr('Sheen'), mat.sheen.isEnabled, (v) => { mat.sheen.isEnabled = v; }),
-          slider(tr('Sheen intensity'), mat.sheen.intensity, { min: 0, max: 1, step: .01 }, (v) => { mat.sheen.intensity = v; }),
-          colorInput(tr('Sheen color'), mat.sheen.color.toHexString(), (v) => { mat.sheen.color = Color3.FromHexString(v); }),
-          toggle(tr('Iridescence'), mat.iridescence.isEnabled, (v) => { mat.iridescence.isEnabled = v; }),
-          slider(tr('Iridescence intensity'), mat.iridescence.intensity, { min: 0, max: 1, step: .01 }, (v) => { mat.iridescence.intensity = v; }),
-          slider(tr('Film thickness (nm)'), mat.iridescence.maximumThickness, { min: 100, max: 1000, step: 1 }, (v) => { mat.iridescence.maximumThickness = v; mat.iridescence.minimumThickness = Math.min(mat.iridescence.minimumThickness, v); }),
-          toggle(tr('Anisotropy'), mat.anisotropy.isEnabled, (v) => { mat.anisotropy.isEnabled = v; }),
-          slider(tr('Anisotropy intensity'), mat.anisotropy.intensity, { min: 0, max: 1, step: .01 }, (v) => { mat.anisotropy.intensity = v; }),
+          toggle(tr('Refraction'), mat.subSurface.isRefractionEnabled, (v, mat) => { mat.subSurface.isRefractionEnabled = v; }),
+          slider(tr('Transmission'), mat.subSurface.refractionIntensity, { min: 0, max: 1, step: .01 }, (v, mat) => { mat.subSurface.refractionIntensity = v; }),
+          slider(tr('Index of refraction'), mat.subSurface.indexOfRefraction, { min: 1, max: 2.5, step: .01 }, (v, mat) => { mat.subSurface.indexOfRefraction = v; }),
+          toggle(tr('Sheen'), mat.sheen.isEnabled, (v, mat) => { mat.sheen.isEnabled = v; }),
+          slider(tr('Sheen intensity'), mat.sheen.intensity, { min: 0, max: 1, step: .01 }, (v, mat) => { mat.sheen.intensity = v; }),
+          colorInput(tr('Sheen color'), mat.sheen.color.toHexString(), (v, mat) => { mat.sheen.color = Color3.FromHexString(v); }),
+          toggle(tr('Iridescence'), mat.iridescence.isEnabled, (v, mat) => { mat.iridescence.isEnabled = v; }),
+          slider(tr('Iridescence intensity'), mat.iridescence.intensity, { min: 0, max: 1, step: .01 }, (v, mat) => { mat.iridescence.intensity = v; }),
+          slider(tr('Film thickness (nm)'), mat.iridescence.maximumThickness, { min: 100, max: 1000, step: 1 }, (v, mat) => { mat.iridescence.maximumThickness = v; mat.iridescence.minimumThickness = Math.min(mat.iridescence.minimumThickness, v); }),
+          toggle(tr('Anisotropy'), mat.anisotropy.isEnabled, (v, mat) => { mat.anisotropy.isEnabled = v; }),
+          slider(tr('Anisotropy intensity'), mat.anisotropy.intensity, { min: 0, max: 1, step: .01 }, (v, mat) => { mat.anisotropy.intensity = v; }),
         ),
         section(
           tr('Color'),
-          colorInput(hasTex ? tr('Tint (multiplies texture)') : tr('Base color'), mat.albedoColor.toHexString(), (v) => q(() => (mat.albedoColor = Color3.FromHexString(v)))),
+          colorInput(hasTex ? tr('Tint (multiplies texture)') : tr('Base color'), mat.albedoColor.toHexString(), (v, mat) => q(() => (mat.albedoColor = Color3.FromHexString(v)))),
           hasTex
-            ? toggle(tr('Show texture'), !!mat.albedoTexture, (v) => {
+            ? toggle(tr('Show texture'), !!mat.albedoTexture, (v, mat) => {
+                const meta = (mat.metadata ??= {});
                 if (v && meta.stashedAlbedo) {
                   mat.albedoTexture = meta.stashedAlbedo;
                   meta.stashedAlbedo = null;
@@ -155,39 +168,40 @@ export class MaterialPanel {
         ),
         section(
           tr('Surface'),
-          slider(tr('Metallic'), mat.metallic ?? 1, { min: 0, max: 1, step: 0.01 }, (v) => (mat.metallic = v)),
-          slider(tr('Roughness'), mat.roughness ?? 1, { min: 0, max: 1, step: 0.01 }, (v) => (mat.roughness = v)),
-          toggle(tr('Clear coat'), mat.clearCoat.isEnabled, (v) => (mat.clearCoat.isEnabled = v)),
-          slider(tr('Clear coat intensity'), mat.clearCoat.intensity, { min: 0, max: 1, step: 0.01 }, (v) => (mat.clearCoat.intensity = v)),
-          toggle(tr('Unlit'), mat.unlit, (v) => (mat.unlit = v)),
+          slider(tr('Metallic'), mat.metallic ?? 1, { min: 0, max: 1, step: 0.01 }, (v, mat) => (mat.metallic = v)),
+          slider(tr('Roughness'), mat.roughness ?? 1, { min: 0, max: 1, step: 0.01 }, (v, mat) => (mat.roughness = v)),
+          toggle(tr('Clear coat'), mat.clearCoat.isEnabled, (v, mat) => (mat.clearCoat.isEnabled = v)),
+          slider(tr('Clear coat intensity'), mat.clearCoat.intensity, { min: 0, max: 1, step: 0.01 }, (v, mat) => (mat.clearCoat.intensity = v)),
+          toggle(tr('Unlit'), mat.unlit, (v, mat) => (mat.unlit = v)),
         ),
         section(
           tr('Emission'),
-          colorInput(tr('Emissive color'), mat.emissiveColor.toHexString(), (v) => (mat.emissiveColor = Color3.FromHexString(v))),
-          slider(tr('Intensity'), mat.emissiveIntensity, { min: 0, max: 10, step: 0.05 }, (v) => (mat.emissiveIntensity = v)),
+          colorInput(tr('Emissive color'), mat.emissiveColor.toHexString(), (v, mat) => (mat.emissiveColor = Color3.FromHexString(v))),
+          slider(tr('Intensity'), mat.emissiveIntensity, { min: 0, max: 10, step: 0.05 }, (v, mat) => (mat.emissiveIntensity = v)),
         ),
-        ...this.textureControls(mat),
+        ...this.textureControls(mat, targets),
         section(tr('General'), ...common),
       ];
     }
     if (mat instanceof StandardMaterial) {
+      const { slider, colorInput } = forMaterials((m): m is StandardMaterial => m instanceof StandardMaterial);
       return [
         section(
           tr('Color'),
-          colorInput(tr('Diffuse color'), mat.diffuseColor.toHexString(), (v) => (mat.diffuseColor = Color3.FromHexString(v))),
-          colorInput(tr('Specular color'), mat.specularColor.toHexString(), (v) => (mat.specularColor = Color3.FromHexString(v))),
-          slider(tr('Glossiness'), mat.specularPower, { min: 1, max: 256, step: 1 }, (v) => (mat.specularPower = v)),
-          colorInput(tr('Emissive'), mat.emissiveColor.toHexString(), (v) => (mat.emissiveColor = Color3.FromHexString(v))),
+          colorInput(tr('Diffuse color'), mat.diffuseColor.toHexString(), (v, mat) => (mat.diffuseColor = Color3.FromHexString(v))),
+          colorInput(tr('Specular color'), mat.specularColor.toHexString(), (v, mat) => (mat.specularColor = Color3.FromHexString(v))),
+          slider(tr('Glossiness'), mat.specularPower, { min: 1, max: 256, step: 1 }, (v, mat) => (mat.specularPower = v)),
+          colorInput(tr('Emissive'), mat.emissiveColor.toHexString(), (v, mat) => (mat.emissiveColor = Color3.FromHexString(v))),
         ),
-        ...this.textureControls(mat),
+        ...this.textureControls(mat, targets),
         section(tr('General'), ...common),
       ];
     }
     return [section(tr('General'), ...common)];
   }
-  private textureControls(mat: Material) {
+  private textureControls(mat: Material, targets: Material[]) {
     const ed = this.ui.editor;
-    const { slider } = editControls(this.ui, () => materialToJSON(mat), (s) => applyMaterial(mat, s));
+    const { slider } = editControls(this.ui, () => targets.map(materialToJSON), (states) => targets.forEach((m, i) => applyMaterial(m, states[i])));
     // Advanced: collapsed by default, kept open across re-renders once the user opens it
     const details = h('details', { class: 'sec', open: this.texturesOpen }, h('summary', {}, tr('Textures')));
     // Slots (and their thumbnails, read back from the GPU) are only built while the block is open
@@ -199,11 +213,13 @@ export class MaterialPanel {
       const input = h('input', { type: 'file', accept: '.png,.jpg,.jpeg,.webp,.ktx2', hidden: true });
       input.addEventListener('change', () => {
         const chosen = input.files?.[0];
-        if (chosen) this.ui.run(() => ed.setMaterialTexture(mat, slot, chosen));
+        if (chosen) this.ui.run(() => ed.setMaterialTexture(targets, slot, chosen));
       });
       const set = (patch: Partial<NonNullable<typeof state>>) => {
-        const states = textureStates(mat);
-        if (states[slot]) { states[slot] = { ...states[slot]!, ...patch }; applyTextureStates(mat, states); }
+        for (const m of targets) {
+          const states = textureStates(m);
+          if (states[slot]) { states[slot] = { ...states[slot]!, ...patch }; applyTextureStates(m, states); }
+        }
       };
       const open = this.pickerFor?.material === mat && this.pickerFor.slot === slot;
       const togglePicker = () => { this.pickerFor = open ? null : { material: mat, slot }; this.ui.renderPanel(); };
@@ -217,12 +233,12 @@ export class MaterialPanel {
         h('div', { class: 'texture-actions' },
           button(state || current ? tr('Replace') : tr('Choose file'), () => input.click(), { icon: Upload, cls: 'small' }),
           button(tr('From an object'), togglePicker, { icon: Layers, cls: `small${open ? ' active' : ''}` }),
-          state ? iconButton(X, tr('Restore original'), () => this.ui.run(() => ed.setMaterialTexture(mat, slot, null))) : null),
+          state ? iconButton(X, tr('Restore original'), () => this.ui.run(() => ed.setMaterialTexture(targets, slot, null))) : null),
         open
           ? h('div', { class: 'texture-picker' },
               others.length
                 ? h('div', { class: 'texture-picker-grid' }, ...others.map((t) =>
-                    h('button', { class: 'texture-pick', title: t.label, onClick: () => this.useTexture(mat, slot, t.texture) },
+                    h('button', { class: 'texture-pick', title: t.label, onClick: () => this.useTexture(targets, slot, t.texture) },
                       this.thumb(t.texture), h('span', {}, t.label))))
                 : hint(tr('No other textures in the scene. Add a textured model first.')))
           : null,
