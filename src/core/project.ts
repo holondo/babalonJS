@@ -248,7 +248,7 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
     const file = new File([blob], path.split('/').pop()!);
     // Same data as the stored Blob: it must not be written again (see FILES)
     const keys = storedAs.get(blob);
-    if (keys) storedAs.set(file, new Set(keys));
+    if (keys) storedAs.set(file, new Map(keys));
     return file;
   };
 
@@ -405,15 +405,15 @@ ${path}`;
 const projectRange = (id: string) => IDBKeyRange.bound(`${id}
 `, `${id}
 ￿`);
-/** Keys each Blob is known to be stored under (read from there, or written there). */
-const storedAs = new WeakMap<Blob, Set<string>>();
-const markStored = (blob: Blob, key: string) => {
-  const keys = storedAs.get(blob);
-  if (keys) keys.add(key);
-  else storedAs.set(blob, new Set([key]));
+/** Revision of each key this immutable Blob was actually written to. */
+const storedAs = new WeakMap<Blob, Map<string, string>>();
+const markStored = (blob: Blob, key: string, revision: string) => {
+  let keys = storedAs.get(blob);
+  if (!keys) storedAs.set(blob, keys = new Map());
+  keys.set(key, revision);
 };
 /** What STORE holds: the scene, and the paths of its files in FILES (`files` only in old projects). */
-interface StoredSnapshot extends ProjectSnapshot { paths?: string[] }
+interface StoredSnapshot extends ProjectSnapshot { paths?: string[]; fileVersions?: Record<string, string> }
 
 export interface ProjectInfo {
   id: string;
@@ -485,23 +485,35 @@ export async function listProjects(): Promise<ProjectInfo[]> {
 
 export function saveProject(id: string, snap: ProjectSnapshot, thumbnail?: Blob): Promise<void> {
   return transaction('readwrite', (tx) => {
-    // The scene description goes in STORE; each file in FILES, written only when it's new
-    const files = tx.objectStore(FILES);
-    const paths = Object.keys(snap.files);
-    const written: [Blob, string][] = [];
-    for (const [path, blob] of Object.entries(snap.files)) {
-      const key = fileKey(id, path);
-      if (storedAs.get(blob)?.has(key)) continue;
-      files.put(blob, key);
-      written.push([blob, key]);
-    }
-    const keys = files.getAllKeys(projectRange(id));
-    keys.onsuccess = () => {
-      const keep = new Set(paths.map((p) => fileKey(id, p)));
-      for (const key of keys.result as string[]) if (!keep.has(key)) files.delete(key);
+    const store = tx.objectStore(STORE);
+    // Read the committed revisions in this transaction, including writes from other tabs.
+    // A historical identity alone is unsafe after overwriting, deleting, or undoing a file.
+    const previous = store.get(id);
+    previous.onsuccess = () => {
+      const files = tx.objectStore(FILES);
+      const paths = Object.keys(snap.files);
+      const oldVersions = (previous.result as StoredSnapshot | undefined)?.fileVersions ?? {};
+      const fileVersions: Record<string, string> = {};
+      const written: [Blob, string, string][] = [];
+      for (const [path, blob] of Object.entries(snap.files)) {
+        const key = fileKey(id, path);
+        const version = oldVersions[path];
+        if (version && storedAs.get(blob)?.get(key) === version) {
+          fileVersions[path] = version;
+          continue;
+        }
+        const revision = fileVersions[path] = crypto.randomUUID();
+        files.put(blob, key);
+        written.push([blob, key, revision]);
+      }
+      const keys = files.getAllKeys(projectRange(id));
+      keys.onsuccess = () => {
+        const keep = new Set(paths.map((p) => fileKey(id, p)));
+        for (const key of keys.result as string[]) if (!keep.has(key)) files.delete(key);
+      };
+      tx.addEventListener('complete', () => written.forEach(([blob, key, revision]) => markStored(blob, key, revision)));
+      store.put({ json: snap.json, files: {}, paths, fileVersions }, id);
     };
-    tx.addEventListener('complete', () => written.forEach(([blob, key]) => markStored(blob, key)));
-    tx.objectStore(STORE).put({ json: snap.json, files: {}, paths }, id);
     const meta = tx.objectStore(META);
     if (thumbnail) meta.put({ id, name: snap.json.name, updatedAt: snap.json.savedAt, thumbnail });
     else {
@@ -524,7 +536,7 @@ export async function loadProject(id: string): Promise<ProjectSnapshot | null> {
       for (const path of snap.paths) {
         const get = tx.objectStore(FILES).get(fileKey(id, path));
         get.onsuccess = () => {
-          if (get.result) { files[path] = get.result; markStored(get.result, fileKey(id, path)); }
+          if (get.result) files[path] = get.result;
           if (--pending === 0) result({ snap, files });
         };
       }
@@ -532,7 +544,15 @@ export async function loadProject(id: string): Promise<ProjectSnapshot | null> {
   });
   const { snap } = loaded;
   if (!snap) return null;
-  if (snap.paths) return { json: snap.json, files: loaded.files };
+  if (snap.paths) {
+    // Keep loaded files readable even after an edit replaces/deletes their IndexedDB records.
+    for (const [path, blob] of Object.entries(loaded.files)) {
+      const copy = loaded.files[path] = await inMemory(blob);
+      const revision = snap.fileVersions?.[path];
+      if (revision) markStored(copy, fileKey(id, path), revision);
+    }
+    return { json: snap.json, files: loaded.files };
+  }
   // Projects saved before the file store keep their files inline; the next save moves them
   // out, overwriting this record, so they are copied into memory first (see inMemory)
   for (const [path, blob] of Object.entries(snap.files)) snap.files[path] = await inMemory(blob);

@@ -590,6 +590,8 @@ export class UI {
   }
 
   async openStoredProject(id: string) {
+    await this.flushProject();
+    if (id === this.projectId) return;
     const snap = await loadProject(id);
     if (!snap) throw new Error(tr('Project no longer exists.'));
     await this.loadSnapshot(snap, id);
