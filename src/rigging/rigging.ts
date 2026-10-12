@@ -839,8 +839,9 @@ export class Rigger {
         scaling: m.scaling.clone(),
         geometry: m.geometry,
       });
-      // The geometry is shared with the loaded file (and copies): give this mesh its own
-      m.makeGeometryUnique();
+      // Keep the original even when it is already unique (e.g. a separated mesh).
+      // makeGeometryUnique is a no-op in that case: cancelling would dispose the backup.
+      m.geometry?.copy(`rig-${node.uniqueId}-${m.uniqueId}`).applyToMesh(m);
       const toRigSpace = worldMatrix(m).multiply(toRig);
       m.bakeTransformIntoVertices(toRigSpace);
       m.parent = node;

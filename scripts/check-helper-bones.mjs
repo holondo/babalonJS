@@ -27,6 +27,18 @@ const editor={scene,entities:[],pose:{stop(){}},refreshShadowCasters(){},refresh
 const rigger=new Rigger(editor), original=entity(1);
 const {Vector3}=await import('@babylonjs/core');
 const positions=new Map(RIG_TEMPLATE.map(j=>[j.id,Vector3.FromArray(j.pos)]));
+// A unique mesh (e.g. after separation) must survive Back, rebind, and cancellation.
+const retry=entity(50),retryMesh=retry.meshes[0],retryGeometry=retryMesh.geometry;
+const retryPositions=Array.from(retryMesh.getVerticesData('position'));
+for(let i=0;i<2;i++) {
+  const pending=rigger.build(retry,positions);
+  assert.notEqual(pending.geometries[0],retryGeometry,'Binding must not reuse its own geometry backup');
+  rigger.unbind(retry,pending,true);
+  assert.equal(retryMesh.geometry,retryGeometry);
+  assert.ok(!retryGeometry.isDisposed(),'Adjust/cancel must preserve unique source geometry');
+  assert.deepEqual(Array.from(retryMesh.getVerticesData('position')),retryPositions);
+}
+retry.root.dispose(false,true);
 const state=rigger.build(original,positions,undefined,'helper');original.rig=state;
 assert.equal(state.helpers.length,2);
 assert.equal(state.skeleton.bones.length,RIG_TEMPLATE.length-TIP_JOINTS.length+2);
