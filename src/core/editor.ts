@@ -1460,13 +1460,45 @@ export class Editor {
   }
 
   /** Size of the object along an axis; setting it scales the object uniformly (keeps it on the floor). */
-  setDimension(entity: Entity, axis: Axis, value: number) {
-    const b = this.boundsOf(entity);
-    if (value <= 0 || b.size[axis] <= 1e-9) return;
-    this.transformMany([entity], (e) => {
-      e.root.scaling.scaleInPlace(value / b.size[axis]);
-      e.root.position.y += b.min.y - this.boundsOf(e).min.y;
-    });
+  /** Size along the object's own axes (not the world box, so a rotated object keeps its width). */
+  objectSize(entity: Entity) {
+    const root = entity.root;
+    const turn = root.rotationQuaternion!.clone();
+    root.rotationQuaternion!.copyFromFloats(0, 0, 0, 1);
+    const size = this.boundsOf(entity).size;
+    root.rotationQuaternion!.copyFrom(turn);
+    root.computeWorldMatrix(true);
+    return size;
+  }
+
+  /**
+   * Sets one dimension (object axes). Proportional scales the whole object; otherwise only that
+   * axis. A negative value also mirrors the object on that axis. The object stays on its spot.
+   */
+  setDimension(entity: Entity, axis: Axis, value: number, proportional = true) {
+    const size = this.objectSize(entity)[axis];
+    if (!value || size <= 1e-9) return;
+    const factor = Math.abs(value) / size;
+    this.transformMany([entity], (e) => this.keepPlace(e, () => {
+      if (proportional) e.root.scaling.scaleInPlace(factor);
+      else e.root.scaling[axis] *= factor;
+      if (value < 0) e.root.scaling[axis] *= -1;
+    }));
+  }
+
+  /** Mirrors the selected objects on one of their axes, in place (undoable). */
+  mirror(axis: Axis, entities = this.selection) {
+    const list = entities.filter((e) => e.kind !== 'light');
+    if (list.length) this.transformMany(list, (e) => this.keepPlace(e, () => (e.root.scaling[axis] *= -1)));
+  }
+
+  /** Runs a scale change keeping the object where it was: same center on the floor plan, same bottom. */
+  private keepPlace(e: Entity, change: () => void) {
+    const before = this.boundsOf(e);
+    change();
+    e.root.computeWorldMatrix(true);
+    const after = this.boundsOf(e);
+    e.root.position.addInPlace(new Vector3(before.center.x - after.center.x, before.min.y - after.min.y, before.center.z - after.center.z));
   }
 
   private readonly pickable = (m: AbstractMesh) => m.isPickable && m.isEnabled() && m.isVisible && !this.overlays.has(m);

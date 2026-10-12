@@ -2319,3 +2319,30 @@ body.drawing canvas {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ---------- Object → size and mirror ---------- */
+
+.size-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.mirror-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mirror-row > span {
+  flex: 1;
+  color: var(--muted);
+  font-size: 13px;
+}
+/* Axes currently mirrored */
+.mirror-row .btn.active {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.mirror-row .btn.active svg.lucide {
+  stroke: var(--gold);
+}

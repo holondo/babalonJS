@@ -806,6 +806,7 @@ const PT: Record<string, string> = {
   'Choose file': 'Escolher arquivo',
   'From an object': 'De um objeto',
   'No other textures in the scene. Add a textured model first.': 'Não há outras texturas na cena. Adicione primeiro um modelo com textura.',
+  'Keep proportions': 'Manter proporções',
 };
 
 const DICTS: Partial<Record<Lang, Record<string, string>>> = { pt: PT };

@@ -1,4 +1,4 @@
-import { ArrowDownToLine, Eye, EyeOff, RotateCcw, Trash2 } from 'lucide';
+import { ArrowDownToLine, Eye, EyeOff, FlipHorizontal2, RotateCcw, Trash2 } from 'lucide';
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { Entity } from '../../core/editor';
 import { locale, tr } from '../../core/i18n';
@@ -72,7 +72,7 @@ export class ObjectsPanel {
       e.kind !== 'light'
         ? slider(
             tr('Scale'),
-            e.root.scaling.x,
+            Math.abs(e.root.scaling.x),
             {
               min: -2,
               max: 1.3,
@@ -82,7 +82,8 @@ export class ObjectsPanel {
               format: (v) => `${v.toFixed(2)}×`,
               onCommit: commit,
             },
-            (v) => ed.editTransform((r) => r.scaling.scaleInPlace(v / (r.scaling.x || 1))),
+            // Magnitude only: a mirrored axis stays mirrored
+            (v) => ed.editTransform((r) => r.scaling.scaleInPlace(v / (Math.abs(r.scaling.x) || 1))),
           )
         : null,
       row(
@@ -98,14 +99,28 @@ export class ObjectsPanel {
     );
   }
 
-  /** Width/height/depth in the chosen unit; editing one scales the object uniformly. */
+  /** Changing one size scales the whole object (default) or only that axis. */
+  private proportional = true;
+
+  /**
+   * Width/height/depth in the chosen unit, along the object's own axes. Proportional by default;
+   * a negative value mirrors that axis. Mirror buttons flip the object in place.
+   */
   sizeFields(e: Entity) {
     const ed = this.ui.editor;
     const tools = ed.tools;
-    const size = ed.boundsOf(e).size;
+    const size = ed.objectSize(e);
     const field = (axis: Axis, label: string) =>
-      numberInput(label, tools.toUnit(size[axis]), { suffix: tools.unit }, (v) => ed.setDimension(e, axis, tools.fromUnit(v)));
-    return h('div', { class: 'dims' }, field('x', tr('Width')), field('y', tr('Height')), field('z', tr('Depth')));
+      numberInput(label, tools.toUnit(size[axis]), { suffix: tools.unit }, (v) => ed.setDimension(e, axis, tools.fromUnit(v), this.proportional));
+    const mirrored = (axis: Axis) => e.root.scaling[axis] < 0;
+    return h('div', { class: 'size-fields' },
+      h('div', { class: 'dims' }, field('x', tr('Width')), field('y', tr('Height')), field('z', tr('Depth'))),
+      toggle(tr('Keep proportions'), this.proportional, (v) => (this.proportional = v)),
+      h('div', { class: 'mirror-row' },
+        h('span', {}, tr('Mirror')),
+        ...(['x', 'y', 'z'] as Axis[]).map((axis) =>
+          button(axis.toUpperCase(), () => ed.mirror(axis, [e]), { icon: FlipHorizontal2, cls: `small${mirrored(axis) ? ' active' : ''}` }))),
+    );
   }
 
   objectSection(e: Entity) {
