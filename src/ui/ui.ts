@@ -403,7 +403,7 @@ export class UI {
     window.addEventListener('keydown', (e) => {
       if (this.editor.recording) { if (e.key === 'Escape') this.photoUI.cancelRecording(); return; }
       const target = e.target as HTMLElement;
-      if (target.matches('input[type=text], input:not([type]), textarea, select')) return;
+      if (target.isContentEditable || target.matches('input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea, select')) return;
       const ed = this.editor;
       const ctrl = e.ctrlKey || e.metaKey;
       if (ctrl && e.key.toLowerCase() === 'z') {
