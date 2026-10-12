@@ -68,7 +68,7 @@ import type { RigState } from '../rigging/rigging';
 import type { MotionSettings } from '../animation/motion';
 import type { ClipState } from '../animation/animation';
 import type { Axis } from '../tools/tools';
-import { jointNodes } from '../rigging/humanoid';
+import { forgetHumanoid, jointNodes } from '../rigging/humanoid';
 import type { HumanBone } from '../rigging/humanoid';
 import { ClipManager } from '../animation/retarget';
 import type { AddedClip } from '../animation/retarget';
@@ -1147,16 +1147,32 @@ export class Editor {
         select: false,
       });
     } else return;
-    const sourceMaterials = this.materialsOf(entity);
-    this.materialsOf(copy).forEach((m, i) => {
-      if (sourceMaterials[i]) { copyUserTextures(sourceMaterials[i], m); applyMaterial(m, materialToJSON(sourceMaterials[i])); }
-    });
-    if (entity.separation) this.separator.copy(entity, copy);
+    if (entity.kind !== 'model') this.copyMaterials(entity, copy);
     if (entity.optimization && !entity.optimization.session) this.optimizer.copy(entity, copy);
     if (entity.textureOptimization) this.textureOptimizer.copy(entity, copy);
     if (entity.rig) this.rigger.copy(entity, copy);
-    if (entity.addedClips?.length) this.clips.copy(entity, copy);
     if (entity.motion) this.motions.set(copy, { ...entity.motion }, false);
+    if (entity.kind !== 'model' || entity.rig) this.copyAnimationState(entity, copy);
+    copy.root.rotationQuaternion!.copyFrom(entity.root.rotationQuaternion!);
+    copy.root.scaling.copyFrom(entity.root.scaling);
+    copy.root.position.copyFrom(entity.root.position).addInPlace(new Vector3(0.6, 0, 0.6));
+    this.select(copy);
+    return copy;
+  }
+
+  private copyMaterials(entity: Entity, copy: Entity) {
+    const sourceMaterials = this.materialsOf(entity);
+    this.materialsOf(copy).forEach((m, i) => {
+      const source = sourceMaterials[i];
+      if (!source) return;
+      if (m.metadata) m.metadata = { ...m.metadata };
+      copyUserTextures(source, m);
+      applyMaterial(m, materialToJSON(source));
+    });
+  }
+
+  private copyAnimationState(entity: Entity, copy: Entity) {
+    if (entity.addedClips?.length) this.clips.copy(entity, copy);
     if (copy.animationGroups.length === entity.animationGroups.length && copy.animationGroups.length) this.anim.apply(copy, this.anim.state(entity));
     if (entity.posed) {
       // Same skeleton: copy the hand-made pose joint by joint
@@ -1164,11 +1180,6 @@ export class Editor {
       jointNodes(copy).forEach((n, i) => from[i] && restoreJoints(captureJoints([from[i]]).map((s) => ({ ...s, node: n }))));
       copy.posed = true;
     }
-    copy.root.rotationQuaternion!.copyFrom(entity.root.rotationQuaternion!);
-    copy.root.scaling.copyFrom(entity.root.scaling);
-    copy.root.position.copyFrom(entity.root.position).addInPlace(new Vector3(0.6, 0, 0.6));
-    this.select(copy);
-    return copy;
   }
 
   /** Unregistered copy for preparing a rig comparison without exposing partial results. */
@@ -1179,6 +1190,12 @@ export class Editor {
     copy.root.rotationQuaternion!.copyFrom(entity.root.rotationQuaternion!);
     copy.root.scaling.copyFrom(entity.root.scaling);
     copy.root.position.copyFrom(entity.root.position);
+    this.copyMaterials(entity, copy);
+    if (entity.boneMap) { copy.boneMap = { ...entity.boneMap }; forgetHumanoid(copy); }
+    if (entity.separation) this.separator.copy(entity, copy);
+    // App rigs are copied after their geometry is prepared by the caller; imported skeletons
+    // already exist here, so a separated part can retain its clips and current pose.
+    if (!entity.rig) this.copyAnimationState(entity, copy);
     copy.root.setEnabled(false);
     return copy;
   }

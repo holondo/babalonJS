@@ -1,4 +1,5 @@
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import type { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { Entity, Editor } from '../core/editor';
 import { tr } from '../core/i18n';
@@ -29,7 +30,10 @@ export class Separator {
   restore(entity: Entity, state: SeparationState) {
     if (state.meshes.length !== entity.meshes.length) throw new Error(tr('The separated model does not match its source.'));
     state.meshes.forEach((part, i) => applyPart(entity.meshes[i] as Mesh, part));
-    entity.root.setPivotPoint(Vector3.FromArray(state.pivot)); entity.separation = state;
+    // The saved root position already sits at the part's origin: only the inner node moves back
+    const fit = fitNode(entity);
+    if (fit) fit.position.subtractInPlace(Vector3.FromArray(state.pivot).subtract(Vector3.FromArray(entity.separation?.pivot ?? [0, 0, 0])));
+    entity.separation = state;
     this.editor.invalidate();
   }
   /** One binary file per separated entity: a JSON header followed by the arrays (deflated in the project ZIP). */
@@ -125,7 +129,8 @@ export class Separator {
     const remaining = parts?.[1] ?? current.map((p, i) => subset(p, selection.faces.get(source.meshes[i] as Mesh) ?? new Set(), false));
     if (!selected.some(p => p.indices.length) || !remaining.some(p => p.indices.length)) throw new Error(tr('Select part of the model, leaving some faces unselected.'));
     const copy = this.editor.createModelCopy(source);
-    const oldPivot = source.root.getPivotPoint().asArray();
+    const oldRoot = source.root.position.clone();
+    const oldFit = fitNode(source)?.position.clone();
     const apply = (entity: Entity, meshes: MeshPart[]) => {
       meshes.forEach((p, i) => applyPart(entity.meshes[i] as Mesh, p));
       entity.root.computeWorldMatrix(true);
@@ -143,18 +148,38 @@ export class Separator {
           min.minimizeInPlace(v); max.maximizeInPlace(v);
         }
       }
-      const pivot = [(min.x + max.x) / 2, min.y, (min.z + max.z) / 2];
-      entity.root.setPivotPoint(Vector3.FromArray(pivot)); entity.separation = { meshes, pivot };
+      // Origin at the bottom center of the part: the root moves there and its content moves back,
+      // so nothing changes on screen but moving, rotating and scaling now work around the part
+      // (a Babylon pivot point instead made the gizmos shift the object while scaling)
+      const delta = new Vector3((min.x + max.x) / 2, min.y, (min.z + max.z) / 2);
+      const fit = fitNode(entity);
+      if (fit) {
+        entity.root.position.addInPlace(Vector3.TransformNormal(delta, entity.root.getWorldMatrix()));
+        fit.position.subtractInPlace(delta);
+        entity.root.computeWorldMatrix(true);
+      }
+      const total = Vector3.FromArray(entity.separation?.pivot ?? [0, 0, 0]).add(fit ? delta : Vector3.Zero());
+      entity.separation = { meshes, pivot: total.asArray() };
     };
     this.stop();
     this.editor.group(() => {
       apply(source, remaining); apply(copy, selected);
-      this.editor.record({ undo: () => { before.forEach((p, i) => applyPart(source.meshes[i] as Mesh, p)); source.root.setPivotPoint(Vector3.FromArray(oldPivot)); source.separation = persistent; this.editor.notify('entities'); }, redo: () => { apply(source, remaining); this.editor.notify('entities'); } });
+      const afterRoot = source.root.position.clone(), afterFit = fitNode(source)?.position.clone(), after = source.separation;
+      const place = (root: Vector3, fit?: Vector3) => { source.root.position.copyFrom(root); if (fit) fitNode(source)?.position.copyFrom(fit); };
+      this.editor.record({
+        undo: () => { before.forEach((p, i) => applyPart(source.meshes[i] as Mesh, p)); place(oldRoot, oldFit); source.separation = persistent; this.editor.notify('entities'); },
+        redo: () => { after!.meshes.forEach((p, i) => applyPart(source.meshes[i] as Mesh, p)); place(afterRoot, afterFit); source.separation = after; this.editor.notify('entities'); },
+      });
       this.editor.publishSeparated(copy);
     });
     this.editor.refreshShadowCasters();
     this.editor.select(copy); this.editor.notify('entities'); return copy;
   }
+}
+
+/** The node between a model's root and its content (see Editor.instantiate). */
+function fitNode(entity: Entity) {
+  return entity.root.getChildren((n) => n.name === 'fit', true)[0] as TransformNode | undefined;
 }
 
 /** Arrays are moved to a binary body (Float32 for vertex data, Uint32 for indices). */
