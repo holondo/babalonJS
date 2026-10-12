@@ -1824,3 +1824,525 @@ body.ui-hidden .ui-restore {
 .panel-foot .grow {
   flex: 1;
 }
+.project-gallery {
+  width: min(880px, calc(100vw - 24px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--purple);
+  color: var(--text);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+.project-gallery::backdrop {
+  background: rgba(10, 6, 16, 0.6);
+  backdrop-filter: blur(6px);
+}
+.gallery-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 22px 18px;
+}
+.gallery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.gallery-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+  gap: 14px;
+}
+.gallery-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.gallery-card.current {
+  border-color: var(--gold);
+}
+.gallery-open {
+  position: relative;
+  display: block;
+  padding: 0;
+  border-radius: 0;
+}
+.gallery-thumb {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+}
+.gallery-open:hover .gallery-thumb {
+  filter: brightness(1.1);
+}
+.gallery-badge {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--gold);
+  color: var(--purple);
+}
+.gallery-meta {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px 8px 12px;
+}
+.gallery-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.gallery-text b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gallery-text small,
+.gallery-foot small {
+  color: var(--muted);
+}
+.gallery-meta .ibtn {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+}
+.gallery-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+body.ui-hidden .project-gallery { visibility: hidden; }
+
+/* Start card: secondary actions and recent projects */
+.empty-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.empty-row .btn {
+  flex: 1;
+  margin-top: 0;
+}
+.recent-projects {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.recent-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.empty .recent-head .btn {
+  width: auto;
+  height: 30px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--gold);
+  font-weight: 600;
+}
+.recent-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 6px;
+  border-radius: 14px;
+  text-align: left;
+}
+.recent-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.recent-thumb {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 40px;
+  flex: none;
+  border-radius: 9px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+.recent-thumb svg {
+  width: 16px;
+  height: 16px;
+}
+.recent-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.recent-text b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-text small {
+  color: var(--muted);
+}
+
+/* ---------- Separate mode: lasso and brush strokes over the 3D view ---------- */
+
+.stroke-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: none;
+  pointer-events: none;
+}
+body.drawing canvas {
+  cursor: crosshair;
+}
+.stroke-layer.on {
+  display: block;
+}
+.stroke-layer svg {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.stroke-layer polyline {
+  fill: color-mix(in srgb, var(--gold) 14%, transparent);
+  stroke: var(--gold);
+  stroke-width: 2px;
+  stroke-dasharray: 6 5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.stroke-layer.brush polyline {
+  fill: none;
+  stroke: color-mix(in srgb, var(--gold) 40%, transparent);
+  stroke-dasharray: none;
+}
+
+/* ---------- Library (Poly Haven) ---------- */
+
+.library {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+.library-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 6px 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.library-search:focus-within {
+  border-color: var(--gold);
+  color: var(--text);
+}
+.library-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  font: inherit;
+  color: var(--text);
+  background: none;
+  border: 0;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.library-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.library-search .library-clear {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+}
+/* One row of categories that scrolls sideways */
+.library-categories .chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.library-categories .chip {
+  text-transform: capitalize;
+}
+.library-status:empty {
+  display: none;
+}
+.library-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+}
+.library-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  border-radius: 14px;
+}
+.library-thumb {
+  display: block;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid transparent;
+}
+.library-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.library-card:hover .library-thumb {
+  border-color: rgba(233, 168, 59, 0.45);
+}
+.library-card.active .library-thumb {
+  border-color: var(--gold);
+}
+.library-name {
+  font-size: 12.5px;
+  line-height: 1.25;
+  padding: 0 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.library-more {
+  width: 100%;
+}
+/* The chosen item's actions stay at the bottom of the panel, within reach */
+.library-bar {
+  position: sticky;
+  bottom: -18px;
+  margin: 4px -16px -18px;
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* Opaque: the grid scrolls underneath */
+  background: var(--purple);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
+.library-bar[hidden] {
+  display: none;
+}
+.library-bar-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.library-bar-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.library-bar-title b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.library-bar-title a {
+  color: var(--muted);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.library-bar .chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.library-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.library-bar-actions .primary {
+  flex: 1;
+  height: 44px;
+}
+.library-bar-actions .progress {
+  flex: 1;
+}
+.library > * {
+  min-width: 0;
+}
+/* The bottom bar bleeds to the panel's edges: no sideways scrolling because of it */
+.panel-body:has(.library) {
+  overflow-x: hidden;
+}
+.library-search .library-clear[hidden] {
+  display: none;
+}
+
+/* ---------- Material → Textures ---------- */
+
+.texture-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.texture-slot:first-of-type {
+  border-top: 0;
+}
+.texture-slot-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.texture-thumb {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+}
+.texture-thumb.blank {
+  display: block;
+  border-style: dashed;
+}
+.texture-slot-title {
+  flex: 1;
+  min-width: 0;
+}
+.texture-slot-title h4 {
+  margin: 0;
+}
+.texture-slot-title small {
+  color: var(--muted);
+}
+.texture-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.texture-picker {
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+}
+.texture-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.texture-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  min-width: 0;
+  border-radius: 12px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.texture-pick:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+.texture-pick .texture-thumb {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+.texture-pick span {
+  width: 100%;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ---------- Object → size and mirror ---------- */
+
+.size-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.mirror-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mirror-row > span {
+  flex: 1;
+  color: var(--muted);
+  font-size: 13px;
+}
+/* Axes currently mirrored */
+.mirror-row .btn.active {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.mirror-row .btn.active svg.lucide {
+  stroke: var(--gold);
+}

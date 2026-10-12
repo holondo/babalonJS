@@ -1,5 +1,8 @@
-import { Geometry, Mesh, VertexData } from '@babylonjs/core';
-import type { BaseTexture, Material } from '@babylonjs/core';
+import { Geometry } from '@babylonjs/core/Meshes/geometry.js';
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js';
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
+import type { Material } from '@babylonjs/core/Materials/material.js';
 import type { Editor, Entity } from '../core/editor';
 import { tr } from '../core/i18n';
 import { simplifyMeshes } from './simplify';
@@ -201,23 +204,30 @@ export class ModelOptimizer {
   // ---------- Saving and copies ----------
 
   /** Saved form: settings plus, per optimized mesh and level, its kept indices. */
+  private readonly savedData = new WeakMap<Optimization, Uint8Array>();
+
   serialize(e: Entity): { settings: OptimizeSettings; error: number; meshes: number[]; data: Uint8Array; bakes: { mesh: number; size: number; png: Uint8Array }[] } | null {
     const o = e.optimization;
     if (!o || o.session) return null;
-    const parts: Uint32Array[] = [];
-    for (const v of o.meshes) {
-      parts.push(Uint32Array.of(v.levels.length));
-      for (const l of v.levels) parts.push(Uint32Array.of(l.length), l);
-    }
-    const total = parts.reduce((n, p) => n + p.length, 0);
-    const out = new Uint32Array(total);
-    let k = 0;
-    for (const p of parts) {
-      out.set(p, k);
-      k += p.length;
+    // An optimization never changes once made (a new one replaces it): build its bytes once
+    let data = this.savedData.get(o);
+    if (!data) {
+      const parts: Uint32Array[] = [];
+      for (const v of o.meshes) {
+        parts.push(Uint32Array.of(v.levels.length));
+        for (const l of v.levels) parts.push(Uint32Array.of(l.length), l);
+      }
+      const out = new Uint32Array(parts.reduce((n, p) => n + p.length, 0));
+      let k = 0;
+      for (const p of parts) {
+        out.set(p, k);
+        k += p.length;
+      }
+      data = new Uint8Array(out.buffer);
+      this.savedData.set(o, data);
     }
     const bakes = o.meshes.filter((v) => v.normal).map((v) => ({ mesh: e.meshes.indexOf(v.mesh), size: v.normal!.size, png: v.normal!.png }));
-    return { settings: { ...o.settings }, error: o.error, meshes: o.meshes.map((v) => e.meshes.indexOf(v.mesh)), data: new Uint8Array(out.buffer), bakes };
+    return { settings: { ...o.settings }, error: o.error, meshes: o.meshes.map((v) => e.meshes.indexOf(v.mesh)), data, bakes };
   }
 
   /** Rebuilds a saved optimization (no recomputation). Returns false if it doesn't fit the model. */

@@ -1,19 +1,18 @@
-import {
-  Color3,
-  CreateGreasedLine,
-  GreasedLineMeshMaterialType,
-  Matrix,
-  Mesh,
-  MeshBuilder,
-  Observable,
-  Plane,
-  PointerEventTypes,
-  StandardMaterial,
-  TransformNode,
-  Vector3,
-  VertexBuffer,
-} from '@babylonjs/core';
-import type { AbstractMesh, GreasedLineBaseMesh, PointerInfo } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color.js';
+import { CreateGreasedLine } from '@babylonjs/core/Meshes/Builders/greasedLineBuilder.js';
+import { GreasedLineMeshMaterialType } from '@babylonjs/core/Materials/GreasedLine/greasedLineMaterialInterfaces.js';
+import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
+import { Observable } from '@babylonjs/core/Misc/observable.js';
+import { Plane } from '@babylonjs/core/Maths/math.plane.js';
+import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js';
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
+import type { GreasedLineBaseMesh } from '@babylonjs/core/Meshes/GreasedLine/greasedLineBaseMesh.js';
+import type { PointerInfo } from '@babylonjs/core/Events/pointerEvents.js';
 import type { Editor, Entity } from '../core/editor';
 
 export type Unit = 'm' | 'cm' | 'mm' | 'in' | 'ft';
@@ -81,6 +80,8 @@ export class Tools {
   readonly changed = new Observable<void>();
   measureMode = false;
   measurements: Measurement[] = [];
+  /** Ephemeral XR geometry: never enters editor history or project serialization. */
+  readonly sessionMeasurements: Measurement[] = [];
   guides: Guide[] = [];
   active: Measurement | null = null;
   /** Guide whose chip is expanded (shows the delete button). */
@@ -149,6 +150,30 @@ export class Tools {
     this.changed.notifyObservers();
   }
 
+  private editDepth = 0;
+  private loading = false;
+
+  beginEdit() {
+    if (this.loading) return;
+    const entities = [...this.editor.entities];
+    this.editor.beginEdit(this, () => ({ ...this.toJSON(entities), snapVertices: this.snapVertices, surfaceDefault: this.surfaceDefault }), (state) => {
+      const unit = this.unit;
+      this.load({ ...state, unit }, entities);
+      this.snapVertices = state.snapVertices;
+      this.surfaceDefault = state.surfaceDefault;
+    });
+  }
+
+  endEdit() { this.editor.endEdit(this); }
+
+  edit<T>(fn: () => T): T {
+    if (this.loading || this.editDepth) return fn();
+    this.beginEdit();
+    this.editDepth++;
+    try { return fn(); }
+    finally { this.editDepth--; this.endEdit(); }
+  }
+
   // ---------- Measure mode ----------
 
   setMeasureMode(on: boolean) {
@@ -174,6 +199,7 @@ export class Tools {
         if (!hit?.pickedMesh) return false;
         const m = this.measurements.find((mm) => mm.id === hit.pickedMesh!.metadata.measureId);
         if (!m) return false;
+        this.beginEdit();
         this.dragging = { m, end: hit.pickedMesh.metadata.end };
         this.setActive(m);
         this.editor.camera.detachControl();
@@ -194,6 +220,7 @@ export class Tools {
         this.dragging = null;
         this.editor.camera.attachControl(true);
         this.computeSurface(m);
+        this.endEdit();
         this.changed.notifyObservers();
         return true;
       }
@@ -287,17 +314,39 @@ export class Tools {
   // ---------- Measurements ----------
 
   addMeasurement(a: Anchor, b: Anchor, surface: boolean) {
-    const id = this.nextId++;
-    const line = this.screenLine(`measure${id}`, [this.worldOf(a), this.worldOf(b)], MEASURE_COLOR, 3, true);
-    const markers: [Mesh, Mesh] = [this.createMarker(), this.createMarker()];
-    markers[0].metadata = { measureId: id, end: 'a' };
-    markers[1].metadata = { measureId: id, end: 'b' };
-    const m: Measurement = { id, a, b, surface, path: null, surfaceFailed: false, length: 0, line, markers };
+    return this.edit(() => {
+    const m = this.createMeasurement(a, b, surface, this.nextId++);
     this.measurements.push(m);
     this.computeSurface(m);
     this.applyVisibility();
     this.changed.notifyObservers();
     return m;
+    });
+  }
+
+  private createMeasurement(a: Anchor, b: Anchor, surface: boolean, id: number) {
+    const line = this.screenLine(`measure${id}`, [this.worldOf(a), this.worldOf(b)], MEASURE_COLOR, 3, true);
+    const markers: [Mesh, Mesh] = [this.createMarker(), this.createMarker()];
+    markers[0].metadata = { measureId: id, end: 'a' };
+    markers[1].metadata = { measureId: id, end: 'b' };
+    const m: Measurement = { id, a, b, surface, path: null, surfaceFailed: false, length: 0, line, markers };
+    return m;
+  }
+
+  addSessionMeasurement(a: Vector3, b: Vector3) {
+    const point = (v: Vector3): Anchor => ({ entity: null, local: v.clone(), normal: Vector3.Up() });
+    const m = this.createMeasurement(point(a), point(b), false, -(this.sessionMeasurements.length + 1));
+    m.markers.forEach((marker) => { marker.isPickable = false; });
+    this.sessionMeasurements.push(m);
+    this.updateMeasurement(m, true, true);
+    return m;
+  }
+
+  removeSessionMeasurement(m: Measurement) {
+    const index = this.sessionMeasurements.indexOf(m);
+    if (index < 0) return;
+    this.sessionMeasurements.splice(index, 1);
+    this.disposeMeasurement(m);
   }
 
   private createMarker() {
@@ -309,20 +358,25 @@ export class Tools {
   }
 
   removeMeasurement(m: Measurement) {
-    m.line.dispose();
-    m.markers.forEach((mk) => {
-      this.editor.overlays.delete(mk);
-      mk.dispose();
-    });
-    this.editor.overlays.delete(m.line);
+    return this.edit(() => {
+    this.disposeMeasurement(m);
     this.measurements = this.measurements.filter((x) => x !== m);
     if (this.active === m) this.active = null;
     this.changed.notifyObservers();
+    });
+  }
+
+  private disposeMeasurement(m: Measurement) {
+    m.line.dispose();
+    m.markers.forEach((mk) => { this.editor.overlays.delete(mk); mk.dispose(); });
+    this.editor.overlays.delete(m.line);
   }
 
   clearMeasurements() {
+    return this.edit(() => {
     for (const m of [...this.measurements]) this.removeMeasurement(m);
     this.cancelPending();
+    });
   }
 
   setActive(m: Measurement | null) {
@@ -331,9 +385,11 @@ export class Tools {
   }
 
   setSurface(m: Measurement, on: boolean) {
+    return this.edit(() => {
     m.surface = on;
     this.computeSurface(m);
     this.changed.notifyObservers();
+    });
   }
 
   private computeSurface(m: Measurement) {
@@ -389,11 +445,16 @@ export class Tools {
 
   private update() {
     const visible = !this.editor.cleanView;
-    for (const m of this.measurements) {
+    for (const m of this.measurements) this.updateMeasurement(m, visible);
+    for (const m of this.sessionMeasurements) this.updateMeasurement(m, this.editor.arMode, true);
+    if (this.pending && visible) this.placeMarker(this.pendingMarker, this.worldOf(this.pending), 14);
+  }
+
+  private updateMeasurement(m: Measurement, visible: boolean, xr = false) {
       const on = visible && this.alive(m.a) && this.alive(m.b);
       m.line.setEnabled(on);
       m.markers.forEach((mk) => mk.setEnabled(on));
-      if (!on) continue;
+      if (!on) return;
       const pts = this.linePoints(m);
       if (m.line.metadata?.points !== pts.length) {
         // An updatable line can't change its point count: rebuild it
@@ -408,10 +469,8 @@ export class Tools {
       let length = 0;
       for (let i = 1; i < pts.length; i++) length += Vector3.Distance(pts[i - 1], pts[i]);
       m.length = length;
-      this.placeMarker(m.markers[0], this.worldOf(m.a), m === this.active ? 14 : 11);
-      this.placeMarker(m.markers[1], this.worldOf(m.b), m === this.active ? 14 : 11);
-    }
-    if (this.pending) this.placeMarker(this.pendingMarker, this.worldOf(this.pending), 14);
+      this.placeMarker(m.markers[0], this.worldOf(m.a), m === this.active ? 14 : 11, xr);
+      this.placeMarker(m.markers[1], this.worldOf(m.b), m === this.active ? 14 : 11, xr);
   }
 
   /**
@@ -434,9 +493,11 @@ export class Tools {
   }
 
   /** Keeps a marker at a constant size on screen. */
-  private placeMarker(marker: Mesh, pos: Vector3, pixels: number) {
+  private placeMarker(marker: Mesh, pos: Vector3, pixels: number, xr = false) {
     marker.position.copyFrom(pos);
-    marker.scaling.setAll(this.editor.worldPerPixel(pos) * pixels);
+    const camera = xr ? this.scene.activeCamera : null;
+    const size = camera ? 2 * Math.max(Vector3.Distance(camera.globalPosition, pos), camera.minZ) * Math.tan(camera.fov / 2) / (this.editor.engine.getRenderingCanvas()?.clientHeight || 1) : this.editor.worldPerPixel(pos);
+    marker.scaling.setAll(size * pixels);
   }
 
   private applyVisibility() {
@@ -450,6 +511,7 @@ export class Tools {
   // ---------- Guides ----------
 
   addGuide(axis: Axis, value?: number) {
+    return this.edit(() => {
     const sel = this.editor.selected;
     if (value === undefined) {
       if (sel && sel.kind !== 'light') value = this.editor.boundsOf(sel)[axis === 'y' ? 'max' : 'center'][axis];
@@ -462,6 +524,7 @@ export class Tools {
     this.applyVisibility();
     this.changed.notifyObservers();
     return g;
+    });
   }
 
   /** Guide geometry is built at unit size and scaled to the scene in setGuideValue(). */
@@ -581,18 +644,22 @@ export class Tools {
 
   /** Puts the guide at the bottom, center or top (min/center/max) of the selected object. */
   guideToSelection(g: Guide, edge: Edge) {
+    return this.edit(() => {
     const sel = this.editor.selected;
     if (!sel || sel.kind === 'light') return;
     this.setGuideValue(g, this.editor.boundsOf(sel)[edge][g.axis]);
     this.changed.notifyObservers();
+    });
   }
 
   removeGuide(g: Guide) {
+    return this.edit(() => {
     for (const m of g.node.getChildMeshes()) this.editor.overlays.delete(m);
     g.node.dispose();
     this.guides = this.guides.filter((x) => x !== g);
     if (this.activeGuide === g) this.activeGuide = null;
     this.changed.notifyObservers();
+    });
   }
 
   clearGuides() {
@@ -600,9 +667,11 @@ export class Tools {
   }
 
   setSmartGuides(on: boolean) {
+    return this.edit(() => {
     this.smartGuides = on;
     if (!on) this.clearSmartLines();
     this.changed.notifyObservers();
+    });
   }
 
   // ---------- Smart guides (snapping while moving) ----------
@@ -752,6 +821,9 @@ export class Tools {
   }
 
   load(json: ToolsJSON | undefined, entities: (Entity | null)[]) {
+    const wasLoading = this.loading;
+    this.loading = true;
+    try {
     this.clear();
     if (!json) return;
     this.unit = json.unit ?? 'm';
@@ -769,13 +841,18 @@ export class Tools {
     }
     this.active = null;
     this.changed.notifyObservers();
+    } finally { this.loading = wasLoading; }
   }
 
   clear() {
+    const wasLoading = this.loading;
+    this.loading = true;
+    try {
     this.clearMeasurements();
     this.clearGuides();
     this.clearSmartLines();
     this.measureMode = false;
+    } finally { this.loading = wasLoading; }
   }
 }
 

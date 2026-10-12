@@ -1,5 +1,8 @@
-import { RawTexture, Texture } from '@babylonjs/core';
-import type { BaseTexture, Material, Scene } from '@babylonjs/core';
+import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture.js';
+import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
+import type { Material } from '@babylonjs/core/Materials/material.js';
+import type { Scene } from '@babylonjs/core/scene.js';
 
 /**
  * Normal map baking from the original mesh onto its optimized version, in a Web Worker

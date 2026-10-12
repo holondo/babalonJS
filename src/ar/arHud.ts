@@ -1,4 +1,5 @@
 import { Eye, EyeOff, Move, Ruler, SlidersHorizontal, X } from 'lucide';
+import type { Measurement } from '../tools/tools';
 import type { ARMode } from './ar';
 import { chips, flashScreen, h, iconButton, shutterButton, slider, toggle } from '../ui/dom';
 import { saveAndOfferShare, timestampedName } from '../core/files';
@@ -12,6 +13,7 @@ import { LIGHT_PRESETS, PHOTO_FILTERS } from '../core/presets';
  */
 export class ARHud {
   readonly el = h('div', { class: 'ar-hud' });
+  private labels = new Map<Measurement, HTMLElement>();
   private message = '';
   private settingsOpen = false;
   /** Everything hidden except a small button to bring it back (gestures keep working). */
@@ -27,6 +29,7 @@ export class ARHud {
     this.ar = ar;
     document.body.append(this.el);
     ar.changed.add(() => this.render());
+    ar.onFrame(() => this.updateLabels());
     this.setupGestures();
     this.render();
   }
@@ -44,6 +47,7 @@ export class ARHud {
 
   private render() {
     const ar = this.ar;
+    this.labels.clear();
     this.el.classList.toggle('show', ar.active);
     if (!ar.active) {
       this.uiHidden = false;
@@ -60,11 +64,12 @@ export class ARHud {
     const hint =
       (ar.lastError && `⚠ ${ar.lastError}`) ||
       this.message ||
+      (ar.measuring ? tr(ar.measurementPending ? 'Tap the second surface point' : 'Tap the first surface point') :
       (ar.status === 'searching'
         ? tr('Move the phone slowly to find the floor')
         : ar.status === 'ready'
           ? tr('Tap to place the scene')
-          : tr('Drag to turn · pinch to resize'));
+          : tr('Drag to turn · pinch to resize')));
     this.el.replaceChildren(
       iconButton(X, tr('Exit AR'), () => ar.exit(), { cls: 'round ar-exit' }),
       h(
@@ -81,7 +86,7 @@ export class ARHud {
       ),
       ...(this.showFps ? [h('div', { class: 'ar-fps' }, '— fps')] : []),
       ...(this.settingsOpen ? [this.optionsPanel()] : []),
-      ...(ar.status !== 'placed'
+      ...(ar.measuring ? [h('div', { class: 'ar-bottom' }, h('button', { class: 'btn primary', onClick: () => ar.setMeasuring(false) }, tr('Finish measuring')))] : ar.status !== 'placed'
         ? [h('div', { class: 'ar-bottom' }, h('button', { class: 'btn primary', onClick: () => ar.placeInFront() }, tr('Place in front of me')))]
         : [
             h(
@@ -95,8 +100,26 @@ export class ARHud {
             ),
           ]),
     );
+    for (const measurement of ar.measurements) {
+      const label = h('div', { class: 'mlabel', style: 'position:absolute;left:0;top:0;pointer-events:none' }, h('span', { class: 'mtext' }));
+      this.labels.set(measurement, label);
+      this.el.append(label);
+    }
+    this.updateLabels();
     const panel = this.el.querySelector('.ar-options');
     if (panel) panel.scrollTop = scroll;
+  }
+
+  private updateLabels() {
+    if (!this.ar.active || this.uiHidden) return;
+    const width = this.el.clientWidth, height = this.el.clientHeight;
+    for (const [measurement, label] of this.labels) {
+      const projected = this.ar.measurementLabel(measurement, width, height);
+      label.style.display = projected?.visible ? '' : 'none';
+      if (!projected) continue;
+      label.style.transform = `translate(${projected.x}px, ${projected.y}px) translate(-50%, -50%)`;
+      label.textContent = projected.text;
+    }
   }
 
   /** Options panel: everything optional, cheapest settings by default. */
@@ -110,6 +133,13 @@ export class ARHud {
     return h(
       'div',
       { class: 'ar-options' },
+      toggle(tr('Measure real objects'), ar.measuring, (on) => { this.settingsOpen = false; ar.setMeasuring(on); }),
+      ar.measurements.length || ar.measurementPending ? h('button', { class: 'btn', onClick: () => ar.clearMeasurements() }, tr('Clear AR measurements')) : null,
+      h('p', { class: 'ar-note' }, tr('AR measurements are approximate and are discarded when you exit.')),
+      toggle(tr('Request depth on next AR session'), ar.requestDepthOnNextSession, (on) => ar.setDepthRequest(on)),
+      ar.requestDepthOnNextSession ? h('p', { class: 'ar-note' }, tr('Exit and enter AR to request depth. Heavier: sensing may run until you exit, even with occlusion off.')) : null,
+      ar.depthSupported ? toggle(tr('Real objects hide the scene'), ar.occlusion, (on) => ar.setOcclusion(on)) : null,
+      ar.depthRequested && !ar.depthSupported ? h('p', { class: 'ar-note' }, tr('Depth occlusion is unavailable in this session.')) : null,
       toggle(tr('Camera background'), !ar.virtual, (v) => ar.setVirtual(!v)),
       ar.virtual ? h('p', { class: 'ar-note' }, tr('Virtual AR: walk around the scene in its own environment.')) : null,
       h('h4', {}, tr('Lighting')),
@@ -182,7 +212,8 @@ export class ARHud {
       const dx = ev.clientX - p.x;
       p.x = ev.clientX;
       p.y = ev.clientY;
-      if (this.ar.status !== 'placed') return;
+      if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > 8) moved = true;
+      if (this.ar.measuring || this.ar.status !== 'placed') return;
       if (pointers.size === 2 && pinch) {
         const now = pair();
         if (pinch.dist > 0) this.ar.scaleBy(now.dist / pinch.dist);
@@ -200,12 +231,16 @@ export class ARHud {
       pointers.delete(ev.pointerId);
       if (pointers.size < 2) pinch = null;
       // A quick tap without movement places (or moves) the scene at the marker
-      if (pointers.size === 0 && !moved && performance.now() - start.t < 400 && this.ar.status !== 'placed') {
+      if (pointers.size === 0 && !moved && performance.now() - start.t < 400 && (this.ar.measuring || this.ar.status !== 'placed')) {
+        if (this.ar.measuring) {
+          if (!this.ar.measurePoint()) this.flash(tr('Move the phone slowly to find a surface'));
+          return;
+        }
         // No surface found: in virtual AR place it in front of the user
         if (!this.ar.place() && !(this.ar.virtual && this.ar.placeInFront())) this.flash(tr('Move the phone slowly to find the floor'));
       }
     };
     this.el.addEventListener('pointerup', end);
-    this.el.addEventListener('pointercancel', end);
+    this.el.addEventListener('pointercancel', (ev) => { pointers.delete(ev.pointerId); pinch = null; moved = true; });
   }
 }

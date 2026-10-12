@@ -81,6 +81,7 @@ export class MeasureLabels {
       if (!moved && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 4) return;
       moved = true;
       const rect = this.ui.editor.engine.getRenderingCanvas()!.getBoundingClientRect();
+      tools.beginEdit();
       tools.dragGuide(g, ev.clientX - rect.left - offset.x, ev.clientY - rect.top - offset.y);
     });
     const end = () => {
@@ -91,8 +92,8 @@ export class MeasureLabels {
       if (!moved) tools.setActiveGuide(tools.activeGuide === g ? null : g);
       else tools.changed.notifyObservers();
     };
-    el.addEventListener('pointerup', end);
-    el.addEventListener('pointercancel', end);
+    el.addEventListener('pointerup', () => { end(); tools.endEdit(); });
+    el.addEventListener('pointercancel', () => { end(); tools.endEdit(); });
   }
 
   updateLabels() {

@@ -1,4 +1,4 @@
-import { Observable } from '@babylonjs/core';
+import { Observable } from '@babylonjs/core/Misc/observable.js';
 import type { Editor } from '../core/editor';
 
 /**

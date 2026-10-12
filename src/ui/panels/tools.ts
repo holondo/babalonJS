@@ -41,8 +41,8 @@ export class ToolsPanel {
           cls: `wide ${tools.measureMode ? 'primary' : ''}`,
         }),
         hint(tr('Tap two points: on a model they stick to its surface, elsewhere they land on the floor. Drag the points to adjust.')),
-        toggle(tr('Follow the surface'), tools.surfaceDefault, (v) => (tools.surfaceDefault = v)),
-        toggle(tr('Snap to vertices'), tools.snapVertices, (v) => (tools.snapVertices = v)),
+        toggle(tr('Follow the surface'), tools.surfaceDefault, (v) => tools.edit(() => (tools.surfaceDefault = v))),
+        toggle(tr('Snap to vertices'), tools.snapVertices, (v) => tools.edit(() => (tools.snapVertices = v))),
         chips(units, tools.unit, (v) => tools.setUnit(v)),
         tools.measurements.length
           ? h('ul', { class: 'outliner' }, ...tools.measurements.map((m, i) => this.measurementRow(m, i)))
@@ -92,7 +92,7 @@ export class ToolsPanel {
         'div',
         { class: 'guide-head' },
         numberInput(tr('Guide {name}', { name }), tools.toUnit(g.value), { suffix: tools.unit }, (v) => {
-          tools.setGuideValue(g, tools.fromUnit(v));
+          tools.edit(() => tools.setGuideValue(g, tools.fromUnit(v)));
           tools.changed.notifyObservers();
         }),
         iconButton(Trash2, tr('Delete'), () => tools.removeGuide(g), { cls: 'mini' }),

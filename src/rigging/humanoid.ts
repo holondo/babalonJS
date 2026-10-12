@@ -1,5 +1,7 @@
-import { Quaternion, TransformNode, Vector3 } from '@babylonjs/core';
-import type { Bone, Skeleton } from '@babylonjs/core';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
+import type { Bone } from '@babylonjs/core/Bones/bone.js';
+import type { Skeleton } from '@babylonjs/core/Bones/skeleton.js';
 import type { Entity } from '../core/editor';
 
 /**

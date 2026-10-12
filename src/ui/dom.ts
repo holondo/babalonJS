@@ -184,9 +184,10 @@ export function flashScreen(parent: HTMLElement) {
   setTimeout(() => flash.remove(), 500);
 }
 
-export function colorInput(label: string, value: string, onInput: (hex: string) => void) {
+export function colorInput(label: string, value: string, onInput: (hex: string) => void, onCommit?: () => void) {
   const input = h('input', { type: 'color', value });
   input.addEventListener('input', () => onInput(input.value));
+  input.addEventListener('change', () => onCommit?.());
   return h('label', { class: 'color' }, h('span', {}, label), input);
 }
 

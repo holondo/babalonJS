@@ -83,6 +83,8 @@ Boundaries: `editor.ts` stays UI-free; new data goes in `presets.ts`; new UI use
 | D5 | Storage budget per project / total and when to call `navigator.storage.persist()` | P02 |
 | D6 | Camera mode lens selection: confirm what the S24 exposes (separate rear `deviceId`s and/or `zoom` < 1) before building UI | P14 |
 | D7 | Play Store: Digital Asset Links must be served at `https://holondo.github.io/.well-known/assetlinks.json` (needs a `holondo.github.io` repo) or a custom domain; Play developer account and package name | P16 |
+| D8 | Separated parts: store as the source asset + triangle subset (light, needs the source) vs. own geometry; and whether separating an optimized or rigged model is blocked or re-applies them | P18, P19 |
+| D9 | Plane cut edge: keep triangles whole (default, no new vertices) vs. exact cut with interpolated attributes; whether to offer hole capping later | P19 |
 
 ## 5. Implementation steps
 
@@ -937,6 +939,196 @@ The app is usable beyond touch and mouse, and installable from the Play Store.
 - [ ] Evidence reviewed by the user.
 - [ ] Approval received before public release.
 
+
+### P18 - Separate a model into parts (selection core)
+
+**Status:** TODO
+
+**Objective**
+
+A model that holds several things (two people in one GLB, a character and its base) can be split into separate objects. Each new object moves, poses, optimizes, rigs and exports on its own. The first ways to choose what to separate are the cheapest and most reliable ones:
+
+- by the file's own parts (nodes and meshes);
+- by connected pieces: tap a piece and get the whole island of triangles connected to it.
+
+**Required reading**
+
+- decision D8;
+- `src/core/editor.ts`: `Entity`, `createModelCopy()`, `duplicate()`, `pickSurface()`, `record()`/`group`, `refreshShadowCasters()`;
+- `src/optimize/optimizer.ts`: `compactGeometry()`, `useGeometry()`, index-subset variants and their `serialize`/`restore` (the same idea: a part is a triangle subset of the original vertices);
+- `src/core/project.ts`: how `optimization` stores deflated index buffers next to the source model;
+- `src/rigging/weights.ts` `adjacency()` and `src/rigging/skinMath.ts` `weld()` (connectivity across UV seams);
+- `src/ui/panels/objects.ts` and `src/ui/ui.ts` (selection bar More menu).
+
+**Target files**
+
+- `src/edit/selection.ts`: the face selection model (per mesh, a bit set of triangles), its highlight overlay, and island finding in a worker if it's slow on 1M-vertex meshes;
+- `src/edit/separate.ts`: `Separator`, which turns the selection into a new entity and the rest into the original;
+- `src/ui/panels/separate.ts`: the "Separate" mode UI;
+- `src/core/editor.ts`, `src/core/project.ts`, `src/core/i18n.ts`.
+
+**Scope**
+
+- Entry: More (⋯) → "Separate parts…". It opens a separate mode with its own bar (like rig placement) and keeps the editor's other tools out of the way.
+- Ways to select:
+  - **Parts list:** the model's meshes and nodes, tap to toggle. Most multi-character files already have one node per character.
+  - **Tap a piece:** selects the connected island under the finger. Islands are connected through welded positions, so UV seams don't break them.
+  - Add / subtract toggle, Select all, None, Invert.
+- **Separate:**
+  - The selected triangles become a new object and the rest stay in the original. Both are index subsets over the original vertices, so UVs, materials, skin weights, morph targets and texture quality are untouched.
+  - Each object's pivot is placed at the bottom center of its bounds.
+  - It is one undo step.
+- **Skinned models:** both parts keep a copy of the skeleton and of the animation groups that drive it, the same way `createModelCopy` already handles them.
+- **Saving:** a part is stored as the source asset plus its triangle subset (deflated), like optimized geometry (D8). Duplicate copies it, and old projects are unaffected.
+- **Excluded:** cutting triangles in half (P19), screen lasso and brush (P20), and splats (not meshes).
+
+**Integration with the project**
+
+- The selection model and overlay are the base for P19 and P20.
+- Optimization (O03) and rigging (`Rigger`) operate on the separated entity like on any model. Per D8, separating is blocked on a model that is optimized or rigged in the app until that is reverted.
+
+**Minimum pre-integration verification**
+
+- Separate a GLB with two characters by parts list and by tapping, then move one away.
+- Pose or play a clip on each.
+- Save, reopen and export.
+
+**Acceptance criteria**
+
+- [ ] Two people in one GLB become two objects that move, pose and animate independently.
+- [ ] Textures, UVs and skin look identical before and after (no seam tears).
+- [ ] Undo restores the single model exactly; save/reopen and duplicate keep the parts.
+- [ ] Tapping a piece on a 1M-vertex model responds in under 1 s on the S24 (island data cached after the first tap).
+
+### P19 - Cut with a plane
+
+**Status:** TODO
+
+**Objective**
+
+Split a model where its pieces touch or are one mesh: a cutting plane placed with a gizmo, Photoshop-style, with a live preview of the two sides.
+
+**Required reading**
+
+- P18 and decision D9;
+- `src/core/editor.ts` gizmo setup (`GizmoManager`, the rig `handle` pattern in `src/rigging/rigging.ts`);
+- `src/tools/tools.ts` (guides: a placed plane-like helper with snapping);
+- Babylon `VertexData`, and skinning attributes (`matricesIndices`, `matricesWeights`).
+
+**Target files**
+
+- `src/edit/planeCut.ts`: plane placement, side classification and the exact cut;
+- `src/edit/separate.ts`;
+- `src/ui/panels/separate.ts`.
+
+**Scope**
+
+- **"Cut with plane"** in separate mode:
+  - A translucent plane in lilac (the guides color) with move and rotate gizmos.
+  - Snap buttons for horizontal, vertical, facing the camera, and "through the selection's center".
+  - The two sides are tinted gold and purple live.
+- **Edge mode (D9):**
+  - **Keep triangles whole** (default): each triangle goes to the side of its center. No new vertices, attributes untouched, the edge looks slightly jagged.
+  - **Exact cut:** triangles crossing the plane are split. New vertices interpolate position, normal, UV, color and skin weights (renormalized). The cut is open, with no cap, which matches what the two people looked like before.
+- The cut can be limited to the current selection (only those triangles are cut).
+- The result goes to the same "Separate" action: both sides become objects, as one undo step.
+- **Excluded:** capping holes and boolean modeling.
+
+**Integration with the project**
+
+- The exact cut creates new vertices, so a part is no longer a pure subset. Per D8 it is saved as its own geometry buffer in the project (deflated), not as an index subset.
+
+**Minimum pre-integration verification**
+
+- Cut a figure at the waist with both edge modes and compare.
+- Check that the UV at the cut has no texture stretching and that a skinned cut still animates.
+
+**Acceptance criteria**
+
+- [ ] The live preview always matches the result.
+- [ ] Exact cut: no texture distortion along the cut; skinned parts deform without spikes.
+- [ ] Keep-whole mode creates no new vertices.
+- [ ] Undo, save/reopen and export work for both modes.
+
+### P20 - Lasso, brush and smart selection
+
+**Status:** TODO
+
+**Objective**
+
+Select by hand, like in Figma or Photoshop:
+
+- draw a lasso on the screen, or paint with a brush;
+- grow the selection smartly until it stops at natural boundaries.
+
+**Required reading**
+
+- P18 (selection model and overlay);
+- `src/core/editor.ts` `pickSurface()` and `scene.skipPointerMovePicking`;
+- `src/tools/tools.ts` (along-the-surface path: walking the surface);
+- `src/rigging/skinVisibility.ts` (BVH over triangles, reusable for visibility).
+
+**Target files**
+
+- `src/edit/lasso.ts`: screen-space selection with visibility;
+- `src/edit/smartSelect.ts`: region growing;
+- `src/edit/selection.ts`;
+- `src/ui/panels/separate.ts`;
+- a selection worker if needed.
+
+**Scope**
+
+- **Lasso:**
+  - Draw a closed shape with a finger or the mouse.
+  - It selects triangles whose projected center is inside the shape.
+  - "Through" toggle: off selects only visible triangles (checked with one render of triangle IDs, or rays against the P18/BVH data), on also selects the hidden ones behind.
+- **Brush:**
+  - Paint triangles under the pointer with an adjustable radius (`slider()`), with add and subtract.
+  - Two-finger gestures still orbit, as in rig placement.
+- **Smart selection** ("magic wand"), starting from a tapped triangle:
+  - Grows across neighbors and stops at sharp creases (normal angle above a threshold), UV island borders, material changes and narrow necks.
+  - A "tolerance" slider controls how far it grows.
+  - Grow and Shrink buttons extend or retract the selection one ring at a time.
+- **Undo:** the selection itself has undo inside the mode, and one step for the final separate.
+- **Phone:** all of it works by touch on a 375 px screen. Lasso and brush are bar tools; the panel only holds options.
+- **Excluded:** ML segmentation (e.g. person detection on renders) — noted as a future option, not in scope (no proprietary services; would need a local free model).
+
+**Integration with the project**
+
+- These are only selection producers. Separating and saving are still P18 and P19.
+
+**Minimum pre-integration verification**
+
+Separate two people who touch (hands on shoulders) using a lasso, a brush fix-up and smart select, on desktop and on the S24.
+
+**Acceptance criteria**
+
+- [ ] Lasso without "through" never selects the hidden side.
+- [ ] Smart select picks a whole head or arm on a typical character and stops at the neck or shoulder with default tolerance.
+- [ ] The selection updates within one frame on 200k triangles and stays responsive on 1M (worker).
+- [ ] Every selection tool works with touch only.
+
+## Milestone M6 - Separate models
+
+**Proves**
+
+A single file with several things in it becomes independent objects, chosen by parts, pieces, plane or hand selection, without losing texture or skin quality.
+
+**Integrated verification**
+
+- **Flow:**
+  1. Import a GLB with two people.
+  2. Separate one by tapping, and cut a joined pair with a plane (both modes).
+  3. Fix up with lasso and brush.
+  4. Optimize one part and rig the other.
+  5. Save, reopen and export.
+- Run it on desktop and on the S24.
+
+**Human approval gate**
+
+- [ ] Evidence reviewed by the user.
+- [ ] Approval received before release.
+
 ## 7. Final integrated validation
 
 - **Primary flow (S24 and desktop):** open the gallery → new project → add a library model (optimized if heavy) and an own-texture primitive → material preset + advanced glass → custom or library HDR → light preset → undo/redo across all edit kinds → photo with filter → turntable video → AR with anchor, measure a real object → camera mode with another lens → save → reload → reopen.
@@ -960,11 +1152,14 @@ The app is usable beyond touch and mouse, and installable from the Play Store.
 | P07 | SUPERSEDED | | [ ] | Model optimization — see model_optimization_implementation_plan.md (O02–O05, D1) |
 | P08 | TODO | | [ ] | Smaller startup |
 | P09 | TODO | | [ ] | Video export — Milestone M3, needs D1 |
-| P10 | TODO | | [ ] | Poly Haven library — needs D3, D4 |
-| P11 | TODO | | [ ] | AR anchors |
-| P12 | TODO | | [ ] | Measure real things in AR |
-| P13 | TODO | | [ ] | AR occlusion |
-| P14 | TODO | | [ ] | Camera mode with lens choice — needs D6 |
+| P10 | VERIFIED | Real model + HDR from Poly Haven with CC0 attribution; forced-offline reload served from cache | [ ] | Poly Haven library — needs D3, D4 |
+| P11 | IN PROGRESS | Implemented (anchors); not tested on a phone | [ ] | AR anchors |
+| P12 | IN PROGRESS | Implemented (AR measuring); not tested on a phone | [ ] | Measure real things in AR |
+| P13 | IN PROGRESS | Implemented (depth occlusion, opt-in); not tested on a phone | [ ] | AR occlusion |
+| P14 | VERIFIED | Simulated video: composition, orientation, lens switch stops the old track, exit restores the environment; real lenses not tested on a phone | [ ] | Camera mode with lens choice — needs D6 |
 | P15 | TODO | | [ ] | iPhone Quick Look — Milestone M4 |
 | P16 | TODO | | [ ] | Accessibility |
 | P17 | TODO | | [ ] | Play Store (TWA) — Milestone M5, needs D7 |
+| P18 | VERIFIED | Parts list and tap a piece on the Mannequin; undo/redo, duplicate, save/reopen | [ ] | Separate model into parts (parts list, tap a piece) — needs D8 |
+| P19 | VERIFIED | Horizontal cut at the waist, both edge modes; skin weights normalized; both parts animate | [ ] | Cut with a plane — needs D9 |
+| P20 | VERIFIED | Lasso (visible vs through: 405 / 928 faces, 79 ms), brush, wand; 375 px layout | [ ] | Lasso, brush and smart selection — Milestone M6 |

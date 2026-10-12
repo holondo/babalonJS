@@ -1,6 +1,7 @@
 import { Move3d, Play, ArrowLeftRight, Bone, Check, PersonStanding, Rotate3d, RotateCcw, RotateCw } from 'lucide';
 import type { IconNode } from 'lucide';
-import { Color3, Vector3 } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color.js';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { Entity } from '../../core/editor';
 import { REQUIRED_BONES, boneLabel, humanoidOf, jointNodes, setBoneMapping } from '../../rigging/humanoid';
 import type { HumanBone } from '../../rigging/humanoid';

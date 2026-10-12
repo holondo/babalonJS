@@ -4,8 +4,6 @@ import { UI } from './ui/ui';
 import { locale, tr } from './core/i18n';
 import { registerSW } from 'virtual:pwa-register';
 import { setupSystemBars } from './device/systemBars';
-import { ARMode } from './ar/ar';
-import { ARHud } from './ar/arHud';
 import { takeSharedFiles } from './core/files';
 import { GyroControl } from './device/gyro';
 
@@ -17,9 +15,14 @@ const ui = new UI(editor, document.querySelector<HTMLElement>('#app')!);
 setupSystemBars(editor);
 
 // Augmented reality (WebXR): only offered where the browser supports it (Android Chrome + ARCore)
-const ar = new ARMode(editor);
-const arHud = new ARHud(ar);
-ar.checkSupport().then(() => ui.setAR(ar, arHud.el));
+if (navigator.xr) navigator.xr.isSessionSupported('immersive-ar').then(async (supported) => {
+  if (!supported) return;
+  const [{ ARMode }, { ARHud }] = await Promise.all([import('./ar/ar'), import('./ar/arHud')]);
+  const ar = new ARMode(editor);
+  const arHud = new ARHud(ar);
+  await ar.checkSupport();
+  ui.setAR(ar, arHud.el);
+}).catch(() => {});
 
 // Gyro mode: the phone's orientation turns the camera (any phone, no camera needed)
 ui.setGyro(new GyroControl(editor));

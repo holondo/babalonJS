@@ -1,3 +1,4 @@
+import type { MaterialJSON } from './state';
 import type { HumanBone } from '../rigging/humanoid';
 import type { EnvSettings, LightType, PhotoSettings } from './editor';
 
@@ -240,3 +241,17 @@ export const ANIMATION_LIBRARY: LibraryClip[] = [
 export function libraryClipUrl(id: string) {
   return `${import.meta.env.BASE_URL}animations/${id}.glb`;
 }
+
+/** Physical looks; base-color textures remain attached. Advanced effects are opt-in. */
+export const MATERIAL_PRESETS: { id: string; label: string; values: Partial<MaterialJSON>; advanced?: Partial<NonNullable<MaterialJSON['advanced']>> }[] = [
+  { id: 'glass', label: 'Glass', values: { metallic: 0, roughness: .05 }, advanced: { refraction: true, transmission: 1, ior: 1.5 } },
+  { id: 'brushed', label: 'Brushed metal', values: { metallic: 1, roughness: .3 }, advanced: { anisotropy: true, anisotropyIntensity: .8 } },
+  { id: 'chrome', label: 'Chrome', values: { metallic: 1, roughness: .08 } },
+  { id: 'glossy', label: 'Glossy plastic', values: { metallic: 0, roughness: .18 } },
+  { id: 'matte', label: 'Matte plastic', values: { metallic: 0, roughness: .65 } },
+  { id: 'rubber', label: 'Rubber', values: { metallic: 0, roughness: .95, albedo: '#303030' } },
+  { id: 'ceramic', label: 'Ceramic', values: { metallic: 0, roughness: .2, clearCoat: true } },
+  { id: 'fabric', label: 'Fabric / velvet', values: { metallic: 0, roughness: .9 }, advanced: { sheen: true, sheenIntensity: 1, sheenRoughness: .7 } },
+  { id: 'paint', label: 'Car paint', values: { metallic: .65, roughness: .3, clearCoat: true } },
+  { id: 'gold', label: 'Gold', values: { metallic: 1, roughness: .2, albedo: '#FFD073' } },
+];

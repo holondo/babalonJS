@@ -1,11 +1,15 @@
+import { editControls } from '../editControls';
+import { lightToJSON, applyLight } from '../../core/state';
 import { Crosshair, Lightbulb, Sun, Trash2 } from 'lucide';
-import { Color3, StandardMaterial } from '@babylonjs/core';
-import type { SpotLight, PointLight } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color.js';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
+import type { SpotLight } from '@babylonjs/core/Lights/spotLight.js';
+import type { PointLight } from '@babylonjs/core/Lights/pointLight.js';
 import { ENV_PRESETS } from '../../core/editor';
 import type { Entity, GroundMode } from '../../core/editor';
 import { LIGHT_PRESETS } from '../../core/presets';
 import { tr } from '../../core/i18n';
-import { button, chips, colorInput, h, hint, icon, row, section, select, slider, toggle } from '../dom';
+import { button, h, hint, icon, row, section, select } from '../dom';
 import type { UI } from '../ui';
 import { deg, rad } from '../shared';
 
@@ -55,6 +59,7 @@ export class LightPanel {
 
   lightControls(e: Entity) {
     const ed = this.ui.editor;
+    const { slider, colorInput, toggle } = editControls(this.ui, () => lightToJSON(e), (s) => applyLight(ed, e, s));
     const light = e.light!;
     const max = e.lightType === 'directional' ? 10 : 300;
     const targets = ed.entities.filter((x) => x.kind !== 'light');
@@ -89,12 +94,21 @@ export class LightPanel {
 
   envPanel() {
     const ed = this.ui.editor;
+    const { slider, colorInput, toggle, chips } = editControls(this.ui, () => ({ ...ed.env }), (s) => ed.applyEnv(s));
     const env = ed.env;
+    const input = h('input', { type: 'file', accept: '.hdr,.exr,.env', hidden: true });
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (file) this.ui.run(() => ed.importEnvironment(file));
+    });
     const set = (p: Partial<typeof env>) => this.ui.quiet(() => ed.applyEnv(p));
     return [
       section(
         tr('Environment lighting (HDR)'),
-        chips(Object.entries(ENV_PRESETS).map(([value, p]) => ({ value, label: tr(p.label) })), env.preset, (v) => ed.applyEnv({ preset: v })),
+        input,
+        button(tr('Load environment…'), () => input.click(), { cls: 'small' }),
+        env.custom ? hint(ed.environments.get(env.custom)?.file.name ?? tr('Custom environment')) : null,
+        chips(Object.entries(ENV_PRESETS).map(([value, p]) => ({ value, label: tr(p.label) })), env.custom ? '' : env.preset, (v) => ed.applyEnv({ preset: v })),
         slider(tr('Intensity'), env.intensity, { min: 0, max: 3, step: 0.01 }, (v) => set({ intensity: v })),
         slider(tr('Rotation'), deg(env.rotation), { min: 0, max: 360, step: 1, format: (v) => `${Math.round(v)}°` }, (v) => set({ rotation: rad(v) })),
         slider(tr('Extra ambient light'), env.ambient, { min: 0, max: 2, step: 0.01 }, (v) => set({ ambient: v })),

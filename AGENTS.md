@@ -27,7 +27,7 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | | `files.ts` | Saving, sharing and receiving files (share target) |
 | | `i18n.ts` | Translations |
 | `ui/` | `ui.ts` | The shell: top bar, dock, selection bar, menus, view controls, panel frame, project actions, autosave, keys |
-| | `panels/*.ts` | One class per panel: `add`, `objects`, `material`, `animate`, `pose`, `rig`, `optimize`, `tools`, `light` |
+| | `panels/*.ts` | One class per panel: `add`, `library`, `objects`, `material`, `animate`, `pose`, `rig`, `optimize`, `separate`, `tools`, `light` |
 | | `photo.ts` | Photo mode: its panel, on-screen controls, aspect frame and capture |
 | | `measureLabels.ts` | Measurement and guide labels over the 3D view |
 | | `jointOverlay.ts` | Joint handles over the 3D view (posing, rigging) |
@@ -49,7 +49,11 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | | `bake.ts`, `bake.worker.ts` | Normal map baked from the original onto the optimized mesh |
 | | `textures.ts`, `textures.worker.ts` | KTX2 compression / downscaling of a model's textures (`TextureOptimizer`) |
 | | `export.ts` | Compact GLB export (glTF-Transform, loaded on demand) |
-| `ar/` | `ar.ts`, `arHud.ts` | WebXR AR session / its on-camera overlay |
+| `edit/` | `selection.ts`, `separate.ts` | Separating a model into objects: face selection (pieces, overlay) and `Separator` (separate mode, triangle subsets, saving) |
+| | `lasso.ts`, `smartSelect.ts`, `planeCut.ts` | Lasso and brush (with a software depth buffer for visibility), magic wand and grow/shrink, cutting with a plane |
+| `library/` | `polyhaven.ts` | Poly Haven CC0 models and HDRIs: index, downloads, cache for offline use, attribution |
+| `capture/` | `camera.ts`, `video.ts` | Live camera as the photo background (lens choice, zoom); turntable and sway videos |
+| `ar/` | `ar.ts`, `arHud.ts` | WebXR AR session / its on-camera overlay (anchors, measuring real objects, depth occlusion) |
 | `tools/` | `tools.ts` | Measurements (incl. along-the-surface path), guides, smart guides, alignment |
 | `device/` | `gyro.ts`, `systemBars.ts` | Gyro mode; status bar / title bar color, desktop title-bar overlay |
 
@@ -81,6 +85,9 @@ Expensive features are opt-in (AR shadows, room lighting, camera access, FPS cou
 - No per-frame allocation-heavy work, no GPU readbacks in the render loop (the theme-color sampler is throttled and paused in AR).
 - `scene.skipPointerMovePicking` is on: pick explicitly when you need what's under the pointer.
 - Rebuild geometry (e.g. lines) only when its data changed.
+- Babylon is imported per module, which skips its side effects: a method that silently does nothing (returns `null`, no error) usually needs its registering module (see the comment at the top of `core/editor.ts`). Check the startup bundle when adding one; skip helpers that pull in large modules (Babylon's scene helpers added ≈420 KB for one skybox function).
+- Projects store each file once (`project-files` in IndexedDB): autosave only writes the scene and the files whose bytes changed. Generated data (rig weights, optimized geometry, separated parts) is cached per state object so unchanged data isn't rebuilt or rewritten. Keep it that way: never re-create a Blob for unchanged data.
+- Panels build costly content (GPU read-backs for thumbnails, big lists) only when it's shown; collapsed sections stay empty.
 
 ### Touch first, desktop too
 - Every feature must work with fingers on a ~375 px wide phone and with mouse and keyboard on desktop. Check both layouts (phone layout is below 760 px).
@@ -127,6 +134,27 @@ Don't add new top-level buttons casually; find the right place in this structure
 1. `npm run build` must pass (TypeScript is strict about unused code).
 2. Run the app (`npm run dev`) and exercise the change in a browser, on desktop and phone sizes.
 3. Some features can't be tested on a desktop (AR, gyro sensors, Android share sheet): test their logic with simulated input, say clearly what wasn't tested on a device, and ask the user to test on a phone (published site, or `npm run dev -- --host` with Chrome USB port forwarding for AR).
+
+### Driving the app from a browser tool (cheaply)
+
+`main.ts` exposes the editor as `window.editor`, so a browser automation tool can run JavaScript in the page instead of moving the cursor. Prefer this: it costs far fewer tokens than screenshots and clicks, and it's exact.
+
+- **Set up through the API.**
+  - Load and act: `await editor.addFromUrl(url, name)`, `editor.selected`, `editor.optimizer.apply(e, settings)`, `editor.rigger.start(e)` / `bind()`, `await editor.exportGLB(compact)`.
+  - Put a test model in `public/` and load it by URL. Delete it before finishing.
+- **Test the real user path when it matters.**
+  - Dispatch a `drop` event with a `DataTransfer` holding a `File`. This goes through `loadFiles`, so notices and toasts run.
+  - Or click a button found by its text, e.g. `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Objects').click()`.
+- **Return small JSON, not pages or images.**
+  - Have the script return just the numbers and state you need: timings with `performance.now()`, triangle counts, panel `innerText`, toast texts.
+  - Check layout in script instead of with screenshots, e.g. elements with `scrollWidth > clientWidth`.
+- **Screenshots only for visual checks**, at reduced scale, after the state is set up by script. Zoom into a region rather than capturing the whole screen.
+- **Keep results across reloads.** Code changes reload the page and wipe JS state. Store reference data (e.g. weights before a change) in IndexedDB to compare after, and delete the test database at the end.
+- **Long operations.**
+  - A single script call times out after about 45 s. Start the work without awaiting it, store the result on `window`, then poll in a later call.
+  - Worker `console.log` output may not reach the page console: post a message to the main thread and log it there.
+- **Phone layout:** emulate 375×812, reload, run the same script checks, then reset the viewport.
+- **Know the limits.** Calling editor methods proves the logic, not the gestures (pinch, drag, gizmo handles) and not the device (AR, gyro, camera). Say what wasn't exercised.
 
 ## Git
 

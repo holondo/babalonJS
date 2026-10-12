@@ -1,10 +1,12 @@
+import type { CameraBackdrop } from '../capture/camera';
+import { editControls } from './editControls';
 import { Camera, EyeOff, RotateCcw, Scan, SlidersHorizontal, X } from 'lucide';
 import { ASPECTS, DEFAULT_PHOTO, aspectRect } from '../core/editor';
 import type { PhotoSettings } from '../core/editor';
 import { timestampedName } from '../core/files';
 import { PHOTO_FILTERS } from '../core/presets';
 import { tr } from '../core/i18n';
-import { button, chips, flashScreen, h, hint, iconButton, row, section, shutterButton, slider, toggle } from './dom';
+import { button, flashScreen, h, hint, iconButton, row, section, select, shutterButton } from './dom';
 import type { UI } from './ui';
 import { errorMessage } from './shared';
 
@@ -14,10 +16,23 @@ export class PhotoMode {
 
   constructor(ui: UI) {
     this.ui = ui;
+    // UI field initializers run before editor is assigned; register lazily on first camera use.
+
   }
+
+  private backdrop: CameraBackdrop | null = null;
+  private cameraObserved = false;
+
+  private videoDuration = 8;
+  private videoHeight = 720;
+  private videoPath: 'scene' | 'object' | 'sway' = 'scene';
+  private videoAbort: AbortController | null = null;
+
+  cancelRecording() { this.videoAbort?.abort(); }
 
   photoPanelContent() {
     const ed = this.ui.editor;
+    const { slider, toggle, chips, action } = editControls(this.ui, () => ({ ...ed.photo }), (s) => ed.setPhoto(s));
     const p = ed.photo;
     const set = (v: Partial<PhotoSettings>) => this.ui.quiet(() => ed.setPhoto(v));
     const pct = (v: number) => `${Math.round(v)}`;
@@ -26,6 +41,10 @@ export class PhotoMode {
       section(tr('Filters'), chips(PHOTO_FILTERS.map((f) => ({ value: f.id, label: tr(f.label) })), '', (id) => ed.setPhoto({ ...DEFAULT_PHOTO, fov: p.fov, focusDistance: p.focusDistance, ...PHOTO_FILTERS.find((f) => f.id === id)!.values }))),
       section(
         tr('Camera'),
+        typeof navigator.mediaDevices !== 'undefined' ? button(this.backdrop?.active ? tr('Stop camera') : tr('Camera background'), () => this.ui.run(() => this.toggleCamera()), { cls: 'small' }) : null,
+        this.backdrop?.active ? select(tr('Camera lens'), this.backdrop.devices.map((d, i) => ({ value: d.deviceId, label: d.label || tr('Camera {n}', { n: i + 1 }) })), this.backdrop.deviceId, (id) => this.ui.run(async () => { await this.backdrop!.start(id); this.ui.renderPanel(); })) : null,
+        this.backdrop?.active && this.backdrop.zoom ? slider(tr('Camera zoom'), this.backdrop.zoomValue, { ...this.backdrop.zoom }, (v) => this.ui.run(() => this.backdrop!.setZoom(v))) : null,
+
         slider(tr('Field of view'), p.fov, { min: 10, max: 110, step: 1, format: (v) => `${Math.round(v)}°` }, (v) => set({ fov: v })),
         chips(Object.entries(ASPECTS).map(([value, a]) => ({ value, label: tr(a.label) })), p.aspect, (v) => ed.setPhoto({ aspect: v })),
       ),
@@ -52,12 +71,19 @@ export class PhotoMode {
         p.dof ? slider(tr('Focus distance'), p.focusDistance, { min: 0.2, max: 50, step: 0.05, format: (v) => `${v.toFixed(2)} m` }, (v) => set({ focusDistance: v })) : null,
         p.dof ? hint(tr('In photo mode, tap an object to focus on it.')) : null,
       ),
-      row(button(tr('Reset to defaults'), () => ed.setPhoto({ ...DEFAULT_PHOTO }), { icon: RotateCcw, cls: 'ghost' })),
+      section(tr('Video'),
+        select(tr('Movement'), [{ value: 'scene', label: tr('Scene turntable') }, { value: 'object', label: tr('Object turntable') }, { value: 'sway', label: tr('Gentle sway') }], this.videoPath, (v) => { this.videoPath = v as typeof this.videoPath; }),
+        select(tr('Duration'), [4, 8, 12].map((v) => ({ value: String(v), label: `${v} s` })), String(this.videoDuration), (v) => { this.videoDuration = +v; }),
+        select(tr('Video height'), [720, 1080].map((v) => ({ value: String(v), label: `${v}p` })), String(this.videoHeight), (v) => { this.videoHeight = +v; }),
+        button(tr('Record video'), () => this.record(), { cls: 'primary' }),
+      ),
+      row(button(tr('Reset to defaults'), () => action(() => ed.setPhoto({ ...DEFAULT_PHOTO })), { icon: RotateCcw, cls: 'ghost' })),
     ];
   }
 
   renderPhotoHud() {
     const ed = this.ui.editor;
+    const { chips } = editControls(this.ui, () => ({ ...ed.photo }), (s) => ed.setPhoto(s));
     if (!ed.photoMode) return this.ui.photoHud.replaceChildren();
     this.ui.photoHud.replaceChildren(
       iconButton(X, tr('Exit photo mode'), () => ed.setPhotoMode(false), { cls: 'round hud-exit' }),
@@ -78,6 +104,38 @@ export class PhotoMode {
         ),
       ),
     );
+  }
+
+  private async toggleCamera() {
+    if (!this.backdrop) {
+      const { CameraBackdrop } = await import('../capture/camera');
+      this.backdrop = new CameraBackdrop(this.ui.editor);
+    }
+    if (!this.cameraObserved) {
+      this.cameraObserved = true;
+      this.ui.editor.changed.add((kind) => {
+        if (kind === 'photo' && !this.ui.editor.photoMode) this.backdrop?.stop();
+      });
+      window.addEventListener('pagehide', () => this.backdrop?.stop());
+    }
+    if (this.backdrop.active) this.backdrop.stop();
+    else { this.ui.editor.setPhotoMode(true); await this.backdrop.start(); }
+    this.ui.renderPanel();
+  }
+
+  private async record() {
+    const controller = this.videoAbort = new AbortController();
+    const status = h('p', { role: 'status' }, tr('Recording…'));
+    const dialog = h('dialog', { class: 'project-gallery', 'aria-label': tr('Record video') }, status, button(tr('Cancel'), () => controller.abort()));
+    dialog.addEventListener('cancel', () => controller.abort());
+    this.ui.root.append(dialog);
+    dialog.showModal();
+    try {
+      const { recordVideo } = await import('../capture/video');
+      const blob = await recordVideo(this.ui.editor, { duration: this.videoDuration, height: this.videoHeight, path: this.videoPath, signal: controller.signal, progress: (v) => { status.textContent = tr('Recording…') + ` ${Math.round(v * 100)}%`; } });
+      this.ui.deliver(blob, timestampedName('babalon', blob.type.includes('mp4') ? 'mp4' : 'webm'), tr('Video saved'));
+    } catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) this.ui.toast(errorMessage(e), 'error'); }
+    finally { this.videoAbort = null; dialog.remove(); }
   }
 
   async capture() {
