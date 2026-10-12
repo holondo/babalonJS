@@ -78,8 +78,11 @@ export function applyTextureStates(m: Material, state: TextureStates) {
     }
     b.state = next ? { ...next } : null;
     if (next && b.texture) { b.texture.uScale = next.u; b.texture.vScale = next.v; b.texture.wAng = next.rotation; }
-    if (slot === 'base' && m.metadata?.stashedAlbedo) m.metadata.stashedAlbedo = null;
-    slots(m)[prop] = next ? b.texture : b.original;
+    const texture = next ? b.texture : b.original;
+    if (slot === 'base' && m.metadata?.stashedAlbedo) {
+      m.metadata.stashedAlbedo = texture;
+      slots(m)[prop] = null;
+    } else slots(m)[prop] = texture;
   }
 }
 
