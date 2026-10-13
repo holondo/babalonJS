@@ -201,6 +201,7 @@ export class Separator {
       this.selection?.refresh(); this.editor.notify('transform');
     };
     this.editor.record({ undo: () => put(result.before, previous), redo: () => put(result.after, next) });
+    this.selection!.refresh();
     this.editor.notify('transform');
   }
 

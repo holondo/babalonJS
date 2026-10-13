@@ -4,7 +4,7 @@ import type { Observer } from '@babylonjs/core/Misc/observable.js';
 import type { Scene } from '@babylonjs/core/scene.js';
 import type { Editor } from '../core/editor';
 import type { FaceSelection } from './selection';
-import { Deform, recordDeform } from './deform';
+import { Deform, DeformSpace, recordDeform } from './deform';
 import { editBlocker } from './combine';
 import { tr } from '../core/i18n';
 
@@ -16,7 +16,7 @@ export class SelectionTransform {
   readonly handle: Mesh;
   softRadius = 0;
   private observer: Observer<Scene>;
-  private sessions: { deform: Deform; vertices: Uint32Array; weights: Float32Array; world: Matrix; inverse: Matrix }[] | null = null;
+  private sessions: { deform: Deform; space: DeformSpace; base: Float32Array; vertices: Uint32Array; weights: Float32Array; world: Matrix; inverse: Matrix }[] | null = null;
   private center = Vector3.Zero();
   private signature = '';
   readonly editor: Editor;
@@ -34,20 +34,9 @@ export class SelectionTransform {
     });
   }
   recenter() {
-    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
-    const v = new Vector3();
-    for (const [mesh, faces] of this.selection.faces) {
-      if (!faces.size) continue;
-      const indices = mesh.getIndices()!, p = mesh.getVerticesData('position')!, world = mesh.computeWorldMatrix(true), m = faces.mask;
-      for (let f = 0; f < m.length; f++) if (m[f]) for (let j = 0; j < 3; j++) {
-        const i = indices[f * 3 + j] * 3;
-        Vector3.TransformCoordinatesFromFloatsToRef(p[i], p[i + 1], p[i + 2], world, v);
-        if (v.x < x0) x0 = v.x; if (v.y < y0) y0 = v.y; if (v.z < z0) z0 = v.z;
-        if (v.x > x1) x1 = v.x; if (v.y > y1) y1 = v.y; if (v.z > z1) z1 = v.z;
-      }
-    }
-    if (!Number.isFinite(x0)) throw new Error(tr('Select faces first.'));
-    this.center.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    const bounds = this.selection.bounds();
+    if (!bounds) throw new Error(tr('Select faces first.'));
+    this.center.copyFrom(bounds.center);
     this.handle.position.copyFrom(this.center); this.handle.scaling.setAll(1); this.handle.rotationQuaternion!.copyFrom(Quaternion.Identity());
   }
   /** Start of a gizmo drag: which vertices move and by how much (soft selection). */
@@ -57,7 +46,8 @@ export class SelectionTransform {
     for (const [mesh, faces] of this.selection.faces) {
       if (!faces.size) continue;
       const topology = this.selection.neighbors(mesh), deform = new Deform(mesh, topology);
-      const { weld, vertexStart, vertexFaces } = topology, indices = mesh.getIndices()!, p = deform.base;
+      const space = new DeformSpace(deform, false), base = mesh.skeleton ? space.positions.slice() : deform.base;
+      const { weld, vertexStart, vertexFaces } = topology, indices = mesh.getIndices()!, p = base;
       let groups = 0;
       for (let i = 0; i < weld.length; i++) if (weld[i] + 1 > groups) groups = weld[i] + 1;
       // Distance along the surface (in world units) from the selection, per welded vertex
@@ -98,7 +88,7 @@ export class SelectionTransform {
         if (t <= 0) continue;
         vertices.push(i); weights.push(t * t * (3 - 2 * t));
       }
-      this.sessions.push({ deform, vertices: Uint32Array.from(vertices), weights: Float32Array.from(weights), world, inverse: world.clone().invert() });
+      this.sessions.push({ deform, space, base, vertices: Uint32Array.from(vertices), weights: Float32Array.from(weights), world, inverse: world.clone().invert() });
     }
     // The meshes' buffers were replaced by updatable ones: the highlight follows them
     this.selection.refresh();
@@ -108,13 +98,13 @@ export class SelectionTransform {
     if (!this.sessions) return;
     const transform = Matrix.Translation(-this.center.x, -this.center.y, -this.center.z).multiply(Matrix.Compose(this.handle.scaling, this.handle.rotationQuaternion!, this.handle.position));
     const v = new Vector3();
-    for (const { deform, vertices, weights, world, inverse } of this.sessions) {
+    for (const { deform, space, base, vertices, weights, world, inverse } of this.sessions) {
       const full = world.multiply(transform).multiply(inverse);
-      const b = deform.base, p = deform.positions;
+      const b = base;
       for (let k = 0; k < vertices.length; k++) {
         const i = vertices[k], o = i * 3, w = weights[k];
         Vector3.TransformCoordinatesFromFloatsToRef(b[o], b[o + 1], b[o + 2], full, v);
-        p[o] = b[o] + (v.x - b[o]) * w; p[o + 1] = b[o + 1] + (v.y - b[o + 1]) * w; p[o + 2] = b[o + 2] + (v.z - b[o + 2]) * w;
+        space.setPosition(i, b[o] + (v.x - b[o]) * w, b[o + 1] + (v.y - b[o + 1]) * w, b[o + 2] + (v.z - b[o + 2]) * w);
         deform.touch(i);
       }
       deform.updateNormals(vertices);

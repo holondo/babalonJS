@@ -1,4 +1,5 @@
 import type { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { Editor, Entity } from '../core/editor';
 import type { FaceTopology } from './faceTopology';
 import { capturePart } from './parts';
@@ -31,6 +32,9 @@ export class Deform {
   private high = -1;
 
   constructor(mesh: Mesh, topology: FaceTopology) {
+    // Loaded parts and duplicates may share geometry with the source or another part.
+    // An in-place edit must own its buffers before replacing or uploading them.
+    if (mesh.geometry && mesh.geometry.meshes.length > 1) mesh.makeGeometryUnique();
     this.mesh = mesh;
     this.topology = topology;
     this.indices = mesh.getIndices()!;
@@ -42,6 +46,7 @@ export class Deform {
     this.baseNormals = this.normals?.slice() ?? null;
     mesh.setVerticesData('position', this.positions, true);
     if (this.normals) mesh.setVerticesData('normal', this.normals, true);
+    mesh.refreshBoundingInfo(!!mesh.skeleton);
     this.winding = this.findWinding();
   }
 
@@ -117,12 +122,12 @@ export class Deform {
   static restore(mesh: Mesh, state: DeformState) {
     mesh.setVerticesData('position', state.positions.slice(), true);
     if (state.normals) mesh.setVerticesData('normal', state.normals.slice(), true);
-    if (!mesh.skeleton) mesh.refreshBoundingInfo();
+    mesh.refreshBoundingInfo(!!mesh.skeleton);
   }
 
   finish() {
     this.upload();
-    if (!this.mesh.skeleton) this.mesh.refreshBoundingInfo();
+    this.mesh.refreshBoundingInfo(!!this.mesh.skeleton);
   }
 
   private findWinding() {
@@ -184,4 +189,55 @@ function upload(mesh: Mesh, kind: string, data: Float32Array, from: number, to: 
   if (!buffer) return;
   buffer.updateDirectly(data.subarray(from, to), from);
   (buffer.getWrapperBuffer() as unknown as { _data: Float32Array | null })._data = data;
+}
+
+/** Edit the displayed surface, mapping skinned vertices back to authored coordinates. */
+export class DeformSpace {
+  readonly deform: Deform;
+  readonly positions: Float32Array;
+  readonly normals: Float32Array | null;
+  private readonly inverseSkin = new Map<number, Matrix>();
+  constructor(deform: Deform, includeNormals = true) {
+    this.deform = deform;
+    const mesh = deform.mesh;
+    this.positions = mesh.skeleton ? Float32Array.from(mesh.getPositionData(true, true)!) : deform.positions;
+    const normals = includeNormals && mesh.skeleton ? mesh.getNormalsData(true, true) : null;
+    this.normals = !includeNormals ? null : mesh.skeleton ? (normals ? Float32Array.from(normals) : null) : deform.normals;
+  }
+  setPosition(vertex: number, x: number, y: number, z: number) {
+    const mesh = this.deform.mesh, p = vertex * 3;
+    this.positions[p] = x; this.positions[p + 1] = y; this.positions[p + 2] = z;
+    if (!mesh.skeleton) return;
+    let inverse = this.inverseSkin.get(vertex);
+    if (!inverse) {
+      const matrices = mesh.skeleton.getTransformMatrices(mesh);
+      const indices = mesh.getVerticesData('matricesIndices')!, weights = mesh.getVerticesData('matricesWeights')!;
+      const extraIndices = mesh.getVerticesData('matricesIndicesExtra'), extraWeights = mesh.getVerticesData('matricesWeightsExtra');
+      const values = new Float32Array(16);
+      for (let i = 0; i < mesh.numBoneInfluencers; i++) {
+        const offset = vertex * 4 + i % 4;
+        const index = i < 4 ? indices[offset] : extraIndices?.[offset];
+        const weight = i < 4 ? weights[offset] : extraWeights?.[offset];
+        if (index === undefined || !weight) continue;
+        for (let k = 0; k < 16; k++) values[k] += matrices[index * 16 + k] * weight;
+      }
+      inverse = Matrix.FromArray(values).invert();
+      this.inverseSkin.set(vertex, inverse);
+    }
+    const point = Vector3.TransformCoordinates(new Vector3(x, y, z), inverse);
+    this.deform.positions[p] = point.x; this.deform.positions[p + 1] = point.y; this.deform.positions[p + 2] = point.z;
+  }
+  updateNormals(vertices: number[]) {
+    if (!this.deform.mesh.skeleton || !this.normals || !this.deform.normals) return;
+    const skin = Matrix.Identity(), normal = new Vector3();
+    for (const vertex of vertices) {
+      const inverse = this.inverseSkin.get(vertex);
+      if (!inverse) continue;
+      inverse.invertToRef(skin);
+      const p = vertex * 3;
+      Vector3.TransformNormalFromFloatsToRef(this.deform.normals[p], this.deform.normals[p + 1], this.deform.normals[p + 2], skin, normal);
+      normal.normalize();
+      this.normals[p] = normal.x; this.normals[p + 1] = normal.y; this.normals[p + 2] = normal.z;
+    }
+  }
 }

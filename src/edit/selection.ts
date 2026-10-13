@@ -59,6 +59,8 @@ export class FaceSelection {
     this.material.backFaceCulling = false;
     this.material.zOffset = -2;
     this.reset();
+    // Babylon updates both the visible bounds and its CPU picking points here.
+    for (const mesh of this.faces.keys()) if (mesh.skeleton) { mesh.skeleton.prepare(true); mesh.refreshBoundingInfo(true); }
   }
   /** Sizes the selection to the current geometry, keeping it where the face count didn't change. */
   reset() {

@@ -2,7 +2,7 @@ import { Vector3, Matrix } from '@babylonjs/core/Maths/math.vector.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import type { Editor } from '../core/editor';
 import type { FaceSelection } from './selection';
-import { Deform } from './deform';
+import { Deform, DeformSpace } from './deform';
 import type { DeformState } from './deform';
 import { editBlocker } from './combine';
 
@@ -12,14 +12,14 @@ export type SurfaceBrush = 'pull' | 'inflate' | 'smooth' | 'flatten';
  * What a brush needs about a mesh, built once per Surface session and reused by every stroke:
  * the deformation (updatable buffers) and welded vertex groups.
  */
-export class SculptContext {
-  readonly deform: Deform;
+export class SculptContext extends DeformSpace {
+  private stamp = 0;
   readonly groupStart: Uint32Array;
   readonly groupVertices: Uint32Array;
   readonly mark: Uint32Array;
   constructor(mesh: Mesh, selection: FaceSelection) {
     const topology = selection.neighbors(mesh);
-    this.deform = new Deform(mesh, topology);
+    super(new Deform(mesh, topology));
     const { weld } = topology;
     let groups = 0;
     for (let i = 0; i < weld.length; i++) if (weld[i] + 1 > groups) groups = weld[i] + 1;
@@ -31,6 +31,11 @@ export class SculptContext {
     for (let i = 0; i < weld.length; i++) this.groupVertices[fill[weld[i]]++] = i;
     this.mark = new Uint32Array(groups);
   }
+  nextStamp() {
+    if (++this.stamp > 0xffffffff) { this.mark.fill(0); this.stamp = 1; }
+    return this.stamp;
+  }
+
 }
 
 /**
@@ -44,6 +49,7 @@ export class SculptStroke {
   readonly mesh: Mesh;
   private readonly editor: Editor;
   private readonly deform: Deform;
+  private readonly context: SculptContext;
   private readonly brush: SurfaceBrush;
   private readonly strength: number;
   private readonly radius: number;
@@ -61,12 +67,12 @@ export class SculptStroke {
   private readonly startState: DeformState;
   private moved = false;
   private readonly mark: Uint32Array;
-  private stamp = 0;
 
   private constructor(editor: Editor, selection: FaceSelection, context: SculptContext, face: number, point: Vector3, brush: SurfaceBrush, pixels: number, strength: number, selectedOnly: boolean) {
     const mesh = context.deform.mesh;
     this.editor = editor; this.mesh = mesh; this.brush = brush; this.strength = strength;
     this.deform = context.deform;
+    this.context = context;
     this.deform.rebase();
     this.startState = this.deform.startState();
     this.world = mesh.computeWorldMatrix(true).clone();
@@ -148,12 +154,12 @@ export class SculptStroke {
   // ---------- Internals ----------
 
   private positionOf(group: number, out = new Vector3()) {
-    const v = this.groupVertices[this.groupStart[group]] * 3, p = this.deform.positions;
+    const v = this.groupVertices[this.groupStart[group]] * 3, p = this.context.positions;
     return Vector3.TransformCoordinatesFromFloatsToRef(p[v], p[v + 1], p[v + 2], this.world, out);
   }
 
   private normalAt(group: number) {
-    const n = this.deform.normals, v = this.groupVertices[this.groupStart[group]] * 3;
+    const n = this.context.normals, v = this.groupVertices[this.groupStart[group]] * 3;
     if (!n) return this.editor.camera.getForwardRay().direction.scale(-1);
     return Vector3.TransformNormal(new Vector3(n[v], n[v + 1], n[v + 2]), this.world).normalize();
   }
@@ -184,7 +190,7 @@ export class SculptStroke {
 
   /** One brush stamp around a surface point. */
   private dab(center: Vector3, drag?: Vector3) {
-    const r2 = this.radius * this.radius, stamp = ++this.stamp, mark = this.mark;
+    const r2 = this.radius * this.radius, stamp = this.context.nextStamp(), mark = this.mark;
     // Surface flood within the radius from the center vertex
     const region: number[] = [this.at];
     mark[this.at] = stamp;
@@ -194,11 +200,11 @@ export class SculptStroke {
       mark[o] = stamp;
       if (Vector3.DistanceSquared(this.positionOf(o, p), center) <= r2) region.push(o);
     });
-    const positions = this.deform.positions, moved: number[] = [];
+    const positions = this.context.positions, moved: number[] = [];
     const local = drag ? Vector3.TransformNormal(drag, this.inverse) : null;
     const planeLocal = Vector3.TransformCoordinates(this.planePoint, this.inverse), normalLocal = Vector3.TransformNormal(this.planeNormal, this.inverse).normalize();
     const radiusLocal = Vector3.TransformNormal(new Vector3(this.radius, 0, 0), this.inverse).length();
-    const n = this.deform.normals;
+    const n = this.context.normals;
     // Smooth reads the neighbors' current positions: compute all targets first
     const targets = new Float32Array(region.length * 3);
     for (let i = 0; i < region.length; i++) {
@@ -226,13 +232,14 @@ export class SculptStroke {
       const g = region[i];
       for (let k = this.groupStart[g]; k < this.groupStart[g + 1]; k++) {
         const v = this.groupVertices[k];
-        positions[v * 3] = targets[i * 3]; positions[v * 3 + 1] = targets[i * 3 + 1]; positions[v * 3 + 2] = targets[i * 3 + 2];
+        this.context.setPosition(v, targets[i * 3], targets[i * 3 + 1], targets[i * 3 + 2]);
         this.deform.touch(v); moved.push(v);
       }
     }
     if (!moved.length) return;
     this.moved = true;
     this.deform.updateNormals(moved);
+    this.context.updateNormals(moved);
     this.deform.upload();
     this.editor.invalidate();
   }
