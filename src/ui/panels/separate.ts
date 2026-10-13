@@ -23,6 +23,7 @@ export class SeparatePanel {
   private readonly cursor = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   private brushPoint: ScreenPoint | null = null;
   private listening = false;
+  private resetStroke: (() => void) | null = null;
   /** Part of the panel: selecting faces, sculpting, or changing the mesh. */
   private part: 'select' | 'sculpt' | 'modify' = 'select';
 
@@ -72,6 +73,7 @@ export class SeparatePanel {
   sync() {
     const s = this.ui.editor.separator;
     const on = this.drawing();
+    if (!on) this.resetStroke?.();
     this.layer.classList.toggle('on', on);
     document.body.classList.toggle('drawing', on);
     this.cameraButtons(on);
@@ -305,6 +307,13 @@ export class SeparatePanel {
       const points = sculpting() ? [] : stroke?.points ?? [];
       this.path.setAttribute('points', points.map((p) => `${p.x},${p.y}`).join(' ') + (s.mode === 'select' && s.tool === 'lasso' && points.length ? ` ${points[0].x},${points[0].y}` : ''));
       this.path.style.strokeWidth = (s.tool === 'brush' || s.mode === 'surface') ? `${s.radius * 2}px` : '';
+    };
+    this.resetStroke = () => {
+      const pointer = stroke?.id;
+      stroke = null;
+      passed.clear();
+      if (pointer !== undefined && canvas.hasPointerCapture(pointer)) canvas.releasePointerCapture(pointer);
+      draw();
     };
     const swallow = (ev: Event) => {
       ev.stopImmediatePropagation();

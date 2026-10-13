@@ -40,7 +40,7 @@ export class Separator {
    * objects, like Shrinkwrap, can be limited to them (Blender's vertex group).
    */
   lastFaces: { entity: Entity; masks: Map<Mesh, Uint8Array> } | null = null;
-  stop() { this.cutGeneration++; this.cutLoading = false; if (this.selection?.count) this.lastFaces = { entity: this.selection.entity, masks: this.selection.vertexMasks() }; this.sculptContexts.clear(); this.clearBridge(); this.transform?.dispose(); this.transform = null; this.mode = 'select'; this.selection?.dispose(); this.selection = null; this.editor.refreshTool(); }
+  stop() { this.cutGeneration++; this.cutLoading = false; this.sculpting = null; if (this.selection?.count) this.lastFaces = { entity: this.selection.entity, masks: this.selection.vertexMasks() }; this.sculptContexts.clear(); this.clearBridge(); this.transform?.dispose(); this.transform = null; this.mode = 'select'; this.selection?.dispose(); this.selection = null; this.editor.refreshTool(); }
   copy(from: Entity, to: Entity) { if (from.separation) this.restore(to, structuredClone(from.separation!)); }
   restore(entity: Entity, state: SeparationState) {
     if (state.meshes.length !== entity.meshes.length) throw new Error(tr('The separated model does not match its source.'));

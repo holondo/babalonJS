@@ -15,6 +15,7 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 - Startup/cache regression: `node scripts/check-lazy-cache.mjs` after a build. Project ZIP compatibility and worker checks: `node scripts/check-project-archive.mjs`.
 - Installed PWA downloads/resume and version checks: `node scripts/check-offline-install.mjs` after a build. The ordinary site caches features on use; installed apps additionally cache all tool code, workers, WASM and model decoders without evaluating them. Models and libraries stay opt-in.
 - Surface-edit regression: `node scripts/check-surface-brushes.mjs` verifies skinned picking, brush coordinates, visible bounds, repeated strokes, face transforms with undo/redo and isolation of shared geometry.
+- Browser project-switch regression: run the dev server on a fresh port, open `/scripts/fixtures/mesh-project-switch.html` and click "Test project switch". Verifies restoration of the Object cursor and camera controls after Sculpt, Lasso, Brush and a new scene.
 - Rigging has focused checks (Node, no browser): `node scripts/check-leg-junction.mjs`, `check-skin-treatments.mjs`, `check-helper-bones.mjs`, `check-skin-visibility.mjs`. Optimization: `node scripts/check-simplify.mjs`. `node scripts/check-rig-deformation.mjs <model.glb> <envelope|heat> [comparison]` audits final deformation on a model you provide (meshopt-compressed GLB); no model is bundled for it.
 - GitHub Pages deploys on every push to `main` (`.github/workflows/deploy.yml`). The build runs with `BASE_PATH=/<repo>/`.
 

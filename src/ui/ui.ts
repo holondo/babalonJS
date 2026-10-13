@@ -922,6 +922,11 @@ export class UI {
   get focusedContext() { return this.contextBar.focusedId; }
 
   renderSelbar() {
+    // Scene reset can end Mesh mode directly, without going through the panel's Cancel.
+    if (this.separateUI && !this.editor.separator.active) {
+      this.separateUI.sync();
+      if (this.segment.objects === 'separate') this.segment.objects = 'object';
+    }
     const previous = this.focusedContext;
     this.contextBar.render(this.contexts());
     if (previous !== this.focusedContext) this.toggleSelMenu(false);
