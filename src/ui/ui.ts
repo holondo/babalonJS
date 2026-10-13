@@ -55,7 +55,7 @@ import type { GyroControl } from '../device/gyro';
 import { saveAndOfferShare, timestampedName } from '../core/files';
 import { LANGS, getLang, setLang, tr } from '../core/i18n';
 import type { Lang } from '../core/i18n';
-import { button, chips, h, hint, icon, iconButton, menuItem, row, section, segmented, scrollableSegmented } from './dom';
+import { button, chips, h, hint, icon, iconButton, menuItem, progressBar, row, section, segmented, scrollableSegmented } from './dom';
 import { AddPanel } from './panels/add';
 import { ObjectsPanel } from './panels/objects';
 import { MaterialPanel } from './panels/material';
@@ -112,6 +112,9 @@ export class UI {
 
   tab: Tab | null = null;
   private busy = false;
+  private activityId = 0;
+  private readonly activities = new Map<string, { label: string; icon: IconNode; progress: number | null; cancel?: () => void }>();
+  private loadingActivity: ReturnType<UI['beginActivity']> | null = null;
   photoPanel = false;
   /** Selected part of each panel (e.g. Object | Material), remembered per tab. */
   segment: Partial<Record<Tab, string>> = {};
@@ -212,6 +215,7 @@ export class UI {
         return;
       }
       if (kind === 'optimize') {
+        this.renderSelbar();
         if (this.tab === 'objects') this.renderPanel();
         return;
       }
@@ -249,6 +253,13 @@ export class UI {
     editor.loading.add((l) => {
       this.loader.classList.toggle('show', !!l);
       if (l) this.loader.replaceChildren(h('div', { class: 'spinner' }), h('span', {}, tr('Loading {name}… {pct}%', { name: l.name, pct: Math.round(l.progress * 100) })));
+      if (l) {
+        this.loadingActivity ??= this.beginActivity(tr('Loading…'), Upload);
+        this.loadingActivity.update(l.progress || null, tr('Loading {name}', { name: l.name }));
+      } else {
+        this.loadingActivity?.finish();
+        this.loadingActivity = null;
+      }
     });
     new ResizeObserver(() => this.photoUI.renderFrame()).observe(root);
     this.renderAll();
@@ -262,6 +273,44 @@ export class UI {
     } finally {
       this.busy = false;
     }
+  }
+
+  /** Registers work that continues independently of whichever panel is on screen. */
+  beginActivity(label: string, node: IconNode = Download, cancel?: () => void) {
+    const id = `activity-${++this.activityId}`;
+    const activity = { label, icon: node, progress: null as number | null, cancel };
+    this.activities.set(id, activity);
+    this.renderSelbar();
+    return {
+      update: (progress: number | null, nextLabel = activity.label) => {
+        if (!this.activities.has(id)) return;
+        if (nextLabel === activity.label && (progress === null ? activity.progress === null : activity.progress !== null && Math.round(progress * 100) === Math.round(activity.progress * 100))) return;
+        activity.progress = progress;
+        activity.label = nextLabel;
+        this.renderSelbar();
+      },
+      finish: () => {
+        if (this.activities.delete(id)) this.renderSelbar();
+      },
+    };
+  }
+
+  private activityContext(id: string, node: IconNode, label: string, progress: number | null, cancel?: () => void): UIContext {
+    const status = progress === null ? label : `${label} · ${Math.round(progress * 100)}%`;
+    return { id, icon: node, label: status, busy: true, progress, render: () => this.selbar.replaceChildren(
+      this.activitySummary(node, label, progress),
+      ...(cancel ? [button(tr('Cancel'), cancel, { cls: 'small' })] : []),
+    ) };
+  }
+
+  /** Shared compact progress layout for background work and mode-specific controls. */
+  activitySummary(node: IconNode, label: string, progress: number | null) {
+    const meter = progressBar(progress, label);
+    meter.classList.add('compact');
+    return h('div', { class: 'ctx-activity' }, icon(node, 18),
+      h('div', { class: 'ctx-activity-copy' },
+        h('div', { class: 'ctx-activity-heading' }, h('span', { title: label }, label),
+          h('span', { class: 'ctx-percent' }, progress === null ? tr('Working…') : `${Math.round(progress * 100)}%`)), meter));
   }
 
   toast(text: string, kind: 'info' | 'error' = 'info', action?: { label: string; run: () => void }, timeout?: number) {
@@ -586,11 +635,14 @@ export class UI {
   }
 
   private async saveProject() {
+    const activity = this.beginActivity(tr('Preparing project download'), Save);
     try {
       const blob = await toZip(snapshot(this.editor, this.projectName));
       this.deliver(blob, fileSafe(this.projectName) + PROJECT_EXT, tr('Project saved'));
     } catch (e) {
       this.toast(errorMessage(e), 'error');
+    } finally {
+      activity.finish();
     }
   }
 
@@ -773,9 +825,14 @@ export class UI {
   /** Compact: optimized models, compressed geometry and textures (smaller file, same look). */
   private async exportGLB(compact: boolean) {
     await this.run(async () => {
-      const blob = await this.editor.exportGLB(compact);
-      const name = timestampedName(compact ? 'scene-compact' : 'scene', 'glb');
-      this.deliver(blob, name, tr('Scene exported as {name} ({size})', { name, size: formatBytes(blob.size) }));
+      const activity = this.beginActivity(tr(compact ? 'Preparing compact GLB' : 'Preparing scene GLB'));
+      try {
+        // Let the browser paint the activity before serialization starts.
+        await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+        const blob = await this.editor.exportGLB(compact);
+        const name = timestampedName(compact ? 'scene-compact' : 'scene', 'glb');
+        this.deliver(blob, name, tr('Scene exported as {name} ({size})', { name, size: formatBytes(blob.size) }));
+      } finally { activity.finish(); }
     });
   }
 
@@ -862,12 +919,23 @@ export class UI {
    */
   private contexts(): UIContext[] {
     const ed = this.editor, out: UIContext[] = [];
+    for (const [id, activity] of this.activities) out.push(this.activityContext(id, activity.icon, activity.label, activity.progress, activity.cancel));
+    if (ed.optimizer.busy) out.push(this.activityContext('optimize-model', Triangle,
+      tr(ed.optimizer.phase === 'bake' ? 'Baking surface detail: {name}' : 'Optimizing model: {name}', { name: ed.optimizer.entity?.name ?? tr('Scene') }), ed.optimizer.progress, () => ed.optimizer.cancel()));
+    if (ed.textureOptimizer.busy) out.push(this.activityContext('optimize-textures', Layers,
+      tr('Optimizing textures: {name}', { name: ed.textureOptimizer.entity?.name ?? tr('Scene') }), ed.textureOptimizer.progress, () => ed.textureOptimizer.cancel()));
+    const selection = ed.separator.selection;
+    if (selection?.topologyProgress != null) out.push(this.activityContext('mesh-topology', Triangle,
+      tr('Preparing mesh: {name}', { name: selection.entity.name }), selection.topologyProgress, () => selection.cancelPrefetch()));
     if (ed.recording) out.push({ id: 'recording', icon: Video, label: tr('Recording…'), busy: true, render: () => this.selbar.replaceChildren(
-      h('div', { class: 'sel-name always' }, icon(Video, 16), h('span', {}, tr('Recording…'))),
+      this.activitySummary(Video, tr('Recording…'), null),
       h('div', { class: 'sel-tools' }, button(tr('Cancel'), () => this.photoUI.cancelRecording(), { cls: 'small' })),
     ) });
+    if (ed.rigger.active && (!ed.photoMode || ed.rigger.progress !== null || ed.rigger.comparing)) out.push({ id: 'rig', icon: Bone,
+      label: ed.rigger.progress !== null ? tr('Rigging {name}: {pct}%', { name: ed.rigger.entity!.name, pct: Math.round(ed.rigger.progress * 100) }) : tr('Rig'),
+      busy: ed.rigger.progress !== null || ed.rigger.comparing, progress: ed.rigger.progress,
+      render: () => this.rigUI.renderRigBar(), expand: () => this.openPart('objects', 'rig') });
     if (ed.photoMode) return out;
-    if (ed.rigger.active) out.push({ id: 'rig', icon: Bone, label: tr('Rig'), render: () => this.rigUI.renderRigBar(), expand: () => this.openPart('objects', 'rig') });
     if (ed.pose.active) out.push({ id: 'pose', icon: PersonStanding, label: tr('Pose'), render: () => this.poseUI.renderPoseBar(), expand: () => this.openPart('objects', 'pose') });
     if (ed.separator.active) {
       const n = ed.separator.selection?.count ?? 0;
@@ -883,7 +951,7 @@ export class UI {
     }
     const fusion = ed.fusion;
     if (fusion.busy || fusion.preview) out.push({ id: 'boolean', icon: SquaresUnite, label: tr('Boolean'), busy: fusion.busy, render: () => this.selbar.replaceChildren(
-      h('div', { class: 'sel-name always' }, icon(SquaresUnite, 16), h('span', {}, fusion.busy ? tr('Building the new surface…') : tr('Boolean'))),
+      fusion.busy ? this.activitySummary(SquaresUnite, tr('Building the new surface…'), null) : h('div', { class: 'sel-name always' }, icon(SquaresUnite, 16), h('span', {}, tr('Boolean'))),
       h('div', { class: 'sel-tools' },
         fusion.preview ? button(tr('Apply'), () => { fusion.apply(); this.renderAll(); }, { cls: 'small primary' }) : null,
         button(tr('Cancel'), () => { fusion.cancel(); this.renderAll(); }, { cls: 'small' })),

@@ -940,6 +940,7 @@ export class Rigger {
     } finally {
       this.job = null;
       this.progress = null;
+      this.editor.notify('rig');
     }
   }
 

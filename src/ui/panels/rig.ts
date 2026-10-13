@@ -53,7 +53,7 @@ export class RigPanel {
     const titles = ['', tr('Joints'), tr('Skin'), tr('Check')];
     const computing = r.progress !== null || r.comparing;
     this.ui.selbar.replaceChildren(
-      h(
+      computing ? this.ui.activitySummary(Bone, tr('Computing weights…'), r.progress) : h(
         'div',
         { class: 'sel-name always' },
         h('b', { class: 'step-count' }, `${this.rigStep}/3`),

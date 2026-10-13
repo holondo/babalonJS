@@ -38,6 +38,14 @@ export class FaceSelection {
   private overlays = new Map<Mesh, Mesh>();
   private material: StandardMaterial;
   private topology = new Map<Mesh, FaceTopology>();
+  private readonly topologyWorkers = new Set<Worker>();
+  private topologyTotal = 0;
+  get topologyProgress() { return this.topologyWorkers.size ? 1 - this.topologyWorkers.size / this.topologyTotal : null; }
+  cancelPrefetch() {
+    for (const worker of this.topologyWorkers) worker.terminate();
+    this.topologyWorkers.clear();
+    this.editor.notify('tool');
+  }
   readonly editor: Editor;
   readonly entity: Entity;
   constructor(editor: Editor, entity: Entity) {
@@ -118,15 +126,24 @@ export class FaceSelection {
       if (this.topology.has(mesh) || mesh.getTotalIndices() < 30000) continue;
       const geometry = mesh.geometry;
       const worker = new Worker(new URL('./topology.worker.ts', import.meta.url), { type: 'module' });
+      this.topologyWorkers.add(worker);
+      this.topologyTotal++;
+      const finish = () => {
+        worker.terminate();
+        this.topologyWorkers.delete(worker);
+        this.editor.notify('tool');
+      };
       const positions = Float32Array.from(mesh.getVerticesData('position')!), indices = Uint32Array.from(mesh.getIndices()!);
       worker.onmessage = (ev: MessageEvent<FaceTopology>) => {
-        worker.terminate();
         // Only if nothing changed meanwhile
         if (mesh.geometry === geometry && !this.topology.has(mesh) && this.faces.has(mesh)) this.topology.set(mesh, ev.data);
+        finish();
       };
-      worker.onerror = () => worker.terminate();
-      worker.postMessage({ positions, indices }, [positions.buffer, indices.buffer]);
+      worker.onerror = finish;
+      try { worker.postMessage({ positions, indices }, [positions.buffer, indices.buffer]); }
+      catch { finish(); }
     }
+    if (this.topologyWorkers.size) this.editor.notify('tool');
   }
   island(mesh: Mesh, face: number, add = true) {
     const set = this.faces.get(mesh); if (!set) return;
@@ -169,7 +186,7 @@ export class FaceSelection {
     this.editor.overlays.delete(overlay);
     disposeShared(overlay);
   }
-  dispose() { for (const o of this.overlays.values()) this.disposeOverlay(o); this.overlays.clear(); this.material.dispose(); this.topology.clear(); this.editor.invalidate(); }
+  dispose() { this.cancelPrefetch(); for (const o of this.overlays.values()) this.disposeOverlay(o); this.overlays.clear(); this.material.dispose(); this.topology.clear(); this.editor.invalidate(); }
 }
 
 /**

@@ -4,7 +4,7 @@ import type { Material } from '@babylonjs/core/Materials/material.js';
 import type { Scene } from '@babylonjs/core/scene.js';
 import type { Editor, Entity } from '../core/editor';
 import { tr } from '../core/i18n';
-import { textureBytes } from './analysis';
+import { deviceBudget, textureBytes, textureWorkerLimit } from './analysis';
 import { read, write } from 'ktx-parse';
 import type { KTX2Container } from 'ktx-parse';
 
@@ -94,6 +94,7 @@ export class TextureOptimizer {
   /** Encoding workers running now (cancel stops them all). */
   private readonly workers = new Map<Worker, () => void>();
   progress: number | null = null;
+  entity: Entity | null = null;
 
   constructor(editor: Editor) {
     this.editor = editor;
@@ -118,6 +119,7 @@ export class TextureOptimizer {
     const unique = [...new Set(slots.map((s) => s.texture))];
     if (!unique.length) throw new Error(tr('This model has no textures to optimize.'));
     this.progress = 0;
+    this.entity = e;
     this.cancelled = false;
     this.editor.notify('optimize');
     const encoded: EncodedTexture[] = [];
@@ -140,6 +142,7 @@ export class TextureOptimizer {
       throw error;
     } finally {
       this.progress = null;
+      this.entity = null;
       this.editor.notify('optimize');
     }
     if (this.cancelled) throw new DOMException('Cancelled', 'AbortError');
@@ -256,7 +259,7 @@ export class TextureOptimizer {
     if (this.cancelled) throw new DOMException('Cancelled', 'AbortError');
   }
 
-  /** Downscale (if asked), then KTX2 or PNG; one encoder at a time. */
+  /** Downscale (if asked), then KTX2 or PNG; bounded tile encoding. */
   private async encode(job: TextureJob, onProgress: (p: number) => void) {
     let { pixels, width, height } = job;
     if (job.maxSize && Math.max(width, height) > job.maxSize) {
@@ -283,8 +286,8 @@ export class TextureOptimizer {
 
   /**
    * Images over the encoder limit (4K and up), kept at full resolution: UASTC encodes every 4×4
-   * block on its own. Stitch each tile immediately and encode mipmaps afterwards, so only one
-   * WASM encoder and one tile output are live at once, regardless of CPU core count.
+   * block on its own. Stitch each tile immediately with a device-dependent worker limit.
+   * Encode mipmaps afterwards, so their encoder does not add to the parallel tile budget.
    */
   private async encodeLarge(pixels: Uint8Array, width: number, height: number, base: { color: boolean; normalMap: boolean }, onProgress: (p: number) => void): Promise<KTX2Container> {
     if (width % 4 || height % 4) throw new Error(tr('Texture size must be a multiple of 4 to compress at full resolution. Choose a maximum size.'));
@@ -295,21 +298,26 @@ export class TextureOptimizer {
     const blocksW = width / 4;
     const level0 = new Uint8Array(blocksW * (height / 4) * 16);
     let out: KTX2Container | undefined;
-    for (const t of tiles) {
-      this.checkCancelled();
-      const tile = new Uint8Array(t.w * t.h * 4);
-      for (let y = 0; y < t.h; y++) tile.set(pixels.subarray(((t.y + y) * width + t.x) * 4, ((t.y + y) * width + t.x + t.w) * 4), y * t.w * 4);
-      const c = read(await this.run({ ...base, pixels: tile, width: t.w, height: t.h, format: 'ktx2', mipmaps: false, supercompress: false }));
-      const blocks = c.levels[0].levelData;
-      const tbw = t.w / 4;
-      for (let r = 0; r < t.h / 4; r++) level0.set(blocks.subarray(r * tbw * 16, (r + 1) * tbw * 16), ((t.y / 4 + r) * blocksW + t.x / 4) * 16);
-      if (!out) {
-        out = c;
-        // Keep metadata, not the first tile's backing buffer.
-        out.levels = [];
+    let next = 0;
+    const limit = Math.min(tiles.length, this.workerLimit(width, height));
+    await Promise.all(Array.from({ length: limit }, async () => {
+      while (next < tiles.length) {
+        const t = tiles[next++];
+        this.checkCancelled();
+        const tile = new Uint8Array(t.w * t.h * 4);
+        for (let y = 0; y < t.h; y++) tile.set(pixels.subarray(((t.y + y) * width + t.x) * 4, ((t.y + y) * width + t.x + t.w) * 4), y * t.w * 4);
+        const c = read(await this.run({ ...base, pixels: tile, width: t.w, height: t.h, format: 'ktx2', mipmaps: false, supercompress: false }));
+        const blocks = c.levels[0].levelData;
+        const tbw = t.w / 4;
+        for (let r = 0; r < t.h / 4; r++) level0.set(blocks.subarray(r * tbw * 16, (r + 1) * tbw * 16), ((t.y / 4 + r) * blocksW + t.x / 4) * 16);
+        if (!out) {
+          out = c;
+          // Keep metadata, not the first tile's backing buffer.
+          out.levels = [];
+        }
+        step();
       }
-      step();
-    }
+    }));
     this.checkCancelled();
     const h = await resize(pixels, width, height, width / 2, height / 2);
     const rest = (width / 2) * (height / 2) <= ENCODER_LIMIT
@@ -323,6 +331,11 @@ export class TextureOptimizer {
     out.levelCount = out.levels.length;
     out.supercompressionScheme = 0;
     return out;
+  }
+
+  private workerLimit(width: number, height: number) {
+    return textureWorkerLimit(width, height, navigator.hardwareConcurrency,
+      (navigator as Navigator & { deviceMemory?: number }).deviceMemory, deviceBudget().phone);
   }
 
   /** One image in a disposable worker, releasing its WASM heap after encoding. */

@@ -11,6 +11,8 @@ export interface UIContext {
   /** Accessible name and status for the collapsed circle (e.g. "4,504 faces"). */
   label: string;
   busy?: boolean;
+  /** Fraction complete; null means the operation cannot report progress. */
+  progress?: number | null;
   /** Fills the bubble (the UI's `selbar`) with the context's controls. */
   render: () => void;
   /** Opens the context's full settings where the dock's panels open. */
@@ -33,6 +35,7 @@ type Bubble = { el: HTMLDivElement; trigger: HTMLButtonElement; controls: HTMLDi
  */
 export class ContextBar {
   readonly el = h('div', { class: 'ctxbar' });
+  private readonly track = h('div', { class: 'ctx-track' });
   private readonly handle = h('button', { class: 'ctx-handle', title: tr('Drag to the top or the bottom'), 'aria-label': tr('Drag to the top or the bottom') });
   private readonly bubbles = new Map<string, Bubble>();
   private history: string[] = [];
@@ -53,7 +56,7 @@ export class ContextBar {
   constructor(ui: UI) {
     this.ui = ui;
     try { this.slot = localStorage.getItem(SAVED) === 'top' ? 'top' : 'bottom'; } catch { this.slot = 'bottom'; }
-    this.el.append(ui.transformBar.el);
+    this.el.append(this.track, ui.transformBar.el);
     this.setupDrag();
     window.addEventListener('resize', () => this.layout(false));
   }
@@ -88,7 +91,7 @@ export class ContextBar {
         const el = h('div', { class: 'ctx-bubble', 'data-context': c.id }, trigger, controls);
         b = { el, trigger, controls };
         this.bubbles.set(c.id, b);
-        this.el.append(el);
+        this.track.append(el);
       }
       b.trigger.replaceChildren(icon(c.icon, 20));
       b.trigger.title = c.label;
@@ -97,6 +100,8 @@ export class ContextBar {
       b.trigger.setAttribute('aria-expanded', String(c === focus));
       b.el.classList.toggle('expanded', c === focus);
       b.el.classList.toggle('busy', !!c.busy);
+      b.el.classList.toggle('has-progress', c.busy && c.progress != null);
+      b.el.style.setProperty('--ctx-progress', String(Math.max(0, Math.min(1, c.progress ?? 0))));
       b.el.setAttribute('aria-label', c.label);
       b.controls.hidden = c !== focus;
       b.trigger.hidden = c === focus;
@@ -219,6 +224,9 @@ export class ContextBar {
     el.style.setProperty('--ctx-height', `${height}px`);
     const circle = 48, bubbleGap = 8;
     const siblings = (this.bubbles.size - 1) * (circle + bubbleGap);
+    const overflow = siblings + 120 > space - 16;
+    this.track.classList.toggle('overflowing', overflow);
+    const reserved = overflow ? circle + bubbleGap : siblings;
     // Keep every collapsed context reachable; only the focused controls scroll on small screens.
     const active = this.current && this.bubbles.get(this.current.id);
     if (active) {
@@ -226,11 +234,11 @@ export class ContextBar {
       const partSpace = (parts.length - 1) * (circle + bubbleGap);
       for (const part of parts) {
         const expanded = part.classList.contains('expanded');
-        const natural = part.querySelector<HTMLElement>('.ctx-sub-controls')!.scrollWidth + 14;
-        part.style.width = `${expanded ? Math.max(circle, Math.min(natural, space - 16 - siblings - partSpace)) : circle}px`;
+        const natural = part.querySelector<HTMLElement>('.ctx-sub-controls')!.scrollWidth + 18;
+        part.style.width = `${expanded ? Math.max(circle, Math.min(natural, space - 16 - reserved - partSpace)) : circle}px`;
       }
       const natural = parts.length ? parts.reduce((sum, p) => sum + parseFloat(p.style.width), 0) + (parts.length - 1) * bubbleGap : this.ui.selbar.scrollWidth + 2;
-      const width = Math.max(48, Math.min(natural, space - 16 - siblings));
+      const width = Math.max(48, Math.min(natural, space - 16 - reserved));
       active.el.style.width = `${width}px`;
       for (const b of this.bubbles.values()) if (b !== active) b.el.style.width = `${circle}px`;
       el.style.width = `${Math.min(space - 16, width + siblings)}px`;
@@ -239,6 +247,8 @@ export class ContextBar {
         b.el.style.left = `${left}px`;
         left += (b === active ? width : circle) + bubbleGap;
       }
+      if (!overflow) this.track.scrollLeft = 0;
+      else if (this.animateNext) this.track.scrollLeft = Math.max(0, active.el.offsetLeft - (el.clientWidth - width) / 2);
     }
     const w = el.offsetWidth, hgt = el.offsetHeight;
     if (slot === 'top') {

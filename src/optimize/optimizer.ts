@@ -81,6 +81,8 @@ export class ModelOptimizer {
   /** Running computation (one at a time). */
   private task: { cancel: () => void } | null = null;
   progress: number | null = null;
+  entity: Entity | null = null;
+  phase: 'geometry' | 'bake' = 'geometry';
 
   constructor(editor: Editor) {
     this.editor = editor;
@@ -113,6 +115,8 @@ export class ModelOptimizer {
     // Simplify from the original geometry even when an optimization is active
     const sources = meshes.map((m) => this.originalOf(e, m));
     this.progress = 0;
+    this.entity = e;
+    this.phase = 'geometry';
     this.editor.notify('optimize');
     const simplify = simplifyMeshes(
       { meshes: sources.map((g, i) => simplifyInput(g ?? meshes[i].geometry!)), ratios, lockBorder: settings.lockBorder },
@@ -135,6 +139,7 @@ export class ModelOptimizer {
     } finally {
       this.task = null;
       this.progress = null;
+      this.entity = null;
       this.editor.notify('optimize');
     }
   }
@@ -167,6 +172,9 @@ export class ModelOptimizer {
 
   /** Bakes the original's surface detail onto each optimized mesh that has UVs and a material. */
   private async bake(o: Optimization, size: number) {
+    this.phase = 'bake';
+    this.progress = 0;
+    this.editor.notify('optimize');
     const targets = o.meshes.filter((v) => normalMapOf(v.mesh.material) && (v.original ?? v.mesh.geometry)?.getVerticesData('uv'));
     if (!targets.length) throw new Error(tr('Baking needs a material and UVs.'));
     for (const [k, v] of targets.entries()) {

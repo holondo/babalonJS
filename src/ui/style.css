@@ -1438,6 +1438,10 @@ body.photo .viewstack {
 /* ---------- Context bubbles (taskbar next to or above the dock) ---------- */
 
 .ctxbar {
+  --ctx-inset: 8px;
+  --ctx-row-height: max(36px, min(48px, calc(var(--ctx-height) - 18px)));
+  --ctx-pad-top: calc((var(--ctx-height) - var(--ctx-row-height)) / 2 - 1px);
+  --ctx-pad-bottom: calc((var(--ctx-height) - var(--ctx-row-height)) / 2 + 1px);
   position: absolute;
   display: none;
   align-items: center;
@@ -1448,6 +1452,8 @@ body.photo .viewstack {
   height: var(--ctx-height);
 }
 .ctxbar.show { display: flex; }
+.ctx-track { position: absolute; inset: 0; }
+.ctx-track.overflowing { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; overscroll-behavior-x: contain; touch-action: pan-x; }
 .ctx-bubble {
   position: absolute;
   top: 50%;
@@ -1497,11 +1503,11 @@ body.photo .viewstack {
 .ctx-sub-controls {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   width: max-content;
-  max-width: calc(100% - 12px);
+  max-width: calc(100% - 2 * var(--ctx-inset));
   height: 100%;
-  padding-bottom: 10px;
+  padding: var(--ctx-pad-top) 0 var(--ctx-pad-bottom);
   overflow-x: auto;
   scrollbar-width: none;
   overscroll-behavior-x: contain;
@@ -1523,6 +1529,23 @@ body.photo .viewstack {
   background: var(--gold);
   pointer-events: none;
 }
+.ctx-bubble.busy.has-progress:not(.expanded)::after {
+  inset: 2px;
+  width: auto;
+  height: auto;
+  background: conic-gradient(var(--gold) calc(var(--ctx-progress) * 1turn), var(--line) 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), black 0);
+}
+.ctx-activity { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ctx-activity > svg { flex-shrink: 0; }
+.ctx-activity-copy { display: flex; flex-direction: column; gap: 5px; width: clamp(148px, 20vw, 240px); min-width: 0; }
+.ctx-activity-heading { display: flex; align-items: center; gap: 8px; line-height: 16px; }
+.ctx-activity-heading > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.ctx-percent { color: var(--text); font-size: 12px; white-space: nowrap; }
+.ctx-activity .progress.compact { height: 4px; border-radius: var(--radius); }
+.ctx-activity .progress.compact span { display: none; }
+.ctx-activity .progress.indeterminate i { width: 35% !important; animation: ctx-progress 1.4s ease-in-out infinite; }
+@keyframes ctx-progress { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
 .ctx-trigger {
   display: flex;
   align-items: center;
@@ -1536,10 +1559,9 @@ body.photo .viewstack {
 }
 .ctx-trigger:hover,
 .ctx-sub-trigger:hover { color: var(--gold); }
-.ctxbar.at-header .ctx-sub-controls { padding-bottom: 6px; }
-.ctxbar.at-header .ctx-sub-controls .ibtn.tool { height: 40px; }
-.ctxbar.at-header .ctx-handle { bottom: -26px; }
-.ctxbar.at-header .ctx-handle::before { bottom: 30px; }
+.ctxbar .btn,
+.ctxbar .ibtn { height: var(--ctx-row-height); min-height: 36px; border-radius: var(--radius); flex: none; }
+.ctxbar.at-header .ctx-sub-controls .ibtn.tool { height: var(--ctx-row-height); }
 .ctx-trigger:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 .ctx-trigger[hidden], .ctx-controls[hidden] { display: none; }
 .ctx-controls {
@@ -1591,7 +1613,8 @@ body.photo .viewstack {
   min-width: 0;
   max-width: none;
   height: 100%;
-  padding: 4px 8px 14px;
+  padding: var(--ctx-pad-top) var(--ctx-inset) var(--ctx-pad-bottom);
+  gap: 6px;
   border: 0;
   background: none;
   backdrop-filter: none;
@@ -1631,6 +1654,7 @@ body.photo .viewstack {
   .ctxbar .ctx-secondary { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .ctx-activity .progress.indeterminate i { animation: none; transform: translateX(90%); }
   .ctx-trigger, .ctx-sub { transition: none; }
   .ctx-sub-controls { animation: none !important; }
 }
