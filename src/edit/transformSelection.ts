@@ -4,9 +4,7 @@ import type { Observer } from '@babylonjs/core/Misc/observable.js';
 import type { Scene } from '@babylonjs/core/scene.js';
 import type { Editor } from '../core/editor';
 import type { FaceSelection } from './selection';
-import { capturePart } from './parts';
-import { Deform } from './deform';
-import { forgetFaceData } from './smartSelect';
+import { Deform, recordDeform } from './deform';
 import { editBlocker } from './combine';
 import { tr } from '../core/i18n';
 
@@ -129,7 +127,6 @@ export class SelectionTransform {
     if (!sessions) return;
     if (!cancel) this.update();
     this.sessions = null;
-    const entity = this.selection.entity, previous = entity.separation;
     const before = sessions.map((s) => ({ mesh: s.deform.mesh, state: s.deform.startState() }));
     if (cancel) {
       before.forEach(({ mesh, state }) => Deform.restore(mesh, state));
@@ -139,18 +136,8 @@ export class SelectionTransform {
     sessions.forEach((s) => s.deform.finish());
     const after = sessions.map((s) => ({ mesh: s.deform.mesh, state: s.deform.state() }));
     if (!after.some((a, i) => positionsDiffer(a.state.positions, before[i].state.positions))) { this.recenter(); return; }
-    // Saved like any edited geometry (typed copies: fast); one undo step for the whole drag
-    const next = { meshes: entity.meshes.map((m) => capturePart(m as Mesh, true)), pivot: previous?.pivot ?? [0, 0, 0], rigSpace: !!entity.rig };
-    entity.separation = next;
-    forgetFaceData(after.map((a) => a.mesh));
-    const put = (states: typeof before, state: typeof previous) => {
-      states.forEach(({ mesh, state: s }) => Deform.restore(mesh, s));
-      entity.separation = state;
-      forgetFaceData(states.map((a) => a.mesh));
-      this.selection.refresh(); this.editor.refreshShadowCasters(); this.editor.notify('transform');
-    };
-    this.editor.record({ undo: () => put(before, previous), redo: () => put(after, next) });
-    this.editor.refreshShadowCasters(); this.editor.notify('transform');
+    // Saved like any edited geometry; one undo step for the whole drag
+    recordDeform(this.editor, this.selection.entity, after.map((a, i) => ({ mesh: a.mesh, before: before[i].state, after: a.state })), () => this.selection.refresh());
     this.recenter();
   }
   dispose() { this.end(true); this.editor.scene.onBeforeRenderObservable.remove(this.observer); this.handle.dispose(); }

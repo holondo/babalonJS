@@ -2,7 +2,7 @@ import { ArrowDownToLine, Eye, EyeOff, FlipHorizontal2, RotateCcw, Trash2 } from
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { Entity } from '../../core/editor';
 import { locale, tr } from '../../core/i18n';
-import { button, h, hint, icon, iconButton, numberInput, row, section, slider, toggle, progressBar } from '../dom';
+import { button, h, hint, icon, iconButton, numberInput, row, section, slider, toggle } from '../dom';
 import type { Axis } from '../../tools/tools';
 import type { UI } from '../ui';
 import { KIND_ICON, deg, rad } from '../shared';
@@ -34,9 +34,6 @@ export class ObjectsPanel {
     const out: (Node | null)[] = [
       section(tr('Objects in scene'), ed.entities.length ? list : hint(tr('The scene is empty.')), row(button(tr('Clear scene'), () => confirm(tr('Remove everything from the scene?')) && ed.clearScene(), { icon: Trash2, cls: 'ghost' }))),
     ];
-    if (ed.fusion.busy || ed.fusion.preview) return [section(tr('Fuse volumes'),
-      ed.fusion.busy ? progressBar(null, tr('Building the fused surface…')) : hint(tr('Review the result. Intersection texture mapping may change. Originals are kept until Apply.')),
-      row(ed.fusion.preview ? button(tr('Apply'), () => ed.fusion.apply(), { cls: 'primary' }) : null, button(tr('Cancel'), () => { ed.fusion.cancel(); this.ui.renderPanel(); })))];
     const e = ed.selected;
     if (!e) {
       out.push(hint(tr('Tap an object in the scene to select it. Double-tap to focus.')));

@@ -1,7 +1,4 @@
 import { SculptStroke, SculptContext, applyStrokeState } from './sculpt';
-import { ShapeGuide, conformToShape, primitiveTransform } from './conform';
-import type { ConformMode, GuideShape } from './conform';
-import { Deform } from './deform';
 import { forgetFaceData } from './smartSelect';
 import type { SurfaceBrush } from './sculpt';
 import { bridgePart, connectBorders } from './connect';
@@ -38,7 +35,12 @@ export class Separator {
     return null;
   }
   start(entity: Entity) { const reason = this.blocker(entity); if (reason) throw new Error(reason); this.stop(); this.editor.anim.pause(entity); this.editor.pose.stop(); this.editor.rigger.toRest(entity); this.selection = new FaceSelection(this.editor, entity); this.selection.prefetch(); this.editor.refreshTool(); return this.selection; }
-  stop() { this.guide?.dispose(); this.guide = null; this.sculptContexts.clear(); this.clearBridge(); this.transform?.dispose(); this.transform = null; this.mode = 'select'; this.selection?.dispose(); this.selection = null; this.editor.refreshTool(); }
+  /**
+   * The faces selected when Mesh mode last ended (per mesh, by vertex): operations between
+   * objects, like Shrinkwrap, can be limited to them (Blender's vertex group).
+   */
+  lastFaces: { entity: Entity; masks: Map<Mesh, Uint8Array> } | null = null;
+  stop() { if (this.selection?.count) this.lastFaces = { entity: this.selection.entity, masks: this.selection.vertexMasks() }; this.sculptContexts.clear(); this.clearBridge(); this.transform?.dispose(); this.transform = null; this.mode = 'select'; this.selection?.dispose(); this.selection = null; this.editor.refreshTool(); }
   copy(from: Entity, to: Entity) { if (from.separation) this.restore(to, structuredClone(from.separation!)); }
   restore(entity: Entity, state: SeparationState) {
     if (state.meshes.length !== entity.meshes.length) throw new Error(tr('The separated model does not match its source.'));
@@ -94,7 +96,7 @@ export class Separator {
     if (mode === 'transform' && !this.selection!.count) throw new Error(tr('Select faces first.'));
     this.clearBridge();
     this.transform?.dispose(); this.transform = null;
-    if (mode === 'transform') this.transform = new SelectionTransform(this.editor, this.selection!);
+    if (mode === 'transform') { this.transform = new SelectionTransform(this.editor, this.selection!); this.transform.softRadius = this.softRadius; }
     this.mode = mode; this.editor.refreshTool(); this.editor.notify('tool');
     // Prepare the brushes right away (after this frame), so the first stroke starts instantly
     if (mode === 'surface') setTimeout(() => {
@@ -104,6 +106,10 @@ export class Separator {
       selection.refresh();
     }, 50);
   }
+
+  /** Soft selection for Move / Rotate / Scale of faces (world units along the surface). */
+  softRadius = 0;
+  setSoftRadius(radius: number) { this.softRadius = radius; if (this.transform) this.transform.softRadius = radius; }
 
   tool: SelectTool = 'piece';
   add = true;
@@ -120,14 +126,26 @@ export class Separator {
   setTool(tool: SelectTool) { this.tool = tool; this.editor.notify('tool'); }
   set(partial: Partial<Pick<Separator, 'add' | 'tolerance' | 'radius' | 'through'>>) { Object.assign(this, partial); this.editor.notify('tool'); }
 
-  /** Tap on the model: the connected piece or the smart region under the pointer. */
-  tap(x: number, y: number) {
+  /**
+   * Tap on the model: the connected piece or the smart region under the pointer. `add` (Shift)
+   * or `remove` (Ctrl) override the Add/Remove setting; a plain tap on empty space clears the
+   * selection. Also works while transforming faces (the handle moves to the new selection).
+   */
+  tap(x: number, y: number, modifier: 'add' | 'remove' | null = null) {
     const selection = this.selection;
-    if (!selection || this.cut || this.mode !== 'select') return;
+    if (!selection || this.cut || this.mode === 'surface') return;
     const hit = this.editor.pickSurface(x, y);
-    if (!hit || hit.entity !== selection.entity || !(hit.mesh instanceof Mesh) || hit.faceId < 0) return;
-    if (this.tool === 'smart') smartSelect(selection, hit.mesh, hit.faceId, this.tolerance, this.add);
-    else selection.island(hit.mesh, hit.faceId, this.add);
+    const add = modifier ? modifier === 'add' : this.add;
+    if (!hit || hit.entity !== selection.entity || !(hit.mesh instanceof Mesh) || hit.faceId < 0) {
+      if (modifier || !selection.count) return;
+      selection.clear();
+    } else if (this.tool === 'smart') smartSelect(selection, hit.mesh, hit.faceId, this.tolerance, add);
+    else selection.island(hit.mesh, hit.faceId, add);
+    if (this.transform) {
+      if (selection.count) this.transform.recenter();
+      else this.setMode('select');
+    }
+    this.editor.refreshTool();
     this.editor.notify('tool');
   }
 
@@ -145,77 +163,6 @@ export class Separator {
     selection.checkpoint();
     selectScreen(selection, points, this.tool === 'brush' ? this.radius : null, this.through, this.add);
     this.editor.notify('tool');
-  }
-
-  // ---------- Shapes: conform the surface to one, or add one ----------
-
-  /** The shape being placed (gizmo), or null. */
-  guide: ShapeGuide | null = null;
-  conformMode: ConformMode = 'fill';
-  conformStrength = 1;
-  /** How far outside the shape the surface is still pulled, as a share of the shape's size. */
-  conformReach = 0.15;
-
-  setGuide(shape: GuideShape | null) {
-    this.guide?.dispose();
-    this.guide = null;
-    if (shape && this.selection) {
-      this.guide = new ShapeGuide(this.editor, shape);
-      this.guide.fit(this.selection);
-    }
-    this.editor.refreshTool();
-    this.editor.notify('tool');
-  }
-
-  fitGuide() { if (this.guide && this.selection) { this.guide.fit(this.selection); this.editor.refreshTool(); } }
-
-  /** Moves the surface (selected faces, or all) to the shape: one undo step, saved with the project. */
-  conform() {
-    const selection = this.selection, guide = this.guide;
-    if (!selection || !guide) return 0;
-    const reason = editBlocker(selection.entity); if (reason) throw new Error(reason);
-    const changes = conformToShape(selection, guide, this.conformMode, this.conformStrength, this.conformReach * guide.extent());
-    if (!changes.length) return 0;
-    this.sculptContexts.clear();
-    const entity = selection.entity, previous = entity.separation;
-    const next = { meshes: entity.meshes.map((m) => capturePart(m as Mesh, true)), pivot: previous?.pivot ?? [0, 0, 0], rigSpace: !!entity.rig };
-    entity.separation = next;
-    forgetFaceData(changes.map((c) => c.mesh));
-    selection.refresh();
-    const put = (which: 'before' | 'after', state: typeof previous) => {
-      this.sculptContexts.clear();
-      changes.forEach((c) => Deform.restore(c.mesh, c[which]));
-      entity.separation = state;
-      forgetFaceData(changes.map((c) => c.mesh));
-      this.selection?.refresh(); this.editor.refreshShadowCasters(); this.editor.notify('transform');
-    };
-    this.editor.record({ undo: () => put('before', previous), redo: () => put('after', next) });
-    this.editor.refreshShadowCasters(); this.editor.notify('transform');
-    return changes.length;
-  }
-
-  /**
-   * Adds the shape's volume to the model (boolean union, with Fuse volumes): where the shape is
-   * outside the model it becomes the new surface. Ends edit mode; the fuse preview takes over.
-   */
-  async addGuide() {
-    const selection = this.selection, guide = this.guide;
-    if (!selection || !guide) return;
-    const entity = selection.entity;
-    const { position, rotation, scaling } = primitiveTransform(guide);
-    const shape = guide.shape === 'sphere' ? 'sphere' : guide.shape === 'cylinder' ? 'cylinder' : 'box';
-    this.cancel();
-    const piece = this.editor.addPrimitive(shape, { select: false });
-    piece.root.position.copyFrom(position);
-    piece.root.rotationQuaternion = rotation;
-    piece.root.scaling.copyFrom(scaling);
-    piece.root.computeWorldMatrix(true);
-    // The added piece takes the model's look
-    const material = entity.meshes[0]?.material;
-    if (material) piece.meshes[0].material = material;
-    this.editor.select(entity);
-    this.editor.select(piece, true);
-    await this.editor.fusion.start([entity, piece]);
   }
 
   // ---------- Surface brushes, live while dragging ----------

@@ -1403,6 +1403,87 @@ body.photo .viewstack {
 
 /* ---------- Selection "more" menu ---------- */
 
+/* Object | Mesh switch inside the selection bar */
+.objmode {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: calc(var(--radius) - 4px);
+  background: rgba(255, 255, 255, 0.06);
+  margin-right: 4px;
+}
+/* The current mode is a state, not a tool: lilac like the tabs, not gold */
+.objmode .ibtn.active {
+  background: linear-gradient(160deg, rgba(165, 122, 187, 0.45), rgba(37, 28, 53, 0.55));
+  color: #fff;
+}
+.objmode .ibtn.active svg.lucide {
+  stroke: #fff;
+}
+
+/* Optional slider bar under the selection bar (Scale / Rotate) */
+.xbar {
+  position: absolute;
+  top: calc(var(--top) + 58px);
+  left: 50%;
+  width: min(420px, calc(100vw - 20px));
+  transform: translate(-50%, -8px);
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 16px 6px;
+  border-radius: 24px;
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--line);
+  z-index: 5;
+}
+.xbar.show {
+  display: flex;
+  transform: translate(-50%, 0);
+}
+@media (min-width: 761px) {
+  body.panel-open .xbar {
+    left: calc((100% - 360px) / 2);
+  }
+}
+@media (max-width: 760px) {
+  /* Phones: the bar must fit, so only the active tool keeps its label and only the current mode shows */
+  .selbar .ibtn.tool:not(.active) span {
+    display: none;
+  }
+  .objmode {
+    padding: 0;
+    margin: 0;
+    background: none;
+  }
+  .objmode .ibtn:not(.active),
+  .selbar .slider-btn {
+    display: none;
+  }
+}
+
+/* What the keyboard transform (G / R / S) is doing */
+.modal-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--dock-h, 70px) + 24px);
+  transform: translateX(-50%);
+  display: none;
+  max-width: calc(100vw - 20px);
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  z-index: 20;
+  pointer-events: none;
+}
+.modal-hint.show {
+  display: block;
+}
+
 .selmenu {
   top: calc(var(--top) + 58px);
   left: 50%;
@@ -1457,6 +1538,7 @@ body.photo .viewstack {
 }
 body.ui-hidden .topbar,
 body.ui-hidden .selbar,
+body.ui-hidden .xbar,
 body.ui-hidden .dock,
 body.ui-hidden .panel,
 body.ui-hidden .viewstack,

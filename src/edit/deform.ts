@@ -1,5 +1,8 @@
 import type { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import type { Editor, Entity } from '../core/editor';
 import type { FaceTopology } from './faceTopology';
+import { capturePart } from './parts';
+import { forgetFaceData } from './smartSelect';
 
 /** Positions and normals of a mesh at one moment (for undo of a deformation). */
 export interface DeformState { positions: Float32Array; normals: Float32Array | null }
@@ -46,6 +49,17 @@ export class Deform {
   rebase() {
     this.base.set(this.positions);
     if (this.normals && this.baseNormals) this.baseNormals.set(this.normals);
+  }
+
+  /** Puts the given vertices (positions and normals) back where the edit started. */
+  reset(vertices: ArrayLike<number>) {
+    const p = this.positions, b = this.base, n = this.normals, bn = this.baseNormals;
+    for (let k = 0; k < vertices.length; k++) {
+      const o = vertices[k] * 3;
+      p[o] = b[o]; p[o + 1] = b[o + 1]; p[o + 2] = b[o + 2];
+      if (n && bn) { n[o] = bn[o]; n[o + 1] = bn[o + 1]; n[o + 2] = bn[o + 2]; }
+      this.touch(vertices[k]);
+    }
   }
 
   /** Marks a vertex as moved (for the GPU upload range). */
@@ -139,6 +153,25 @@ export class Deform {
     }
     return hard;
   }
+}
+
+/**
+ * Records finished deformations of one object as one undo step, saved with the project like any
+ * edited geometry. `refresh` runs after undo/redo (e.g. to update a selection highlight).
+ */
+export function recordDeform(editor: Editor, entity: Entity, changes: { mesh: Mesh; before: DeformState; after: DeformState }[], refresh?: () => void) {
+  const previous = entity.separation, meshes = changes.map((c) => c.mesh);
+  const next = { meshes: entity.meshes.map((m) => capturePart(m as Mesh, true)), pivot: previous?.pivot ?? [0, 0, 0], rigSpace: !!entity.rig };
+  entity.separation = next;
+  forgetFaceData(meshes);
+  const put = (which: 'before' | 'after', state: typeof previous) => {
+    changes.forEach((c) => Deform.restore(c.mesh, c[which]));
+    entity.separation = state;
+    forgetFaceData(meshes);
+    refresh?.(); editor.refreshShadowCasters(); editor.notify('transform');
+  };
+  editor.record({ undo: () => put('before', previous), redo: () => put('after', next) });
+  editor.refreshShadowCasters(); editor.notify('transform');
 }
 
 /**

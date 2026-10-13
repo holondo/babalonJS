@@ -8,7 +8,6 @@ import {
   AlignStartHorizontal,
   AlignStartVertical,
   AlignVerticalDistributeCenter,
-  Group,
   Ruler,
   Spline,
   Trash2,
@@ -111,13 +110,7 @@ export class ToolsPanel {
     const ed = this.ui.editor;
     const tools = ed.tools;
     const items = ed.selection.filter((e) => e.kind !== 'light');
-    if (items.length < 2) {
-      return section(
-        tr('Align & match'),
-        hint(tr('Select 2 or more objects (multi-select button or Shift+click). The first one selected is the reference.')),
-        row(button(tr('Multi-select'), () => ed.setMultiSelect(!ed.multiSelect), { icon: Group, cls: `small ${ed.multiSelect ? 'primary' : ''}` })),
-      );
-    }
+    if (items.length < 2) return this.ui.multiSelectHint(tr('Align & match'), tr('Select 2 or more objects (multi-select button or Shift+click). The first one selected is the reference.'));
     const a = (node: IconNode, label: string, axis: Axis, edge: Edge) => iconButton(node, label, () => tools.align(axis, edge), { cls: 'boxed' });
     return section(
       tr('Align & match'),

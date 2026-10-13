@@ -2,8 +2,9 @@ import type { LibraryAttribution, LibraryKind } from '../library/polyhaven';
 import type { LibraryPanel } from './panels/library';
 import { ProjectGallery } from './projectGallery';
 import {
+  Box,
   Camera,
-  Scissors,
+  Triangle,
   ChevronDown,
   Copy,
   Ellipsis,
@@ -41,7 +42,7 @@ import {
 } from 'lucide';
 import type { IconNode } from 'lucide';
 import { MODEL_EXTENSIONS } from '../core/editor';
-import type { Editor, Tool } from '../core/editor';
+import type { Editor, PrimitiveType, Tool } from '../core/editor';
 import { PROJECT_EXT, fromZip, loadProject, restore, saveProject, snapshot, toZip } from '../core/project';
 import type { ProjectSnapshot } from '../core/project';
 import { JointOverlay } from './jointOverlay';
@@ -51,7 +52,7 @@ import type { GyroControl } from '../device/gyro';
 import { saveAndOfferShare, timestampedName } from '../core/files';
 import { LANGS, getLang, setLang, tr } from '../core/i18n';
 import type { Lang } from '../core/i18n';
-import { button, chips, h, icon, iconButton, menuItem, segmented } from './dom';
+import { button, chips, h, hint, icon, iconButton, menuItem, row, section, segmented } from './dom';
 import { AddPanel } from './panels/add';
 import { ObjectsPanel } from './panels/objects';
 import { MaterialPanel } from './panels/material';
@@ -61,6 +62,9 @@ import { RigPanel } from './panels/rig';
 import { ToolsPanel } from './panels/tools';
 import { OptimizePanel } from './panels/optimize';
 import { SeparatePanel } from './panels/separate';
+import { TransformBar } from './transformBar';
+import { ModalTransform } from './modalTransform';
+import { ModifyPanel, QUICK_SHAPES, shapeLabel } from './panels/modify';
 import { analyzeScene, deviceBudget, formatBytes, overBudget } from '../optimize/analysis';
 import { DEFAULT_OPTIMIZE } from '../optimize/optimizer';
 import type { Observer } from '@babylonjs/core/Misc/observable.js';
@@ -92,6 +96,10 @@ export class UI {
   readonly lightUI = new LightPanel(this);
   readonly optimizeUI = new OptimizePanel(this);
   readonly separateUI = new SeparatePanel(this);
+  readonly transformBar = new TransformBar(this);
+  readonly modifyUI = new ModifyPanel(this);
+  /** G / R / S from the keyboard (created with the keys, once the canvas exists). */
+  private modal!: ModalTransform;
   readonly photoUI = new PhotoMode(this);
   readonly labelsUI = new MeasureLabels(this);
 
@@ -170,7 +178,7 @@ export class UI {
     this.setupAutosave();
     document.addEventListener('fullscreenchange', () => this.renderViewStack());
     root.append(this.clipInput);
-    root.append(this.labels, this.jointOverlay.el, this.frame, this.topbar, this.selbar, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
+    root.append(this.labels, this.jointOverlay.el, this.frame, this.topbar, this.selbar, this.transformBar.el, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
     this.fileInput.addEventListener('change', () => {
       const files = [...(this.fileInput.files ?? [])];
       this.fileInput.value = '';
@@ -400,12 +408,32 @@ export class UI {
   }
 
   private setupKeys() {
+    this.modal = new ModalTransform(this);
+    // Shift while dragging the scale gizmo keeps the proportions
+    const shift = (e: KeyboardEvent) => { this.editor.proportional = e.shiftKey; };
+    window.addEventListener('keyup', shift);
+    window.addEventListener('blur', () => { this.editor.proportional = false; });
     window.addEventListener('keydown', (e) => {
+      shift(e);
       if (this.editor.recording) { if (e.key === 'Escape') this.photoUI.cancelRecording(); return; }
       const target = e.target as HTMLElement;
       if (target.isContentEditable || target.matches('input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea, select')) return;
       const ed = this.editor;
       const ctrl = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      // Mesh mode: Blender's selection keys
+      const faces = ed.separator.active && ed.separator.mode !== 'surface' ? ed.separator : null;
+      if (e.key === 'Tab' && !ctrl && !e.altKey) {
+        e.preventDefault();
+        if (ed.separator.active) this.separateUI.cancel();
+        else if (ed.selected) this.separateUI.start(ed.selected);
+        return;
+      }
+      if (e.shiftKey && !ctrl && key === 'a') { e.preventDefault(); this.showShapeMenu(); return; }
+      if (faces && !ctrl && key === 'a') { e.preventDefault(); faces.edit((x) => (e.altKey ? x.clear() : x.all())); return; }
+      if (faces && ctrl && key === 'i') { e.preventDefault(); faces.edit((x) => x.all(true)); return; }
+      if (faces && ctrl && (e.key === '+' || e.key === '=' || e.key === '-')) { e.preventDefault(); faces.ring(e.key !== '-'); return; }
+      if (!faces && !ed.separator.active && !ctrl && key === 'a') { e.preventDefault(); e.altKey ? ed.select(null) : ed.selectAll(); return; }
       if (ctrl && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         e.shiftKey ? ed.redo() : ed.undo();
@@ -422,7 +450,8 @@ export class UI {
         e.preventDefault();
         ed.duplicate();
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        ed.remove();
+        // Mesh mode never deletes the whole object from the keyboard
+        if (!ed.separator.active) ed.remove();
       } else if (e.key === 'Escape') {
         if (ed.photoMode) ed.setPhotoMode(false);
         else if (ed.tools.pending) ed.tools.cancelPending();
@@ -430,9 +459,12 @@ export class UI {
         else ed.select(null);
       } else if (e.key === 'm') {
         ed.tools.setMeasureMode(!ed.tools.measureMode);
-      } else if (e.key === 'w' || e.key === 'g') ed.setTool('move');
-      else if (e.key === 'e' || e.key === 'r') ed.setTool('rotate');
-      else if (e.key === 's') ed.setTool('scale');
+      } else if (e.key === 'g' || e.key === 'r' || e.key === 's') {
+        // Blender: transform with the mouse; away from the view (or nothing to move) it picks the gizmo tool
+        const kind = e.key === 'g' ? 'move' : e.key === 'r' ? 'rotate' : 'scale';
+        if (!this.modal.begin(kind)) ed.setTool(kind);
+      } else if (e.key === 'w') ed.setTool('move');
+      else if (e.key === 'e') ed.setTool('rotate');
       else if (e.key === 'f') ed.selected ? ed.focus() : ed.frameAll();
       else if (e.key === 'o') ed.orbitAround();
       else if (e.key === 'p') ed.setPhotoMode(!ed.photoMode);
@@ -600,7 +632,42 @@ export class UI {
   get currentProjectId() { return this.projectId; }
 
   /** Optimized models in the selection become their optimized version before a geometry edit. */
-  private async freezeForEdit() {
+  /** Objects → Modify: quick shapes, boolean operations and shrinkwrap. */
+  openModify() {
+    this.segment.objects = 'modify';
+    if (this.tab !== 'objects') this.openTab('objects'); else this.renderPanel();
+  }
+
+  /** Adds a quick shape on the selection; with a target it opens Modify, ready for Boolean or Shrinkwrap. */
+  addShape(type: PrimitiveType) {
+    this.run(() => {
+      const ed = this.editor, mesh = ed.separator.active;
+      const shape = ed.addShapeOnSelection(type);
+      if (mesh) {
+        // From selected faces: wrap them onto the shape at once (Blender's Shrinkwrap on a vertex group)
+        this.separateUI.refresh();
+        const target = ed.separator.lastFaces?.entity;
+        if (target && target !== shape) ed.wrap.start([target, shape], ed.separator.lastFaces!.masks);
+      }
+      if (ed.selection.length > 1 || ed.wrap.active) this.openModify();
+    });
+  }
+
+  /** Shift+A: the quick shapes, in the menu under the selection bar. */
+  showShapeMenu() {
+    this.selMenuOpen = true;
+    this.selMenu.classList.add('show');
+    this.selMenu.replaceChildren(...QUICK_SHAPES.map((t) => menuItem(Plus, shapeLabel(t), () => { this.toggleSelMenu(false); this.addShape(t); })));
+  }
+
+  /** A section that needs two or more selected objects: how to select them. */
+  multiSelectHint(title: string, text: string) {
+    const ed = this.editor;
+    return section(title, hint(text),
+      row(button(tr('Multi-select'), () => ed.setMultiSelect(!ed.multiSelect), { icon: Group, cls: `small ${ed.multiSelect ? 'primary' : ''}` })));
+  }
+
+  async freezeForEdit() {
     if (await this.editor.prepareGeometryEdit(this.editor.selection)) this.toast(tr('The optimized version is now the model, so it can be edited. Undo to go back.'), 'info', undefined, 6000);
   }
   openProjectPicker() { this.projectInput.click(); }
@@ -703,6 +770,27 @@ export class UI {
   }
 
   renderSelbar() {
+    this.renderSelbarContent();
+    this.transformBar.render();
+  }
+
+  /**
+   * Object | Mesh, like Blender's Tab: the same Move / Rotate / Scale then work on the object or
+   * on the selected faces. Only for one model or shape.
+   */
+  modeSwitch() {
+    const ed = this.editor, e = ed.selected;
+    const mesh = ed.separator.active;
+    if (!mesh && (!e || e.kind === 'light' || e.groupMembers || ed.selection.length > 1)) return null;
+    // Either button switches (on phones only the current mode shows, as one switch)
+    const toggle = () => (mesh ? this.separateUI.cancel() : e && this.separateUI.start(e));
+    return h('span', { class: 'objmode' },
+      iconButton(Box, tr('Object mode (Tab)'), toggle, { active: !mesh, label: tr('Object'), cls: 'tool' }),
+      iconButton(Triangle, tr('Mesh mode (Tab)'), toggle, { active: mesh, label: tr('Mesh'), cls: 'tool' }),
+    );
+  }
+
+  private renderSelbarContent() {
     const ed = this.editor;
     const e = ed.selected;
     if (ed.tools.measureMode && !ed.photoMode) {
@@ -718,8 +806,9 @@ export class UI {
     const multi = iconButton(Group, tr('Multi-select (or Shift+click)'), () => ed.setMultiSelect(!ed.multiSelect), { active: ed.multiSelect });
     this.selbar.classList.toggle('show', (!!e || ed.multiSelect) && !ed.photoMode);
     if (!e) return this.selbar.replaceChildren(h('div', { class: 'sel-name wide' }, h('span', {}, tr('Tap objects to select'))), h('div', { class: 'sel-tools' }, multi));
+    // Tapping the active Scale or Rotate again opens or closes its slider bar
     const toolBtn = (t: Tool, node: IconNode, label: string) =>
-      iconButton(node, label, () => ed.setTool(t), { active: ed.tool === t, label, cls: 'tool' });
+      iconButton(node, t === 'move' ? label : tr('{tool} (tap again for a slider)', { tool: label }), () => (ed.tool === t && t !== 'move' ? this.transformBar.toggle() : ed.setTool(t)), { active: ed.tool === t, label, cls: 'tool' });
     const count = ed.selection.length;
     // Only the most used actions stay visible; the rest live in the "⋯" menu
     this.selbar.replaceChildren(
@@ -727,14 +816,11 @@ export class UI {
       h(
         'div',
         { class: 'sel-tools' },
+        this.modeSwitch(),
         toolBtn('move', Move3d, tr('Move')),
         toolBtn('rotate', Rotate3d, tr('Rotate')),
         e.kind !== 'light' ? toolBtn('scale', Scale3d, tr('Scale')) : null,
-        count === 1 && e.animationGroups.length
-          ? ed.anim.isPlaying(e)
-            ? iconButton(Pause, tr('Pause animation'), () => ed.anim.pause(e), { cls: 'play-btn' })
-            : iconButton(Play, tr('Play animation'), () => ed.anim.play(e), { cls: 'play-btn' })
-          : null,
+        this.transformBar.button(),
         h('span', { class: 'sep' }),
         iconButton(Trash2, tr('Delete (Del)'), () => ed.remove(), { cls: 'danger' }),
         iconButton(Ellipsis, tr('More'), () => this.toggleSelMenu(), { cls: 'more-btn', active: this.selMenuOpen }),
@@ -755,10 +841,9 @@ export class UI {
     const item = (node: IconNode, label: string, run: () => void, opts: { on?: boolean; keep?: boolean; kbd?: string } = {}) =>
       menuItem(node, label, () => (opts.keep ? null : this.toggleSelMenu(false), run()), opts);
     this.selMenu.replaceChildren(
-      ...(ed.selection.length > 1 ? [item(Group, tr('Group'), () => this.run(() => { ed.groupObjects(); }))] : []),
       ...(e.groupMembers ? [item(Group, tr('Ungroup'), () => ed.ungroup(e))] : []),
-      ...(ed.selection.length > 1 ? [item(Group, tr('Fuse volumes…'), () => this.run(async () => { await this.freezeForEdit(); this.openTab('objects'); this.segment.objects = 'object'; await ed.fusion.start(); this.renderPanel(); }))] : []),
-      ...(ed.selection.length > 1 ? [item(Group, tr('Combine'), () => this.run(async () => { await this.freezeForEdit(); ed.combine(); }))] : []),
+      item(Plus, tr('Add shape here'), () => this.showShapeMenu(), { kbd: 'Shift+A', keep: true }),
+      ...(ed.selection.length > 1 ? [item(Group, tr('Boolean, shrinkwrap, combine…'), () => this.openModify())] : []),
       item(Copy, tr('Duplicate'), () => ed.duplicate(), { kbd: 'Ctrl+D' }),
       item(Focus, tr('Focus camera'), () => ed.focus(), { kbd: 'F' }),
       item(Orbit, tr('Orbit around this object'), () => {
@@ -769,7 +854,6 @@ export class UI {
         ? [ed.anim.isPlaying(e) ? item(Pause, tr('Pause animation'), () => ed.anim.pause(e)) : item(Play, tr('Play animation'), () => ed.anim.play(e))]
         : []),
       ...(!e.groupMembers && skeletonsOf(e).length ? [item(PersonStanding, tr('Pose joints'), () => this.poseUI.startPosing(e))] : []),
-      ...(e.kind !== 'light' && !e.groupMembers && ed.selection.length === 1 ? [item(Scissors, tr('Edit mesh…'), () => this.separateUI.start(e))] : []),
       item(Group, tr('Multi-select'), () => (ed.setMultiSelect(!ed.multiSelect), this.toggleSelMenu(true)), { on: ed.multiSelect, keep: true }),
       item(Magnet, tr('Snap to grid'), () => (ed.setSnap(!ed.snap), this.toggleSelMenu(true)), { on: ed.snap, keep: true }),
     );
@@ -847,13 +931,13 @@ export class UI {
     switch (tab) {
       case 'add': return [{ id: 'add', label: tr('Add') }, { id: 'library', label: tr('Library') }];
       case 'objects': {
-        if (this.editor.fusion.busy || this.editor.fusion.preview) return [{ id: 'object', label: tr('Fuse volumes') }];
         const e = this.editor.selected;
         if (!e || e.kind === 'light') return null;
-        if (this.editor.separator.active) return [{ id: 'separate', label: tr('Edit mesh') }];
-        if (e.groupMembers) return [{ id: 'object', label: tr('Object') }, { id: 'material', label: tr('Material') }];
+        if (this.editor.separator.active) return [{ id: 'separate', label: tr('Mesh') }];
+        if (e.groupMembers) return [{ id: 'object', label: tr('Object') }, { id: 'material', label: tr('Material') }, { id: 'modify', label: tr('Modify') }];
         return [
           { id: 'object', label: tr('Object') },
+          { id: 'modify', label: tr('Modify') },
           ...(this.editor.materialsOf(e).length ? [{ id: 'material', label: tr('Material') }] : []),
           { id: 'animate', label: tr('Animate') },
           ...(this.editor.rigger.active && this.editor.rigger.entity === e
@@ -898,14 +982,12 @@ export class UI {
     switch (tab) {
       case 'add':
         return part === 'library' ? this.libraryContent('model') : this.addUI.addPanel();
-      case 'objects':
-        if (part === 'material') return this.materialUI.materialPanel();
-        if (part === 'animate') return this.animateUI.animatePanel();
-        if (part === 'pose') return this.poseUI.posePanel();
-        if (part === 'rig') return this.rigUI.rigPanel();
-        if (part === 'optimize') return this.optimizeUI.optimizePanel();
-        if (part === 'separate') return this.separateUI.panel();
-        return this.objectsUI.scenePanel();
+      case 'objects': {
+        // An operation in progress stays on top of every part until Apply or Cancel
+        const operation = part === 'modify' ? null : this.modifyUI.operation();
+        const content = this.objectsPart(part);
+        return operation ? [operation, ...content] : content;
+      }
       case 'light':
         return part === 'library' ? this.libraryContent('hdri') : part === 'environment' ? this.lightUI.envPanel() : this.lightUI.lightsPanel();
       case 'photo': {
@@ -918,6 +1000,17 @@ export class UI {
         return [part === 'guides' ? guides : part === 'align' ? align : measure];
       }
     }
+  }
+
+  private objectsPart(part: string): (Node | null)[] {
+    if (part === 'material') return this.materialUI.materialPanel();
+    if (part === 'animate') return this.animateUI.animatePanel();
+    if (part === 'pose') return this.poseUI.posePanel();
+    if (part === 'rig') return this.rigUI.rigPanel();
+    if (part === 'optimize') return this.optimizeUI.optimizePanel();
+    if (part === 'separate') return this.separateUI.panel();
+    if (part === 'modify') return this.modifyUI.panel();
+    return this.objectsUI.scenePanel();
   }
 
   /** Runs an action that may fail with a message for the user. */

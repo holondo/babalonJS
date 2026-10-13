@@ -11,6 +11,8 @@ document.documentElement.lang = locale();
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
 const editor = new Editor(canvas);
+// Exposed for browser automation and debugging (see AGENTS.md)
+(window as unknown as { editor: Editor }).editor = editor;
 const ui = new UI(editor, document.querySelector<HTMLElement>('#app')!);
 setupSystemBars(editor);
 

@@ -1,7 +1,8 @@
-import { Brush, Lasso, MousePointerClick, Scissors, Undo2, Wand, X } from 'lucide';
+import { Brush, Lasso, MousePointer2, MousePointerClick, Move3d, Rotate3d, Scale3d, Scissors, Triangle, Undo2, Wand, X } from 'lucide';
 import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
-import type { Entity } from '../../core/editor';
+import type { Entity, PrimitiveType } from '../../core/editor';
+import { QUICK_SHAPES, shapeLabel } from './modify';
 import { tr } from '../../core/i18n';
 import type { SelectTool } from '../../edit/separate';
 import type { ScreenPoint } from '../../edit/lasso';
@@ -9,8 +10,9 @@ import { button, chips, h, hint, icon, iconButton, row, section, segmented, slid
 import type { UI } from '../ui';
 
 /**
- * Separate mode (More → Separate parts…): choose faces of a model, by its own parts, by tapping
- * a piece, with the magic wand, a lasso or a brush, or cut it with a plane; then make them a new object.
+ * Mesh mode (Tab, or Object | Mesh in the selection bar): choose faces of a model (its own parts,
+ * a tapped piece, the magic wand, a lasso or a brush), move / rotate / scale them with the same
+ * tools as objects, sculpt the surface, and modify it (cut, separate, repair, connect).
  */
 export class SeparatePanel {
   private readonly ui: UI;
@@ -19,6 +21,8 @@ export class SeparatePanel {
   private readonly svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   private readonly path = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
   private listening = false;
+  /** Part of the panel: selecting faces, sculpting, or changing the mesh. */
+  private part: 'select' | 'sculpt' | 'modify' = 'select';
 
   constructor(ui: UI) {
     this.ui = ui;
@@ -47,6 +51,7 @@ export class SeparatePanel {
     }
     ed.select(e);
     ed.separator.start(e);
+    this.part = 'select';
     ed.setTool('move');
     this.ui.segment.objects = 'separate';
     if (this.ui.tab !== 'objects') this.ui.openTab('objects');
@@ -66,17 +71,31 @@ export class SeparatePanel {
   }
 
   bar() {
-    const s = this.ui.editor.separator;
+    const ed = this.ui.editor, s = ed.separator;
     const count = s.selection?.count ?? 0;
+    const render = () => { this.sync(); this.ui.renderSelbar(); if (this.ui.tab === 'objects') this.ui.renderPanel(); };
+    // Move / Rotate / Scale act on the selected faces, like on objects in Object mode
+    const tool = (t: 'move' | 'rotate' | 'scale', node: typeof Move3d, label: string) => iconButton(node, t === 'move' ? label : tr('{tool} (tap again for a slider)', { tool: label }), () => this.ui.run(() => {
+      // Tapping the active Scale or Rotate again opens or closes its slider bar
+      if (s.mode === 'transform' && ed.tool === t && t !== 'move') return this.ui.transformBar.toggle();
+      if (s.mode !== 'transform') s.setMode('transform');
+      ed.setTool(t); render();
+    }), { active: s.mode === 'transform' && ed.tool === t, label, cls: 'tool' });
     this.ui.selbar.classList.add('show');
     this.ui.selbar.replaceChildren(
-      h('div', { class: 'sel-name always' }, icon(Scissors, 16), h('span', {}, s.cut ? tr('Place the plane') : count ? tr('{n} faces', { n: count.toLocaleString() }) : tr('Choose faces'))),
+      h('div', { class: s.cut ? 'sel-name always' : 'sel-name' }, icon(Triangle, 16), h('span', {}, s.cut ? tr('Place the plane') : count ? tr('{n} faces', { n: count.toLocaleString() }) : tr('Choose faces'))),
       h(
         'div',
         { class: 'sel-tools' },
-        iconButton(Undo2, s.mode === 'select' ? tr('Undo selection') : tr('Undo'), () => s.mode === 'select' ? s.edit((sel) => sel.undo()) : this.ui.editor.undo()),
-        button(s.mode === 'select' ? tr('Separate') : tr('Done'), () => s.mode === 'select' ? this.separate() : this.cancel(), { cls: 'small primary' }),
-        iconButton(X, tr('Cancel'), () => this.cancel()),
+        this.ui.modeSwitch(),
+        iconButton(MousePointer2, tr('Select faces'), () => this.ui.run(() => { s.setMode('select'); if (this.part === 'sculpt') this.part = 'select'; render(); }), { active: s.mode === 'select', label: tr('Select'), cls: 'tool' }),
+        tool('move', Move3d, tr('Move')),
+        tool('rotate', Rotate3d, tr('Rotate')),
+        tool('scale', Scale3d, tr('Scale')),
+        this.ui.transformBar.button(),
+        h('span', { class: 'sep' }),
+        iconButton(Undo2, s.mode === 'select' ? tr('Undo selection') : tr('Undo'), () => s.mode === 'select' ? s.edit((sel) => sel.undo()) : ed.undo()),
+        iconButton(X, tr('Done (Tab)'), () => this.cancel()),
       ),
     );
   }
@@ -106,7 +125,7 @@ export class SeparatePanel {
     const selectContent = [
       section(
         tr('Select'),
-        segmented(tools, s.tool, (id) => (s.setTool(id as SelectTool), this.sync())),
+        segmented(tools, s.tool, (id) => this.ui.run(() => { s.setTool(id as SelectTool); if (s.mode !== 'select') s.setMode('select'); this.sync(); this.ui.renderSelbar(); })),
         hint(hints[s.tool]),
         chips([{ value: 'add', label: tr('Add') }, { value: 'remove', label: tr('Remove') }], s.add ? 'add' : 'remove', (v) => s.set({ add: v === 'add' })),
         s.tool === 'smart' ? slider(tr('Tolerance'), s.tolerance * 100, { min: 0, max: 100, step: 1, format: (v) => `${Math.round(v)}%` }, (v) => s.set({ tolerance: v / 100 })) : null,
@@ -118,6 +137,12 @@ export class SeparatePanel {
           button(tr('Invert'), () => s.edit((x) => x.all(true))),
         ),
         row(button(tr('Grow'), () => s.ring(true)), button(tr('Shrink'), () => s.ring(false))),
+        hint(tr('Shift+tap adds, Ctrl+tap removes, a tap on empty space clears. Keys: A all, Alt+A none, Ctrl+I invert, Ctrl +/− grow or shrink.')),
+      ),
+      section(
+        tr('Move, rotate and scale faces'),
+        hint(tr('Use Move, Rotate and Scale in the bar above: they change only the selected faces.')),
+        slider(tr('Soft selection radius'), s.softRadius, { min: 0, max: Math.max(...ed.boundsOf(sel.entity).size.asArray()), step: .01 }, v => s.setSoftRadius(v)),
       ),
       meshes.length > 1
         ? section(
@@ -129,6 +154,23 @@ export class SeparatePanel {
             }),
           )
         : null,
+    ];
+    const part = s.mode === 'surface' ? 'sculpt' : this.part === 'sculpt' ? 'select' : this.part;
+    const tabs = segmented([{ id: 'select', label: tr('Select') }, { id: 'sculpt', label: tr('Sculpt') }, { id: 'modify', label: tr('Modify') }], part, (id) => this.ui.run(() => {
+      if (id === 'sculpt') s.setMode('surface');
+      else if (s.mode === 'surface') s.setMode('select');
+      this.part = id as typeof this.part;
+      this.sync(); this.ui.renderSelbar(); this.ui.renderPanel();
+    }));
+    const done = button(tr('Done'), () => this.cancel());
+    if (part === 'select') return [tabs, ...selectContent, done];
+    if (part === 'sculpt') return [tabs, section(tr('Surface brushes'),
+      chips([{ value: 'off', label: tr('Off') }, { value: 'pull', label: tr('Pull') }, { value: 'inflate', label: tr('Inflate') }, { value: 'smooth', label: tr('Smooth') }, { value: 'flatten', label: tr('Flatten') }], s.surfaceBrush ?? 'off', v => { s.surfaceBrush = v === 'off' ? null : v as NonNullable<typeof s.surfaceBrush>; this.sync(); }),
+      slider(tr('Brush size'), s.radius, { min: 8, max: 120, step: 1 }, v => { s.radius = v; }),
+      slider(tr('Strength'), s.brushStrength, { min: .01, max: 1, step: .01 }, v => { s.brushStrength = v; }),
+      toggle(tr('Only selected region'), s.brushSelected, v => { s.brushSelected = v; }),
+      hint(tr('One finger edits; two fingers move the view. Brushes change existing faces.'))), done];
+    return [tabs,
       section(
         tr('Cut with a plane'),
         hint(tr('For pieces that touch: place the plane between them. The gold side becomes the new object.')),
@@ -160,56 +202,16 @@ export class SeparatePanel {
         cut?.cap ? materialPicker() : null,
         cut && sel.count ? toggle(tr('Cut only the selected faces'), cut.limited, (v) => ((cut.limited = v), ed.invalidate())) : null,
       ),
-      row(button(tr('Separate'), () => this.separate(), { icon: Scissors, cls: 'primary' }), button(tr('Cancel'), () => this.cancel(), { cls: 'ghost' })),
-    ];
-    const tabs = segmented([{ id: 'select', label: tr('Select') }, { id: 'transform', label: tr('Transform') }, { id: 'surface', label: tr('Surface') }], s.mode, (mode) => this.ui.run(() => { s.setMode(mode as typeof s.mode); this.sync(); this.ui.renderPanel(); }));
-    if (s.mode === 'select') return [tabs, ...selectContent];
-    if (s.mode === 'transform') return [tabs,
-      section(tr('Transform selection'),
-        hint(tr('Use the gizmo to change only the selected region.')),
-        chips([{ value: 'move', label: tr('Move') }, { value: 'rotate', label: tr('Rotate') }, { value: 'scale', label: tr('Scale') }], ed.tool, v => ed.setTool(v as 'move' | 'rotate' | 'scale')),
-        slider(tr('Soft selection radius'), s.transform!.softRadius, { min: 0, max: Math.max(...ed.boundsOf(sel.entity).size.asArray()), step: .01 }, v => { s.transform!.softRadius = v; }),
-      ), row(button(tr('Done'), () => this.cancel()), button(tr('Back'), () => { s.setMode('select'); this.sync(); this.ui.renderPanel(); }))];
-    return [tabs, section(tr('Surface brushes'),
-      chips([{ value: 'off', label: tr('Off') }, { value: 'pull', label: tr('Pull') }, { value: 'inflate', label: tr('Inflate') }, { value: 'smooth', label: tr('Smooth') }, { value: 'flatten', label: tr('Flatten') }], s.surfaceBrush ?? 'off', v => { s.surfaceBrush = v === 'off' ? null : v as NonNullable<typeof s.surfaceBrush>; this.sync(); }),
-      slider(tr('Brush size'), s.radius, { min: 8, max: 120, step: 1 }, v => { s.radius = v; }),
-      slider(tr('Strength'), s.brushStrength, { min: .01, max: 1, step: .01 }, v => { s.brushStrength = v; }),
-      toggle(tr('Only selected region'), s.brushSelected, v => { s.brushSelected = v; }),
-      hint(tr('One finger edits; two fingers move the view. Brushes change existing faces.'))),
-      this.shapeSection(),
-      section(tr('Repair surface'), hint(tr('Select faces next to the opening, then close it.')), materialPicker(), button(tr('Close opening'), () => this.ui.run(() => { const r = s.fillHoles(); this.ui.toast(r.skipped ? tr('{closed} closed; {skipped} curved or irregular openings were left open.', { closed: r.closed, skipped: r.skipped }) : tr('Opening closed')); }), { cls: 'primary' })), section(tr('Connect borders'), hint(tr('Select faces beside two openings. Preview the seam before applying.')),
+      row(button(tr('Separate'), () => this.separate(), { icon: Scissors, cls: 'primary' })),
+      section(tr('Shrinkwrap to a shape'),
+        hint(tr('Adds a shape fitted to the selected faces and wraps only these faces onto it, live: shape it freely (Scale X / Y / Z for an oval), then Apply (Shift+A).')),
+        chips(QUICK_SHAPES.map((t) => ({ value: t, label: shapeLabel(t) })), '' as PrimitiveType, (t) => this.ui.addShape(t))),
+      section(tr('Repair surface'), hint(tr('Select faces next to the opening, then close it.')), materialPicker(), button(tr('Close opening'), () => this.ui.run(() => { const r = s.fillHoles(); this.ui.toast(r.skipped ? tr('{closed} closed; {skipped} curved or irregular openings were left open.', { closed: r.closed, skipped: r.skipped }) : tr('Opening closed')); }), { cls: 'primary' })),
+      section(tr('Connect borders'), hint(tr('Select faces beside two openings. Preview the seam before applying.')),
         toggle(tr('Reverse connection'), s.bridgeReverse, v => { s.bridgeReverse = v; s.clearBridge(); }),
         slider(tr('Border offset'), s.bridgeOffset, { min: 0, max: 100, step: 1 }, v => { s.bridgeOffset = v; s.clearBridge(); }),
         row(button(tr('Preview'), () => this.ui.run(() => s.previewBridge())), button(tr('Apply connection'), () => this.ui.run(() => { s.connect(); this.sync(); this.ui.renderPanel(); })), button(tr('Cancel'), () => s.clearBridge()))),
-      button(tr('Done'), () => this.cancel()), button(tr('Back'), () => { s.clearBridge(); s.setMode('select'); this.sync(); this.ui.renderPanel(); })];
-  }
-
-  /** Conform the surface to a simple shape, or add the shape's volume (union). */
-  private shapeSection() {
-    const ed = this.ui.editor, s = ed.separator, guide = s.guide;
-    const pick = (v: string) => this.ui.run(() => {
-      // Placing a shape uses the gizmo: brushes step aside
-      if (v !== 'none') s.surfaceBrush = null;
-      s.setGuide(v === 'none' ? null : v as 'sphere' | 'cylinder' | 'box');
-      if (v !== 'none' && ed.tool !== 'rotate') ed.setTool('move');
-      this.sync(); this.ui.renderPanel();
-    });
-    return section(tr('Shrinkwrap'),
-      hint(tr('Place a simple shape over the part to change. Shrinkwrap moves the surface that touches it onto the shape (texture kept); Union adds the shape volume.')),
-      chips([{ value: 'none', label: tr('Off') }, { value: 'sphere', label: tr('Sphere') }, { value: 'cylinder', label: tr('Cylinder') }, { value: 'box', label: tr('Box') }], guide?.shape ?? 'none', pick),
-      guide ? chips([{ value: 'move', label: tr('Move') }, { value: 'rotate', label: tr('Rotate') }], ed.tool === 'rotate' ? 'rotate' : 'move', (v) => ed.setTool(v as 'move' | 'rotate')) : null,
-      guide ? slider(tr('Size'), guide.size, { min: .1, max: 2, step: .01, format: (v) => `${Math.round(v * 100)}%` }, (v) => guide.setSize(v)) : null,
-      guide ? button(tr('Fit to selection'), () => { s.fitGuide(); this.ui.renderPanel(); }, { cls: 'small' }) : null,
-      guide ? chips([{ value: 'fill', label: tr('Outside') }, { value: 'flatten', label: tr('Inside') }, { value: 'both', label: tr('On surface') }], s.conformMode, (v) => { s.conformMode = v as typeof s.conformMode; this.ui.renderPanel(); }) : null,
-      guide ? hint(s.conformMode === 'fill' ? tr('Outside: parts inside the shape move out to it (fills grooves).') : s.conformMode === 'flatten' ? tr('Inside: parts sticking out move in to the shape (flattens bumps).') : tr('On surface: the surface near the shape snaps onto it.')) : null,
-      guide ? slider(tr('Strength'), s.conformStrength, { min: .05, max: 1, step: .01, format: (v) => `${Math.round(v * 100)}%` }, (v) => { s.conformStrength = v; }) : null,
-      guide ? slider(tr('Falloff'), s.conformReach, { min: 0, max: 1, step: .01, format: (v) => `${Math.round(v * 100)}%` }, (v) => { s.conformReach = v; }) : null,
-      guide ? hint(s.selection?.count ? tr('Only the selected faces near the shape change.') : tr('Only the surface near the shape changes.')) : null,
-      guide ? row(
-        button(tr('Apply shrinkwrap'), () => this.ui.run(() => { const n = s.conform(); this.ui.toast(n ? tr('Surface wrapped onto the shape.') : tr('Nothing to change: move or resize the shape over the surface.')); }), { cls: 'primary' }),
-        button(tr('Union'), () => this.ui.run(async () => { await s.addGuide(); this.after(); this.ui.segment.objects = 'object'; if (this.ui.tab !== 'objects') this.ui.openTab('objects'); this.ui.renderPanel(); })),
-      ) : null,
-    );
+      done];
   }
 
   private separate() {
@@ -226,6 +228,9 @@ export class SeparatePanel {
     this.ui.editor.separator.cancel();
     this.after();
   }
+
+  /** After leaving mesh mode from outside the panel. */
+  refresh() { this.after(); }
 
   private after() {
     this.sync();

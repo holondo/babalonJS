@@ -1,5 +1,6 @@
 import { reparent, setAffineTransform } from '../edit/groups';
 import { Fusion } from '../edit/fuse';
+import { Shrinkwrap } from '../edit/shrinkwrap';
 import type { LibraryAttribution } from '../library/polyhaven';
 import { combine } from '../edit/combine';
 import type { Composite } from '../edit/combine';
@@ -142,6 +143,8 @@ export interface AssetRef {
 }
 
 export interface AddOptions {
+  /** Place and size the new shape to fill this world box (instead of the free spot in view). */
+  fit?: { center: Vector3; size: Vector3 };
   publish?: boolean;
   record?: boolean;
   select?: boolean;
@@ -346,6 +349,7 @@ export class Editor {
   /** Optimized variants of heavy models. */
   readonly optimizer = new ModelOptimizer(this);
   readonly fusion = new Fusion(this);
+  readonly wrap = new Shrinkwrap(this);
   readonly separator = new Separator(this);
   readonly textureOptimizer = new TextureOptimizer(this);
   /** Other selected objects besides `selected` (which is the reference for alignment). */
@@ -433,15 +437,30 @@ export class Editor {
     const g = this.gizmos.gizmos;
     g.positionGizmo!.planarGizmoEnabled = true;
     for (const gz of [g.positionGizmo!, g.rotationGizmo!, g.scaleGizmo!]) {
-      // Dragging the shape guide only places it (nothing to record)
-      gz.onDragStartObservable.add(() => (this.separator.guide ? undefined : this.separator.transform ? this.separator.transform.begin() : this.rigger.active ? this.rigger.remember() : this.pose.active ? this.pose.begin() : this.beginTransform()));
+      gz.onDragStartObservable.add(() => (this.separator.transform ? this.separator.transform.begin() : this.rigger.active ? this.rigger.remember() : this.pose.active ? this.pose.begin() : this.beginTransform()));
       gz.onDragEndObservable.add(() => {
-        if (this.separator.guide) return this.invalidate();
         if (this.separator.transform) return this.separator.transform.end();
         if (this.rigger.active) return this.rigger.endHandleDrag();
         if (this.pose.active) return this.pose.end();
         this.tools.clearSmartLines();
         this.endTransform();
+      });
+    }
+    // Scale gizmo: with Shift (or the option) one axis handle scales all three, keeping proportions
+    const sg = g.scaleGizmo!;
+    let scaleStart: Vector3 | null = null;
+    sg.onDragStartObservable.add(() => { scaleStart = (sg.attachedNode as TransformNode | null)?.scaling.clone() ?? null; });
+    for (const axis of [sg.xGizmo, sg.yGizmo, sg.zGizmo]) {
+      axis.dragBehavior.onDragObservable.add(() => {
+        const node = sg.attachedNode as TransformNode | null;
+        if (!this.proportional || !node || !scaleStart) return;
+        // The axis that changed most sets the factor for all
+        let ratio = 1;
+        for (const k of ['x', 'y', 'z'] as Axis[]) {
+          const r = scaleStart[k] ? node.scaling[k] / scaleStart[k] : 1;
+          if (Math.abs(r - 1) > Math.abs(ratio - 1)) ratio = r;
+        }
+        node.scaling.copyFrom(scaleStart).scaleInPlace(ratio);
       });
     }
     // Position gizmo: track the raw position ourselves so grid snapping and smart guides don't get "sticky"
@@ -507,7 +526,10 @@ export class Editor {
       if (this.tools.handlePointer(info)) return;
       // Separate mode: taps select faces of the model being separated
       if (this.separator.active) {
-        if (info.type === PointerEventTypes.POINTERTAP) this.separator.tap(scene.pointerX, scene.pointerY);
+        if (info.type === PointerEventTypes.POINTERTAP) {
+          const ev = info.event as PointerEvent;
+          this.separator.tap(scene.pointerX, scene.pointerY, ev.shiftKey ? 'add' : ev.ctrlKey || ev.metaKey || ev.altKey ? 'remove' : null);
+        }
         return;
       }
       // Rigging: a missed tap must not drop the joints being placed
@@ -1058,10 +1080,43 @@ export class Editor {
       visible: true,
       primitive: type,
     };
-    this.placeNew(entity);
+    if (opts.fit) this.fitShape(entity, opts.fit.center, opts.fit.size);
+    else this.placeNew(entity);
     this.register(entity, opts.record ?? true, opts.select ?? true);
     if ((opts.record ?? true) && !this.isInView(entity)) this.frameAll();
     return entity;
+  }
+
+  /** Sizes and places a shape in a world box: round shapes stay round across their round axes. */
+  private fitShape(entity: Entity, center: Vector3, size: Vector3) {
+    const own = this.boundsOf(entity).size, t = size.clone();
+    const type = entity.primitive;
+    if (type === 'sphere') t.setAll(Math.max(t.x, t.y, t.z));
+    else if (type === 'cylinder' || type === 'cone' || type === 'torus') t.x = t.z = Math.max(t.x, t.z);
+    const s = (target: number, base: number) => (base > 1e-6 ? Math.max(target, 1e-3) / base : 1);
+    entity.root.scaling.set(s(t.x, own.x), type === 'plane' ? 1 : s(t.y, own.y), s(t.z, own.z));
+    const b = this.boundsOf(entity);
+    entity.root.position.addInPlace(center.subtract(b.center));
+    entity.root.computeWorldMatrix(true);
+  }
+
+  /**
+   * Quick shape on what's selected (Blender adds at the 3D cursor; here the selection is the
+   * cursor): fitted to the selected faces in mesh mode (which then ends), otherwise half the size of
+   * the selected object, in its middle. With a target, both end up selected, the target first, ready
+   * for Boolean or Shrinkwrap.
+   */
+  addShapeOnSelection(type: PrimitiveType) {
+    const faces = this.separator.active ? this.separator.selection : null;
+    const target = faces ? faces.entity : this.selected && this.selected.kind !== 'light' ? this.selected : null;
+    let fit: AddOptions['fit'];
+    const box = faces?.count ? faces.bounds() : null;
+    if (box) fit = { center: box.center, size: box.size };
+    else if (target) { const b = this.boundsOf(target); fit = { center: b.center, size: b.size.scale(0.5) }; }
+    if (faces) this.separator.cancel();
+    const shape = this.addPrimitive(type, { fit, select: !target });
+    if (target) { this.select(target); this.select(shape, true); }
+    return shape;
   }
 
   addLight(
@@ -1396,6 +1451,7 @@ export class Editor {
   /** Really deletes everything (including what the undo history holds) to start/open another project. */
   resetScene() {
     this.fusion.cancel();
+    this.wrap.cancel();
     this.separator.cancel();
     this.edits.clear();
     this.select(null);
@@ -1433,6 +1489,14 @@ export class Editor {
   /** Selected objects, the primary (reference) one first. */
   get selection(): Entity[] {
     return this.selected ? [this.selected, ...this.extra] : [];
+  }
+
+  /** Selects every object (Blender's A). */
+  selectAll() {
+    const all = this.entities.filter((e) => !e.groupParent);
+    if (!all.length) return;
+    this.select(all[0]);
+    for (const e of all.slice(1)) this.select(e, true);
   }
 
   /** Selects an object. With `additive`, toggles it in a multi-selection instead. */
@@ -1523,8 +1587,8 @@ export class Editor {
       return;
     }
     if (this.separator?.active) {
-      // The shape being placed takes the gizmo; otherwise the selected region's handle
-      const handle = this.separator.guide?.mesh ?? this.separator.transform?.handle;
+      // The selected region's handle takes the gizmo
+      const handle = this.separator.transform?.handle;
       const show = !!handle && !this.cleanView;
       this.gizmos.positionGizmoEnabled = show && this.tool === 'move';
       this.gizmos.rotationGizmoEnabled = show && this.tool === 'rotate';
@@ -1564,6 +1628,76 @@ export class Editor {
       if (show && tool === 'move') e.root.addBehavior(this.drag);
     }
   }
+
+  /** Scaling keeps the proportions (Shift while dragging the gizmo). */
+  proportional = false;
+
+  // ---------- Live transform (slider bar, G/R/S keys): the selected objects or faces ----------
+
+  private live: { faces: boolean; center: Vector3; start: { entity: Entity | null; p: Vector3; q: Quaternion; s: Vector3 }[] } | null = null;
+
+  /**
+   * Starts a transform driven by a control instead of the gizmo. In mesh mode it moves the
+   * selected faces; otherwise the selected objects, around their middle (Blender's median point).
+   * Returns the center, or null when there's nothing to transform.
+   */
+  beginLive(): Vector3 | null {
+    if (this.live) return this.live.center;
+    const faces = this.separator.transform;
+    if (faces) {
+      faces.begin();
+      const h = faces.handle;
+      this.live = { faces: true, center: h.position.clone(), start: [{ entity: null, p: h.position.clone(), q: h.rotationQuaternion!.clone(), s: h.scaling.clone() }] };
+      return this.live.center;
+    }
+    if (this.separator.active) return null;
+    const entities = this.selection;
+    if (!entities.length) return null;
+    this.beginTransform(entities);
+    const start = entities.map((entity) => ({ entity, p: entity.root.position.clone(), q: entity.root.rotationQuaternion!.clone(), s: entity.root.scaling.clone() }));
+    const center = start.reduce((sum, t) => sum.addInPlace(t.p), Vector3.Zero()).scaleInPlace(1 / start.length);
+    this.live = { faces: false, center, start };
+    return center;
+  }
+
+  /** Sets the live change from where it began: a move, a scale per world axis, a turn around a world axis. */
+  setLive(change: { move?: Vector3; scale?: Vector3; axis?: Vector3; angle?: number }) {
+    const live = this.live;
+    if (!live) return;
+    const turn = change.axis && change.angle ? Quaternion.RotationAxis(change.axis, change.angle) : Quaternion.Identity();
+    const scale = change.scale ?? Vector3.One(), move = change.move ?? Vector3.Zero();
+    const turnMatrix = Matrix.FromQuaternionToRef(turn, new Matrix());
+    for (const t of live.start) {
+      const node = t.entity ? t.entity.root : this.separator.transform?.handle;
+      if (!node) continue;
+      // Position around the center: scaled, turned, then moved
+      const offset = t.p.subtract(live.center).multiplyInPlace(scale);
+      node.position.copyFrom(live.center.add(Vector3.TransformCoordinates(offset, turnMatrix)).addInPlace(move));
+      node.rotationQuaternion = turn.multiply(t.q);
+      node.scaling.copyFrom(t.s).multiplyInPlace(scale);
+    }
+    this.invalidate();
+  }
+
+  /** Ends the live change: one undo step, or back to where it began. */
+  endLive(cancel = false) {
+    const live = this.live;
+    if (!live) return;
+    this.live = null;
+    if (cancel) {
+      for (const t of live.start) {
+        const node = t.entity ? t.entity.root : this.separator.transform?.handle;
+        if (!node) continue;
+        node.position.copyFrom(t.p); node.rotationQuaternion = t.q.clone(); node.scaling.copyFrom(t.s);
+      }
+    }
+    if (live.faces) this.separator.transform?.end(cancel);
+    else this.endTransform();
+    this.emit('transform');
+    this.invalidate();
+  }
+
+  get liveActive() { return !!this.live; }
 
   /** Applies a transform change coming from UI controls (sliders/buttons). */
   editTransform(fn: (root: Mesh) => void, commit = false) {
@@ -1938,6 +2072,7 @@ export class Editor {
 
   setPhotoMode(on: boolean) {
     if (on && (this.fusion.busy || this.fusion.preview)) this.fusion.cancel();
+    if (on) this.wrap.cancel();
     this.photoMode = on;
     this.applyCleanView();
     this.emit('photo');
@@ -2051,6 +2186,7 @@ export class Editor {
    */
   async exportGLB(compact = false): Promise<Blob> {
     if (this.fusion.preview || this.fusion.busy) this.fusion.cancel();
+    this.wrap.cancel();
     this.rigger.difference.clear();
     for (const e of this.entities) if (e.rig) updateHelperBones(e.rig);
     const exclude = new Set<Node>([this.ground, this.grid, ...this.helpers, ...this.overlays]);

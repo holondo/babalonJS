@@ -1,3 +1,4 @@
+import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { Geometry } from '@babylonjs/core/Meshes/geometry.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
@@ -25,7 +26,7 @@ export class FaceSet implements Iterable<number> {
   values() { return this[Symbol.iterator](); }
 }
 
-function buildTopology(mesh: Mesh): FaceTopology {
+export function buildTopology(mesh: Mesh): FaceTopology {
   return computeTopology(Float32Array.from(mesh.getVerticesData('position')!), mesh.getIndices()!);
 }
 
@@ -61,6 +62,31 @@ export class FaceSelection {
     }
   }
   get count() { let n = 0; for (const faces of this.faces.values()) n += faces.size; return n; }
+  /** World box of the selected faces as shown (pose applied), or null when none are selected. */
+  bounds() {
+    const min = new Vector3(Infinity, Infinity, Infinity), max = new Vector3(-Infinity, -Infinity, -Infinity), v = new Vector3();
+    for (const [mesh, faces] of this.faces) {
+      if (!faces.size) continue;
+      const p = mesh.getPositionData(true, true) ?? mesh.getVerticesData('position')!, world = mesh.computeWorldMatrix(true), idx = mesh.getIndices()!, m = faces.mask;
+      for (let f = 0; f < m.length; f++) if (m[f]) for (let j = 0; j < 3; j++) {
+        const i = idx[f * 3 + j] * 3;
+        Vector3.TransformCoordinatesFromFloatsToRef(p[i], p[i + 1], p[i + 2], world, v);
+        min.minimizeInPlace(v); max.maximizeInPlace(v);
+      }
+    }
+    return Number.isFinite(min.x) ? { min, max, center: min.add(max).scaleInPlace(0.5), size: max.subtract(min) } : null;
+  }
+  /** Vertices of the selected faces, per mesh (1 = selected). */
+  vertexMasks() {
+    const out = new Map<Mesh, Uint8Array>();
+    for (const [mesh, faces] of this.faces) {
+      if (!faces.size) continue;
+      const idx = mesh.getIndices()!, mask = new Uint8Array(mesh.getTotalVertices()), m = faces.mask;
+      for (let f = 0; f < m.length; f++) if (m[f]) { mask[idx[f * 3]] = 1; mask[idx[f * 3 + 1]] = 1; mask[idx[f * 3 + 2]] = 1; }
+      out.set(mesh, mask);
+    }
+    return out;
+  }
   checkpoint() { this.history.push(new Map([...this.faces].map(([m, s]) => [m, s.clone()]))); if (this.history.length > 20) this.history.shift(); }
   undo() { const state = this.history.pop(); if (state) { for (const [m, s] of state) this.faces.set(m, s); this.refresh(); } }
   all(invert = false) {

@@ -27,7 +27,8 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | | `files.ts` | Saving, sharing and receiving files (share target) |
 | | `i18n.ts` | Translations |
 | `ui/` | `ui.ts` | The shell: top bar, dock, selection bar, menus, view controls, panel frame, project actions, autosave, keys |
-| | `panels/*.ts` | One class per panel: `add`, `library`, `objects`, `material`, `animate`, `pose`, `rig`, `optimize`, `separate`, `tools`, `light` |
+| | `panels/*.ts` | One class per panel: `add`, `library`, `objects`, `modify`, `material`, `animate`, `pose`, `rig`, `optimize`, `separate` (Mesh mode), `tools`, `light` |
+| | `transformBar.ts`, `modalTransform.ts` | Slider bar for Scale / Rotate; Blender's G / R / S keyboard transform. Both drive the editor's live transform (`beginLive` / `setLive` / `endLive`), for objects or faces |
 | | `photo.ts` | Photo mode: its panel, on-screen controls, aspect frame and capture |
 | | `measureLabels.ts` | Measurement and guide labels over the 3D view |
 | | `jointOverlay.ts` | Joint handles over the 3D view (posing, rigging) |
@@ -51,6 +52,8 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | | `export.ts` | Compact GLB export (glTF-Transform, loaded on demand) |
 | `edit/` | `selection.ts`, `separate.ts` | Separating a model into objects: face selection (pieces, overlay) and `Separator` (separate mode, triangle subsets, saving) |
 | | `lasso.ts`, `smartSelect.ts`, `planeCut.ts` | Lasso and brush (with a software depth buffer for visibility), magic wand and grow/shrink, cutting with a plane |
+| | `fuse.ts`, `fuse.worker.ts`, `shrinkwrap.ts` | Operations between objects (Objects → Modify; first selected is the target, the others are tools): boolean union/subtract/intersect (Manifold, in a worker) and live Shrinkwrap |
+| | `deform.ts` | In-place vertex edits with partial GPU uploads; `recordDeform` saves one as an undo step |
 | `library/` | `polyhaven.ts` | Poly Haven CC0 models and HDRIs: index, downloads, cache for offline use, attribution |
 | `capture/` | `camera.ts`, `video.ts` | Live camera as the photo background (lens choice, zoom); turntable and sway videos |
 | `ar/` | `ar.ts`, `arHud.ts` | WebXR AR session / its on-camera overlay (anchors, measuring real objects, depth occlusion) |
@@ -100,7 +103,9 @@ Expensive features are opt-in (AR shadows, room lighting, camera access, FPS cou
 Keep it uncluttered and at most one level deep:
 - Top bar: logo (project menu), undo/redo, Edit / Photo / AR mode switch.
 - Dock: Add, Objects, Light, Tools. Long panels split into parts with `segmented` (no nested menus).
-- Selection bar: Move / Rotate / Scale / Delete / More (⋯) / Deselect. Secondary actions go in the More menu.
+- Selection bar: Object | Mesh (Tab) / Move / Rotate / Scale / Delete / More (⋯) / Deselect. The same Move / Rotate / Scale act on objects or, in Mesh mode, on the selected faces; tapping the active Scale or Rotate opens its slider bar. Secondary actions go in the More menu.
+- Geometry operations live in one place: Objects → Modify (quick shapes, Boolean, Shrinkwrap, Combine, Group) and, in Mesh mode, the panel's Select / Sculpt / Modify parts. Tools keeps only aids that don't change geometry (measure, guides, align).
+- Keys follow Blender: Tab (mode), G / R / S (transform with the mouse, X / Y / Z, typed values), Shift+A (quick shapes), A / Alt+A (select all / none), Ctrl+I, Ctrl +/− (faces). Shift keeps proportions while dragging the scale gizmo.
 - Floating view controls (bottom right): frame all, gyro, fullscreen, hide interface.
 - Everything must disappear with "hide interface" (H) — add new floating UI to the `body.ui-hidden` rule in `style.css`.
 

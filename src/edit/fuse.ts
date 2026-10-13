@@ -7,13 +7,19 @@ import type { Editor, Entity } from '../core/editor';
 import { copyMesh, spawnComposite, staticMeshBlocker, cloneMaterial, disposeMeshCopy } from './combine';
 import type { PartOrigin } from './combine';
 import { applyPart } from './parts';
-import type { SolidInput, FuseResult } from './fuse.worker';
+import type { BooleanOperation, SolidInput, FuseResult } from './fuse.worker';
+export type { BooleanOperation } from './fuse.worker';
 import { tr } from '../core/i18n';
 
-/** Optional fusion owns an isolated worker and a disposable preview. */
+/**
+ * Boolean operations between objects (Figma's Union / Subtract / Intersect, with Manifold in a
+ * worker): the first entity is the target, the others the tools. Shows a preview; Apply replaces
+ * the originals with the result (one undo step).
+ */
 export class Fusion {
   busy = false;
   preview: Entity | null = null;
+  operation: BooleanOperation = 'union';
   private generation = 0;
   private worker: Worker | null = null;
   private originals: Entity[] = [];
@@ -21,8 +27,9 @@ export class Fusion {
   private reject: ((error: Error) => void) | null = null;
   readonly editor: Editor;
   constructor(editor: Editor) { this.editor = editor; }
-  async start(entities = this.editor.selection) {
+  async start(entities = this.editor.selection, operation: BooleanOperation = 'union') {
     this.cancel();
+    this.operation = operation;
     const generation = ++this.generation;
     if (entities.length < 2) throw new Error(tr('Select at least two objects.'));
     for (const e of entities) { const reason = staticMeshBlocker(e); if (reason) throw new Error(reason); }
@@ -60,15 +67,15 @@ export class Fusion {
       const worker = this.worker = new Worker(new URL('./fuse.worker.ts', import.meta.url), { type: 'module' });
       const output = await new Promise<FuseResult>((resolve, reject) => {
         this.reject = reject;
-        worker.onmessage = ev => ev.data.result ? resolve(ev.data.result) : reject(new Error(tr('Fusion requires closed, consistently oriented surfaces. Use Combine for open parts.')));
-        worker.onerror = () => reject(new Error(tr('Fusion could not run. Try combining the objects.')));
-        worker.postMessage(inputs, inputs.flatMap(i => [i.properties.buffer, i.indices.buffer, i.runs.buffer, i.materials.buffer]));
+        worker.onmessage = ev => ev.data.result ? resolve(ev.data.result) : reject(new Error(tr('Boolean operations need closed surfaces that overlap. Use Combine for open parts.')));
+        worker.onerror = () => reject(new Error(tr('The boolean operation could not run. Try combining the objects.')));
+        worker.postMessage({ solids: inputs, operation }, inputs.flatMap(i => [i.properties.buffer, i.indices.buffer, i.runs.buffer, i.materials.buffer]));
       });
-      if (this.worker !== worker || entities.some(e => !this.editor.entities.includes(e))) throw new Error(tr('Fusion cancelled'));
+      if (this.worker !== worker || entities.some(e => !this.editor.entities.includes(e))) throw new Error(tr('Boolean operation cancelled'));
       const meshes: Mesh[] = [], origins: PartOrigin[] = [];
       for (let run = 0; run < output.materials.length; run++) {
         const original = materials[output.materials[run]];
-        if (!original) throw new Error(tr('Fusion could not run. Try combining the objects.'));
+        if (!original) throw new Error(tr('The boolean operation could not run. Try combining the objects.'));
         const attributes: Record<string, number[]> = Object.fromEntries(kinds.map(k => [k.kind, []]));
         const indices: number[] = [], remap = new Map<number, number>();
         for (let i = output.runs[run]; i < output.runs[run + 1]; i += 3) for (const k of [i + 2, i + 1, i]) {
@@ -80,13 +87,13 @@ export class Fusion {
           indices.push(target);
         }
         if (!indices.length) continue;
-        const mesh = new Mesh(tr('Fused surface'), this.editor.scene);
+        const mesh = new Mesh(tr('Boolean result'), this.editor.scene);
         mesh.overrideMaterialSideOrientation = Material.CounterClockWiseSideOrientation;
         applyPart(mesh, { indices, materials: [{ material: 0, start: 0, count: indices.length }], attributes });
         mesh.material = cloneMaterial(original.material); meshes.push(mesh); origins.push(original.origin);
       }
-      if (!meshes.length) throw new Error(tr('Fusion could not run. Try combining the objects.'));
-      this.preview = spawnComposite(this.editor, tr('Fused object'), meshes, origins, false, false);
+      if (!meshes.length) throw new Error(tr('The boolean operation could not run. Try combining the objects.'));
+      this.preview = spawnComposite(this.editor, operation === 'union' ? tr('Union') : operation === 'subtract' ? tr('Subtraction') : tr('Intersection'), meshes, origins, false, false);
       for (const m of [this.preview.root, ...this.preview.meshes]) { this.editor.overlays.add(m); m.isPickable = false; }
       entities.forEach(e => e.root.setEnabled(false));
       this.editor.invalidate();
@@ -107,7 +114,7 @@ export class Fusion {
   private restoreSources() { this.originals.forEach((e, i) => e.root.setEnabled(this.enabled[i])); }
   cancel() {
     this.generation++;
-    this.worker?.terminate(); this.worker = null; this.reject?.(new Error(tr('Fusion cancelled'))); this.reject = null;
+    this.worker?.terminate(); this.worker = null; this.reject?.(new Error(tr('Boolean operation cancelled'))); this.reject = null;
     this.restoreSources();
     if (this.preview) { for (const m of [this.preview.root, ...this.preview.meshes]) this.editor.overlays.delete(m); this.preview.meshes.forEach(m => disposeMeshCopy(m as Mesh)); this.preview.root.dispose(); this.preview.source?.container.dispose(); }
     this.preview = null; this.originals = []; this.busy = false; this.editor.refreshTool(); this.editor.invalidate(); this.editor.notify('tool');
