@@ -2346,3 +2346,5 @@ body.drawing canvas {
 .mirror-row .btn.active svg.lucide {
   stroke: var(--gold);
 }
+
+.progress.indeterminate i { opacity: .3; }

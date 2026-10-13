@@ -1,9 +1,14 @@
+import type { SeparationState } from '../edit/parts';
+import { copyMesh, spawnComposite, cloneMaterial, disposeMeshCopy } from '../edit/combine';
+import { applyPart, decodeSeparation } from '../edit/parts';
+import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js';
+import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { userTextureFiles, loadUserTexture } from './materialTextures';
 import { materialToJSON, applyMaterial, lightToJSON, applyLight } from './state';
 import type { MaterialJSON, LightJSON } from './state';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { Zippable } from 'fflate';
-import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { AssetContainer } from '@babylonjs/core/assetContainer.js';
 import { tr } from './i18n';
 import type { ToolsJSON } from '../tools/tools';
@@ -26,6 +31,7 @@ interface TransformJSON {
   p: number[];
   q: number[];
   s: number[];
+  pre?: number[];
 }
 
 interface EntityJSON {
@@ -53,6 +59,8 @@ interface EntityJSON {
   /** Optimized variant; `data` is the path of the kept triangles in the project. */
   /** Separated part: binary triangle subsets or cut geometry. */
   separation?: string;
+  group?: number[];
+  composite?: { origins: { asset?: number; primitive?: PrimitiveType; mesh: number; material?: number; sideOrientation?: number }[]; geometry: string };
   optimization?: { settings: OptimizeSettings; error: number; meshes: number[]; data: string; bakes?: { mesh: number; size: number; path: string }[] };
   /** Compressed or downscaled textures, stored in the project (no re-encoding on open). */
   textureOptimization?: { settings: TextureSettings; textures: { index: number; format: 'ktx2' | 'png'; width: number; height: number; path: string }[] };
@@ -102,7 +110,7 @@ export function snapshot(editor: Editor, name: string): ProjectSnapshot {
   const assets = new Map<number, AssetJSON>();
   const path = (asset: AssetRef, f: File) => `assets/${asset.id}/${f.name}`;
 
-  const used = editor.entities.flatMap((e) => [e.source?.asset, ...(e.addedClips ?? []).map((c) => ('asset' in c.from ? c.from.asset : undefined))]);
+  const used = editor.entities.flatMap((e) => [...(e.composite ? e.composite.origins.map(p => p.asset) : [e.source?.asset]), ...(e.addedClips ?? []).map((c) => ('asset' in c.from ? c.from.asset : undefined))]);
   for (const asset of used) {
     if (!asset || assets.has(asset.id)) continue;
     const json: AssetJSON = { id: asset.id, name: asset.name, attribution: asset.attribution };
@@ -144,9 +152,15 @@ function entityToJSON(editor: Editor, e: Entity, files: Record<string, Blob>, in
     name: e.name,
     visible: e.visible,
     castShadows: e.castShadows,
-    t: { p: r.position.asArray(), q: r.rotationQuaternion!.asArray(), s: r.scaling.asArray() },
+    t: { p: r.position.asArray(), q: r.rotationQuaternion!.asArray(), s: r.scaling.asArray(), pre: r.getPivotMatrix().isIdentity() ? undefined : Array.from(r.getPivotMatrix().asArray()) },
   };
-  if (e.kind === 'model') json.asset = e.source!.asset.id;
+  if (e.groupMembers) { json.group = e.groupMembers.filter(m => editor.entities.includes(m)).map(m => editor.entities.indexOf(m)); return json; }
+  if (e.kind === 'model' && !e.composite) json.asset = e.source!.asset.id;
+  if (e.composite) {
+    const path = `composites/${index}.bin`;
+    files[path] = blobOf(e.composite.geometry);
+    json.composite = { origins: e.composite.origins.map(p => ({ asset: p.asset?.id, primitive: p.primitive, mesh: p.mesh, material: p.material, sideOrientation: p.sideOrientation })), geometry: path };
+  }
   if (e.kind === 'primitive') json.primitive = e.primitive;
   if (e.kind !== 'light') json.materials = editor.materialsOf(e).map((m) => {
     const state = materialToJSON(m);
@@ -276,7 +290,43 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
   for (const ej of json.entities) {
     let entity: Entity | null = null;
     byIndex.push(null);
-    if (ej.kind === 'model') {
+    if (ej.group) continue;
+    if (ej.composite) {
+      const meshes: Mesh[] = [];
+      const temporaries: Entity[] = [];
+      try {
+        const data = files[ej.composite.geometry];
+        if (!data) throw new Error();
+        const parts = decodeSeparation(new Uint8Array(await data.arrayBuffer())).meshes;
+        if (parts.length !== ej.composite.origins.length) throw new Error();
+        for (const [i, origin] of ej.composite.origins.entries()) {
+          let template: Entity;
+          if (origin.primitive) template = editor.addPrimitive(origin.primitive, quiet);
+          else {
+            const asset = assets.get(origin.asset!);
+            if (!asset) throw new Error();
+            let entry = loaded.get(asset.id);
+            if (!entry) { entry = { container: await editor.loadAsset(asset), source: null }; loaded.set(asset.id, entry); }
+            template = editor.spawnModel(entry.container, asset.name, entry.source, asset, quiet);
+            entry.source = template.source!;
+          }
+          temporaries.push(template);
+          const source = template.meshes[origin.mesh];
+          if (!(source instanceof Mesh)) throw new Error();
+          const mesh = copyMesh(source);
+          if (origin.material !== undefined && source.material instanceof MultiMaterial) {
+            const material = source.material.subMaterials[origin.material];
+            if (!material) throw new Error();
+            mesh.material = cloneMaterial(material);
+          }
+          meshes.push(mesh);
+          applyPart(mesh, parts[i]);
+          if (origin.sideOrientation !== undefined) mesh.overrideMaterialSideOrientation = origin.sideOrientation;
+        }
+        entity = spawnComposite(editor, ej.name, meshes, ej.composite.origins.map(p => ({ ...p, asset: assets.get(p.asset!) })), false, true);
+      } catch { meshes.forEach(disposeMeshCopy); missing.add(ej.name); }
+      finally { for (const t of temporaries) { editor.remove(t); t.meshes.forEach(m => disposeMeshCopy(m as Mesh)); t.root.dispose(); } }
+    } else if (ej.kind === 'model') {
       const asset = assets.get(ej.asset!);
       if (!loaded.has(ej.asset!)) {
         try {
@@ -303,6 +353,7 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
     byIndex[byIndex.length - 1] = entity;
 
     entity.name = entity.root.name = ej.name;
+    if (ej.t.pre) entity.root.setPreTransformMatrix(Matrix.FromArray(ej.t.pre));
     entity.root.position.fromArray(ej.t.p);
     entity.root.rotationQuaternion!.fromArray(ej.t.q);
     entity.root.scaling.fromArray(ej.t.s);
@@ -310,13 +361,18 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
       const mats = editor.materialsOf(entity);
       ej.materials.forEach((mj, i) => mats[i] && applyMaterial(mats[i], mj));
     }
+    // Edited geometry; when it was edited on a rig made in the app it's in the skeleton's space,
+    // so it goes on after the rig is rebuilt below
+    let separation: SeparationState | null = null;
     if (ej.separation) {
       const blob = files[ej.separation];
       try {
         if (!blob) throw new Error();
-        editor.separator.restoreData(entity, new Uint8Array(await blob.arrayBuffer()));
+        separation = decodeSeparation(new Uint8Array(await blob.arrayBuffer()));
+        if (!(separation.rigSpace && ej.rig)) { editor.separator.restore(entity, separation); separation = null; }
       } catch {
         missing.add(tr('Separated part {name}', { name: ej.name }));
+        separation = null;
       }
     }
     if (ej.optimization) {
@@ -342,6 +398,9 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
       } catch {
         missing.add(tr('Rig of {name}', { name: ej.name }));
       }
+    }
+    if (separation) {
+      try { editor.separator.restore(entity, separation); } catch { missing.add(tr('Separated part {name}', { name: ej.name })); }
     }
     if (ej.boneMap) {
       entity.boneMap = { ...ej.boneMap };
@@ -377,6 +436,13 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
     if (!ej.visible) editor.setVisible(entity, false);
   }
 
+  for (const [i, ej] of json.entities.entries()) if (ej.group) {
+    const members = ej.group.map(k => byIndex[k]).filter((e): e is Entity => !!e);
+    if (members.length !== ej.group.length || members.some(e => e.groupParent || e.groupMembers)) { missing.add(ej.name); continue; }
+    const group = editor.spawnGroup(members, ej.name, quiet, false);
+    group.root.position.fromArray(ej.t.p); group.root.rotationQuaternion!.fromArray(ej.t.q); group.root.scaling.fromArray(ej.t.s);
+    editor.setVisible(group, ej.visible); byIndex[i] = group;
+  }
   editor.tools.load(json.tools, byIndex);
 
   const c = json.camera;

@@ -191,7 +191,7 @@ export class ARMode {
     this.baseEnvIntensity = preset.env.intensity ?? this.baseEnvIntensity;
     const k = Math.max(this.local.size, 0.5) / 2;
     const focus = new Vector3(0, this.local.height / 2, 0);
-    const casters = this.editor.entities.filter((e) => e.kind !== 'light' && e.visible).flatMap((e) => e.meshes);
+    const casters = this.editor.entities.filter((e) => e.kind !== 'light' && !e.groupMembers && e.visible && e.root.isEnabled()).flatMap((e) => e.meshes);
     for (const def of preset.lights) {
       const pos = new Vector3(...def.pos).scale(k);
       const direction = focus.subtract(pos).normalize();
@@ -243,6 +243,8 @@ export class ARMode {
   /** Starts the AR session. Must be called from a tap (browsers require a user gesture). */
   async enter(overlay: HTMLElement) {
     if (this.active) return;
+    this.editor.fusion.cancel();
+    this.editor.separator.cancel();
     const scene = this.editor.scene;
     if (!this.xr) {
       this.xr = await WebXRDefaultExperience.CreateAsync(scene, {
@@ -352,7 +354,7 @@ export class ARMode {
     anchor.rotationQuaternion = Quaternion.Identity();
     anchor.position.set(b ? b.center.x : 0, b ? b.min.y : 0, b ? b.center.z : 0);
     anchor.computeWorldMatrix(true);
-    const nodes: TransformNode[] = [...ed.entities.map((e) => e.root), ed.groundMesh];
+    const nodes: TransformNode[] = [...ed.entities.filter(e => !e.groupParent).map((e) => e.root), ed.groundMesh];
     this.saved = nodes.map((node) => ({
       node,
       parent: node.parent,
@@ -617,7 +619,7 @@ export class ARMode {
           }
           return clone;
         };
-        for (const entity of this.editor.entities) for (const mesh of entity.meshes) {
+        for (const entity of this.editor.entities.filter(e => !e.groupMembers)) for (const mesh of entity.meshes) {
           const original = mesh.material;
           if (!original) continue;
           const clone = cloneMaterial(original);

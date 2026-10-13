@@ -8,6 +8,7 @@ import { tr } from '../core/i18n';
 import { simplifyMeshes } from './simplify';
 import type { SimplifyMesh } from './simplify';
 import { bakeNormals, bakedPng, bakedTexture, normalMapOf, pngTexture, setNormalMap } from './bake';
+import { capturePart } from '../edit/parts';
 
 /**
  * Optimized variants of models: fewer triangles, same look. Non-destructive and reversible
@@ -327,6 +328,43 @@ export class ModelOptimizer {
   }
 
   /** Replaces one optimization state with another (either can be none). */
+  /**
+   * Makes the optimized geometry the model's own, so its surface can be edited: levels of detail
+   * are dropped (they would no longer match) and the geometry is saved like an edited mesh.
+   * A baked normal map becomes the material's normal texture. Undo goes back to the
+   * optimization, with the original still available.
+   */
+  async freeze(e: Entity) {
+    const o = e.optimization;
+    if (!o || o.session) return;
+    // Baked normals live in the optimization: keep them as the material's own texture
+    for (const v of o.meshes) {
+      if (!v.normal) continue;
+      const file = new File([v.normal.png as Uint8Array<ArrayBuffer>], `${v.mesh.name || 'mesh'}-normals.png`, { type: 'image/png' });
+      await this.editor.setMaterialTexture(v.normal.material, 'normal', file);
+    }
+    const previous = e.separation;
+    const frozen = () => {
+      for (const v of o.meshes) {
+        for (const lod of v.lodMeshes) {
+          v.mesh.removeLODLevel(lod);
+          lod.setEnabled(false);
+        }
+        v.mesh.useLODScreenCoverage = false;
+      }
+      e.optimization = undefined;
+      e.separation = { meshes: e.meshes.map((m) => capturePart(m as Mesh, true)), pivot: previous?.pivot ?? [0, 0, 0] };
+      this.editor.notify('optimize');
+      this.editor.notify('entities');
+    };
+    const unfrozen = () => {
+      e.separation = previous;
+      this.swap(e, undefined, o);
+    };
+    frozen();
+    this.editor.record({ undo: unfrozen, redo: frozen });
+  }
+
   private swap(e: Entity, from: Optimization | undefined, to: Optimization | undefined) {
     for (const v of from?.meshes ?? []) {
       for (const lod of v.lodMeshes) {

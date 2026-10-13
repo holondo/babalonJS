@@ -218,11 +218,11 @@ export function numberInput(label: string, value: number, opts: { step?: number;
 }
 
 /** Progress of a long task (0–1), with its message. */
-export function progressBar(fraction: number, label: string) {
+export function progressBar(fraction: number | null, label: string) {
   return h(
     'div',
-    { class: 'progress', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.round(fraction * 100)) },
-    h('i', { style: `width: ${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%` }),
+    { class: `progress${fraction === null ? ' indeterminate' : ''}`, role: 'progressbar', 'aria-label': label, 'aria-valuemin': '0', 'aria-valuemax': '100', ...(fraction === null ? {} : { 'aria-valuenow': String(Math.round(fraction * 100)) }) },
+    h('i', { style: `width: ${Math.round(Math.max(0, Math.min(1, fraction ?? 1)) * 100)}%` }),
     h('span', {}, label),
   );
 }

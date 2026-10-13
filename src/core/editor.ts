@@ -1,4 +1,8 @@
+import { reparent, setAffineTransform } from '../edit/groups';
+import { Fusion } from '../edit/fuse';
 import type { LibraryAttribution } from '../library/polyhaven';
+import { combine } from '../edit/combine';
+import type { Composite } from '../edit/combine';
 import { Separator } from '../edit/separate';
 import type { SeparationState } from '../edit/separate';
 import { loadEnvironment } from './environments';
@@ -108,6 +112,9 @@ export interface Entity {
   textureOptimization?: TextureOptimization;
   /** Part of a model separated from the rest (triangle subsets or cut geometry). */
   separation?: SeparationState;
+  composite?: Composite;
+  groupMembers?: Entity[];
+  groupParent?: Entity;
   castShadows: boolean;
   visible: boolean;
   light?: ShadowLight;
@@ -135,6 +142,7 @@ export interface AssetRef {
 }
 
 export interface AddOptions {
+  publish?: boolean;
   record?: boolean;
   select?: boolean;
 }
@@ -143,6 +151,7 @@ interface TransformSnapshot {
   p: Vector3;
   q: Quaternion;
   s: Vector3;
+  pre: Matrix;
 }
 
 interface Command {
@@ -336,6 +345,7 @@ export class Editor {
   readonly rigger = new Rigger(this);
   /** Optimized variants of heavy models. */
   readonly optimizer = new ModelOptimizer(this);
+  readonly fusion = new Fusion(this);
   readonly separator = new Separator(this);
   readonly textureOptimizer = new TextureOptimizer(this);
   /** Other selected objects besides `selected` (which is the reference for alignment). */
@@ -423,8 +433,11 @@ export class Editor {
     const g = this.gizmos.gizmos;
     g.positionGizmo!.planarGizmoEnabled = true;
     for (const gz of [g.positionGizmo!, g.rotationGizmo!, g.scaleGizmo!]) {
-      gz.onDragStartObservable.add(() => (this.rigger.active ? this.rigger.remember() : this.pose.active ? this.pose.begin() : this.beginTransform()));
+      // Dragging the shape guide only places it (nothing to record)
+      gz.onDragStartObservable.add(() => (this.separator.guide ? undefined : this.separator.transform ? this.separator.transform.begin() : this.rigger.active ? this.rigger.remember() : this.pose.active ? this.pose.begin() : this.beginTransform()));
       gz.onDragEndObservable.add(() => {
+        if (this.separator.guide) return this.invalidate();
+        if (this.separator.transform) return this.separator.transform.end();
         if (this.rigger.active) return this.rigger.endHandleDrag();
         if (this.pose.active) return this.pose.end();
         this.tools.clearSmartLines();
@@ -435,7 +448,7 @@ export class Editor {
     const pg = g.positionGizmo!;
     let raw: Vector3 | null = null;
     pg.onDragStartObservable.add(() => {
-      if (this.pose.active || this.rigger.active) return;
+      if (this.pose.active || this.rigger.active || this.separator.active) return;
       raw = this.selected?.root.position.clone() ?? null;
       this.startFollow();
     });
@@ -450,6 +463,8 @@ export class Editor {
     for (const [gizmo, axes] of axisGizmos) {
       gizmo.dragBehavior.onDragObservable.add((ev) => {
         // Posing: the gizmo drags the IK target, the arm/leg follows
+        if (this.fusion.busy || this.fusion.preview) return;
+      if (this.separator.active) { this.invalidate(); return; }
         if (this.rigger.active) return this.rigger.dragHandle();
         if (this.pose.active) return this.pose.dragIk();
         const e = this.selected;
@@ -700,6 +715,7 @@ export class Editor {
   }
 
   undo() {
+    if (this.fusion.busy || this.fusion.preview) this.fusion.cancel();
     this.commitEdits();
     // While placing a rig's joints, undo/redo step through the joint moves
     if (this.rigger.active) return this.rigger.undo();
@@ -712,6 +728,7 @@ export class Editor {
   }
 
   redo() {
+    if (this.fusion.busy || this.fusion.preview) this.fusion.cancel();
     this.commitEdits();
     if (this.rigger.active) return this.rigger.redo();
     const cmd = this.redoStack.pop();
@@ -723,10 +740,11 @@ export class Editor {
   }
 
   private snapshot(e: Entity): TransformSnapshot {
-    return { p: e.root.position.clone(), q: e.root.rotationQuaternion!.clone(), s: e.root.scaling.clone() };
+    return { p: e.root.position.clone(), q: e.root.rotationQuaternion!.clone(), s: e.root.scaling.clone(), pre: e.root.getPivotMatrix().clone() };
   }
 
   private restore(e: Entity, t: TransformSnapshot) {
+    e.root.setPreTransformMatrix(t.pre);
     e.root.position.copyFrom(t.p);
     e.root.rotationQuaternion!.copyFrom(t.q);
     e.root.scaling.copyFrom(t.s);
@@ -786,7 +804,7 @@ export class Editor {
     let node: Node | null = mesh;
     while (node) {
       const id = node.metadata?.entityId;
-      if (id) return this.entities.find((e) => e.id === id) ?? null;
+      if (id) { const e = this.entities.find((e) => e.id === id); return e?.groupParent ?? e ?? null; }
       node = node.parent;
     }
     return null;
@@ -812,12 +830,13 @@ export class Editor {
   private readonly detachedClips = new WeakMap<Entity, ClipState>();
 
   private attach(entity: Entity) {
-    entity.root.setEnabled(true);
+    entity.root.setEnabled(!entity.groupMembers || entity.visible);
     const clip = this.detachedClips.get(entity);
     if (clip) this.anim.apply(entity, clip);
     this.motions.resume(entity);
     if (entity.light) entity.light.setEnabled(true);
     if (!this.entities.includes(entity)) this.entities.push(entity);
+    if (entity.groupParent) entity.groupParent.meshes = entity.groupParent.groupMembers!.filter(e => this.entities.includes(e)).flatMap(e => e.meshes);
     this.refreshShadows();
     this.emit('entities');
   }
@@ -831,6 +850,7 @@ export class Editor {
     this.motions.suspend(entity);
     entity.animationGroups.forEach((a) => a.stop());
     this.entities = this.entities.filter((e) => e !== entity);
+    if (entity.groupParent) entity.groupParent.meshes = entity.groupParent.groupMembers!.filter(e => this.entities.includes(e)).flatMap(e => e.meshes);
     this.refreshShadows();
     this.emit('entities');
   }
@@ -895,6 +915,8 @@ export class Editor {
     this.loading.notifyObservers({ name: asset.name, progress: 0 });
     try {
       if (asset.main) for (const f of [asset.main, ...(asset.deps ?? [])]) FilesInputStore.FilesToLoad[f.name.toLowerCase()] = f;
+      // GLB scene exports can contain cameras; the loader needs their constructor registration.
+      await import('@babylonjs/core/Cameras/universalCamera.js');
       const container = await LoadAssetContainerAsync(asset.main ?? asset.url!, this.scene, {
         rootUrl: asset.main ? 'file:' : undefined,
         // Animations start on the instances placed in the scene, never on the hidden template
@@ -904,6 +926,13 @@ export class Editor {
           if (ev.lengthComputable) this.loading.notifyObservers({ name: asset.name, progress: ev.loaded / ev.total });
         },
       });
+      for (const node of [...container.transformNodes, ...container.meshes]) {
+        const matrix = node.metadata?.gltf?.extras?.babalonAffine;
+        if (Array.isArray(matrix) && matrix.length === 16 && matrix.every(Number.isFinite)) {
+          node.rotationQuaternion ??= Quaternion.Identity();
+          setAffineTransform(node, Matrix.FromArray(matrix));
+        }
+      }
       container.animationGroups.forEach((g) => g.stop());
       return container;
     } finally {
@@ -924,7 +953,7 @@ export class Editor {
   /** Creates a scene object from an already loaded model (used when opening projects). */
   spawnModel(container: AssetContainer, name: string, source: ModelSource | null, asset: AssetRef, opts: AddOptions = {}) {
     const entity = this.instantiate(container, name, source, asset);
-    this.register(entity, opts.record ?? true, opts.select ?? true);
+    if (opts.publish !== false) this.register(entity, opts.record ?? true, opts.select ?? true);
     return entity;
   }
 
@@ -933,7 +962,15 @@ export class Editor {
     const fit = new TransformNode('fit', this.scene);
     fit.parent = root;
     const inst = container.instantiateModelsToScene((n) => n, true, { doNotInstantiate: true });
-    for (const n of inst.rootNodes) n.parent = fit;
+    for (const n of inst.rootNodes) {
+      n.parent = fit;
+      for (const node of [n, ...n.getDescendants()]) if (node instanceof TransformNode) {
+        const matrix = node.metadata?.gltf?.extras?.babalonAffine;
+        if (Array.isArray(matrix) && matrix.length === 16 && matrix.every(Number.isFinite)) {
+          node.rotationQuaternion ??= Quaternion.Identity(); setAffineTransform(node, Matrix.FromArray(matrix));
+        }
+      }
+    }
     const meshes = root.getChildMeshes(false).filter((m) => m.getTotalVertices() > 0 || m.getClassName().includes('Splat'));
 
     if (!source) {
@@ -1091,7 +1128,7 @@ export class Editor {
   }
 
   private refreshShadows() {
-    const casters = this.entities.filter((e) => e.kind !== 'light' && e.castShadows && e.visible).flatMap((e) => e.meshes);
+    const casters = [...new Set(this.entities.filter((e) => e.kind !== 'light' && !e.groupMembers && e.castShadows && e.visible && e.root.isEnabled()).flatMap((e) => e.meshes))];
     const shadowLights = this.entities.filter((e) => e.shadowGen);
     for (const l of shadowLights) {
       const map = l.shadowGen!.getShadowMap()!;
@@ -1131,6 +1168,18 @@ export class Editor {
       entity = this.selected ?? undefined;
     }
     if (!entity) return;
+    if (entity.groupMembers) {
+      let result: Entity | undefined;
+      this.group(() => {
+        const copies = entity.groupMembers!.filter(e => this.entities.includes(e)).map(e => this.duplicate(e)).filter((e): e is Entity => !!e);
+        result = this.groupObjects(copies);
+        result.root.rotationQuaternion!.copyFrom(entity.root.rotationQuaternion!);
+        result.root.scaling.copyFrom(entity.root.scaling);
+        result.root.position.copyFrom(entity.root.position).addInPlace(new Vector3(.6, 0, .6));
+        copies.forEach((e, i) => this.restore(e, this.snapshot(entity.groupMembers![i])));
+      });
+      return result;
+    }
     let copy: Entity;
     if (entity.kind === 'model' && entity.source) {
       copy = this.createModelCopy(entity);
@@ -1153,11 +1202,77 @@ export class Editor {
     if (entity.rig) this.rigger.copy(entity, copy);
     if (entity.motion) this.motions.set(copy, { ...entity.motion }, false);
     if (entity.kind !== 'model' || entity.rig) this.copyAnimationState(entity, copy);
+    copy.root.setPreTransformMatrix(entity.root.getPivotMatrix().clone());
     copy.root.rotationQuaternion!.copyFrom(entity.root.rotationQuaternion!);
     copy.root.scaling.copyFrom(entity.root.scaling);
     copy.root.position.copyFrom(entity.root.position).addInPlace(new Vector3(0.6, 0, 0.6));
     this.select(copy);
     return copy;
+  }
+
+  spawnGroup(members: Entity[], name = tr('Group'), opts: AddOptions = {}, preserveWorld = true) {
+    const root = this.createRoot(this.uniqueName(name));
+    const group: Entity = { id: this.nextId++, name: root.name, kind: 'model', root, meshes: members.flatMap(e => e.meshes), animationGroups: [], castShadows: true, visible: true, groupMembers: members };
+    if (preserveWorld) {
+      const bounds = members.map(e => this.boundsOf(e));
+      const min = bounds[0].min.clone(), max = bounds[0].max.clone();
+      bounds.forEach(b => { min.minimizeInPlace(b.min); max.maximizeInPlace(b.max); });
+      root.position.set((min.x + max.x) / 2, min.y, (min.z + max.z) / 2);
+    }
+    for (const e of members) {
+      if (preserveWorld) reparent(e.root, root);
+      else e.root.parent = root;
+      e.groupParent = group;
+    }
+    this.register(group, opts.record ?? true, opts.select ?? true);
+    return group;
+  }
+
+  groupObjects(members = this.selection) {
+    if (members.length < 2) throw new Error(tr('Select at least two objects.'));
+    if (members.some(e => e.groupMembers || e.groupParent || e.kind === 'light')) throw new Error(tr('Ungroup these objects before creating another group.'));
+    const group = this.spawnGroup(members, tr('Group'), { record: false });
+    const parent = (on: boolean) => {
+      for (const e of members) { reparent(e.root, on ? group.root : null); e.groupParent = on ? group : undefined; }
+      if (on) this.attach(group); else this.detach(group);
+      this.select(on ? group : members[0]);
+    };
+    this.push({ undo: () => parent(false), redo: () => parent(true), entities: [group, ...members] });
+    return group;
+  }
+
+  ungroup(group = this.selected) {
+    if (!group?.groupMembers) return;
+    const members = group.groupMembers;
+    const local = members.map(e => this.snapshot(e));
+    const apply = (on: boolean) => {
+      for (const [i, e] of members.entries()) {
+        if (on) { e.root.parent = group.root; this.restore(e, local[i]); }
+        else reparent(e.root, null);
+        e.groupParent = on ? group : undefined;
+      }
+      if (on) this.attach(group); else this.detach(group);
+      this.select(on ? group : members[0]);
+    };
+    apply(false);
+    this.push({ undo: () => apply(true), redo: () => apply(false), entities: [group, ...members] });
+  }
+
+  editableModel(entity: Entity) {
+    if (entity.kind === 'model') return entity;
+    const result = combine(this, [entity], 1); this.rename(result, entity.name); return result;
+  }
+
+  combine(entities = this.selection) { return combine(this, entities); }
+
+  /**
+   * Before editing geometry: an optimized model becomes its optimized version (undoable), instead
+   * of refusing. Returns how many models were frozen (to tell the user).
+   */
+  async prepareGeometryEdit(entities: Entity[]) {
+    let frozen = 0;
+    for (const e of entities) if (e.optimization && !e.optimization.session) { await this.optimizer.freeze(e); frozen++; }
+    return frozen;
   }
 
   private copyMaterials(entity: Entity, copy: Entity) {
@@ -1187,9 +1302,11 @@ export class Editor {
     if (!entity.source) throw new Error(tr('This model cannot be copied.'));
     const copy = this.instantiate(entity.source.container, entity.name.replace(/ \d+$/, ''), entity.source);
     copy.castShadows = entity.castShadows;
+    copy.root.setPreTransformMatrix(entity.root.getPivotMatrix().clone());
     copy.root.rotationQuaternion!.copyFrom(entity.root.rotationQuaternion!);
     copy.root.scaling.copyFrom(entity.root.scaling);
     copy.root.position.copyFrom(entity.root.position);
+    copy.composite = entity.composite;
     this.copyMaterials(entity, copy);
     if (entity.boneMap) { copy.boneMap = { ...entity.boneMap }; forgetHumanoid(copy); }
     if (entity.separation) this.separator.copy(entity, copy);
@@ -1224,6 +1341,11 @@ export class Editor {
       entity = this.selected ?? undefined;
     }
     if (!entity) return;
+    if (entity.groupMembers) return this.group(() => {
+      entity!.groupMembers!.filter(e => this.entities.includes(e)).forEach(e => this.remove(e));
+      this.detach(entity!);
+      this.push({ undo: () => this.attach(entity!), redo: () => this.detach(entity!), entities: [entity!] });
+    });
     this.detach(entity);
     this.push({ undo: () => this.attach(entity), redo: () => this.detach(entity), entities: [entity] });
   }
@@ -1235,6 +1357,7 @@ export class Editor {
 
   setVisible(entity: Entity, visible: boolean) {
     entity.visible = visible;
+    if (entity.groupMembers) { entity.root.setEnabled(visible); this.refreshShadows(); this.emit('entities'); return; }
     for (const m of entity.meshes) m.isVisible = visible;
     if (entity.light) entity.light.setEnabled(visible);
     this.refreshShadows();
@@ -1243,6 +1366,7 @@ export class Editor {
 
   setCastShadows(entity: Entity, on: boolean) {
     entity.castShadows = on;
+    entity.groupMembers?.forEach(e => { e.castShadows = on; });
     this.refreshShadows();
   }
 
@@ -1271,6 +1395,8 @@ export class Editor {
 
   /** Really deletes everything (including what the undo history holds) to start/open another project. */
   resetScene() {
+    this.fusion.cancel();
+    this.separator.cancel();
     this.edits.clear();
     this.select(null);
     this.tools.clear();
@@ -1311,6 +1437,8 @@ export class Editor {
 
   /** Selects an object. With `additive`, toggles it in a multi-selection instead. */
   select(entity: Entity | null, additive = false) {
+    if (entity && entity !== this.selected && (this.fusion.busy || this.fusion.preview)) this.fusion.cancel();
+    if (additive && entity && this.selection.some(e => e === entity.groupParent || e.groupParent === entity)) additive = false;
     if (additive && entity && this.selected) {
       if (entity === this.selected) {
         // Removing the primary: the next selected object becomes the reference
@@ -1380,6 +1508,10 @@ export class Editor {
 
   private applyTool() {
     const e = this.selected;
+    if (this.fusion.busy || this.fusion.preview) {
+      this.gizmos.positionGizmoEnabled = this.gizmos.rotationGizmoEnabled = this.gizmos.scaleGizmoEnabled = false;
+      this.gizmos.attachToMesh(null); e?.root.removeBehavior(this.drag); return;
+    }
     if (this.rigger?.active) {
       // Rigging: joints are dragged on screen; a selected joint also gets the move gizmo (one axis at a time)
       const handle = this.rigger.gizmoHandle();
@@ -1387,6 +1519,17 @@ export class Editor {
       this.gizmos.positionGizmoEnabled = !!handle && !this.cleanView;
       this.gizmos.gizmos.positionGizmo!.snapDistance = 0;
       this.gizmos.attachToNode(handle && !this.cleanView ? handle : null);
+      e?.root.removeBehavior(this.drag);
+      return;
+    }
+    if (this.separator?.active) {
+      // The shape being placed takes the gizmo; otherwise the selected region's handle
+      const handle = this.separator.guide?.mesh ?? this.separator.transform?.handle;
+      const show = !!handle && !this.cleanView;
+      this.gizmos.positionGizmoEnabled = show && this.tool === 'move';
+      this.gizmos.rotationGizmoEnabled = show && this.tool === 'rotate';
+      this.gizmos.scaleGizmoEnabled = show && this.tool === 'scale';
+      this.gizmos.attachToMesh(show ? handle! : null);
       e?.root.removeBehavior(this.drag);
       return;
     }
@@ -1794,6 +1937,7 @@ export class Editor {
   }
 
   setPhotoMode(on: boolean) {
+    if (on && (this.fusion.busy || this.fusion.preview)) this.fusion.cancel();
     this.photoMode = on;
     this.applyCleanView();
     this.emit('photo');
@@ -1906,6 +2050,7 @@ export class Editor {
    * meshopt-compressed (loaded on demand); otherwise the original models, as they were loaded.
    */
   async exportGLB(compact = false): Promise<Blob> {
+    if (this.fusion.preview || this.fusion.busy) this.fusion.cancel();
     this.rigger.difference.clear();
     for (const e of this.entities) if (e.rig) updateHelperBones(e.rig);
     const exclude = new Set<Node>([this.ground, this.grid, ...this.helpers, ...this.overlays]);
@@ -1924,6 +2069,8 @@ export class Editor {
     for (const e of original) this.optimizer.preview(e, true);
     const textures = this.textureOptimizer.forExport(compact);
     let glb: Blob;
+    const { affineExport } = await import('../edit/affineExport');
+    const restoreAffineExport = affineExport(this.scene);
     try {
       const { GLTF2Export } = await import('@babylonjs/serializers/glTF/2.0/glTFSerializer.js');
       const data = await GLTF2Export.GLBAsync(this.scene, 'scene', {
@@ -1934,6 +2081,7 @@ export class Editor {
       });
       glb = data.files['scene.glb'] as Blob;
     } finally {
+      restoreAffineExport();
       textures.restore();
       for (const e of original) this.optimizer.preview(e, false);
       this.invalidate();

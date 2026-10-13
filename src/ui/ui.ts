@@ -190,7 +190,7 @@ export class UI {
       }
       if (kind === 'tool') {
         this.renderSelbar();
-        if (editor.separator.active && this.tab === 'objects' && !this.busy) this.renderPanel();
+        if (this.tab === 'objects' && !this.busy && (editor.separator.active || this.segment.objects === 'object')) this.renderPanel();
         return;
       }
       if (kind === 'optimize') {
@@ -598,6 +598,11 @@ export class UI {
   }
 
   get currentProjectId() { return this.projectId; }
+
+  /** Optimized models in the selection become their optimized version before a geometry edit. */
+  private async freezeForEdit() {
+    if (await this.editor.prepareGeometryEdit(this.editor.selection)) this.toast(tr('The optimized version is now the model, so it can be edited. Undo to go back.'), 'info', undefined, 6000);
+  }
   openProjectPicker() { this.projectInput.click(); }
 
   projectRenamed(id: string, name: string) { if (this.projectId === id) this.projectName = name; }
@@ -750,6 +755,10 @@ export class UI {
     const item = (node: IconNode, label: string, run: () => void, opts: { on?: boolean; keep?: boolean; kbd?: string } = {}) =>
       menuItem(node, label, () => (opts.keep ? null : this.toggleSelMenu(false), run()), opts);
     this.selMenu.replaceChildren(
+      ...(ed.selection.length > 1 ? [item(Group, tr('Group'), () => this.run(() => { ed.groupObjects(); }))] : []),
+      ...(e.groupMembers ? [item(Group, tr('Ungroup'), () => ed.ungroup(e))] : []),
+      ...(ed.selection.length > 1 ? [item(Group, tr('Fuse volumes…'), () => this.run(async () => { await this.freezeForEdit(); this.openTab('objects'); this.segment.objects = 'object'; await ed.fusion.start(); this.renderPanel(); }))] : []),
+      ...(ed.selection.length > 1 ? [item(Group, tr('Combine'), () => this.run(async () => { await this.freezeForEdit(); ed.combine(); }))] : []),
       item(Copy, tr('Duplicate'), () => ed.duplicate(), { kbd: 'Ctrl+D' }),
       item(Focus, tr('Focus camera'), () => ed.focus(), { kbd: 'F' }),
       item(Orbit, tr('Orbit around this object'), () => {
@@ -759,8 +768,8 @@ export class UI {
       ...(e.animationGroups.length && ed.selection.length === 1
         ? [ed.anim.isPlaying(e) ? item(Pause, tr('Pause animation'), () => ed.anim.pause(e)) : item(Play, tr('Play animation'), () => ed.anim.play(e))]
         : []),
-      ...(skeletonsOf(e).length ? [item(PersonStanding, tr('Pose joints'), () => this.poseUI.startPosing(e))] : []),
-      ...(e.kind === 'model' && ed.selection.length === 1 ? [item(Scissors, tr('Separate parts…'), () => this.separateUI.start(e))] : []),
+      ...(!e.groupMembers && skeletonsOf(e).length ? [item(PersonStanding, tr('Pose joints'), () => this.poseUI.startPosing(e))] : []),
+      ...(e.kind !== 'light' && !e.groupMembers && ed.selection.length === 1 ? [item(Scissors, tr('Edit mesh…'), () => this.separateUI.start(e))] : []),
       item(Group, tr('Multi-select'), () => (ed.setMultiSelect(!ed.multiSelect), this.toggleSelMenu(true)), { on: ed.multiSelect, keep: true }),
       item(Magnet, tr('Snap to grid'), () => (ed.setSnap(!ed.snap), this.toggleSelMenu(true)), { on: ed.snap, keep: true }),
     );
@@ -838,9 +847,11 @@ export class UI {
     switch (tab) {
       case 'add': return [{ id: 'add', label: tr('Add') }, { id: 'library', label: tr('Library') }];
       case 'objects': {
+        if (this.editor.fusion.busy || this.editor.fusion.preview) return [{ id: 'object', label: tr('Fuse volumes') }];
         const e = this.editor.selected;
         if (!e || e.kind === 'light') return null;
-        if (this.editor.separator.active) return [{ id: 'separate', label: tr('Separate') }];
+        if (this.editor.separator.active) return [{ id: 'separate', label: tr('Edit mesh') }];
+        if (e.groupMembers) return [{ id: 'object', label: tr('Object') }, { id: 'material', label: tr('Material') }];
         return [
           { id: 'object', label: tr('Object') },
           ...(this.editor.materialsOf(e).length ? [{ id: 'material', label: tr('Material') }] : []),

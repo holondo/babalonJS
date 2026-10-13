@@ -88,7 +88,7 @@ export function selectScreen(selection: FaceSelection, points: ScreenPoint[], ra
           const w1 = ((cx - px) * (ay - py) - (ax - px) * (cy - py)) / area;
           const w2 = 1 - w0 - w1;
           if (w0 < -0.01 || w1 < -0.01 || w2 < -0.01) continue;
-          const z = w0 * za + w1 * zb + w2 * zc;
+          const z = 1 / (w0 / za + w1 / zb + w2 / zc);
           const i = y * bw + x;
           if (z < depth[i]) depth[i] = z;
         }
@@ -102,7 +102,7 @@ export function selectScreen(selection: FaceSelection, points: ScreenPoint[], ra
     const selected: number[] = [];
     for (let f = 0; f < indices.length / 3; f++) {
       const a = indices[f * 3] * 3, b = indices[f * 3 + 1] * 3, c = indices[f * 3 + 2] * 3;
-      const z = (s[a + 2] + s[b + 2] + s[c + 2]) / 3;
+      const z = 3 / (1 / s[a + 2] + 1 / s[b + 2] + 1 / s[c + 2]);
       if (z <= 0) continue;
       const x = (s[a] + s[b] + s[c]) / 3, y = (s[a + 1] + s[b + 1] + s[c + 1]) / 3;
       if (!hits(x, y)) continue;

@@ -1,10 +1,21 @@
+import { SculptStroke, SculptContext, applyStrokeState } from './sculpt';
+import { ShapeGuide, conformToShape, primitiveTransform } from './conform';
+import type { ConformMode, GuideShape } from './conform';
+import { Deform } from './deform';
+import { forgetFaceData } from './smartSelect';
+import type { SurfaceBrush } from './sculpt';
+import { bridgePart, connectBorders } from './connect';
+import { fillHoles } from './holes';
+import { editBlocker } from './combine';
+import { SelectionTransform } from './transformSelection';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import type { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { Entity, Editor } from '../core/editor';
 import { tr } from '../core/i18n';
 import { FaceSelection } from './selection';
-import { applyPart, capturePart, subset } from './parts';
+import { openEdges } from './faceTopology';
+import { applyPart, capturePart, compactFaces, mergeLocal, subset, encodeSeparation, decodeSeparation } from './parts';
 import type { MeshPart } from './parts';
 export type { MeshPart } from './parts';
 import { selectScreen } from './lasso';
@@ -12,7 +23,9 @@ import type { ScreenPoint } from './lasso';
 import { selectionRing, smartSelect } from './smartSelect';
 import { PlaneCut } from './planeCut';
 
-export interface SeparationState { meshes: MeshPart[]; pivot: number[] }
+export type { SeparationState } from './parts';
+import type { SeparationState } from './parts';
+export { encodeSeparation, decodeSeparation } from './parts';
 export type SelectTool = 'piece' | 'smart' | 'lasso' | 'brush';
 
 export class Separator {
@@ -21,11 +34,11 @@ export class Separator {
   constructor(editor: Editor) { this.editor = editor; }
   blocker(entity: Entity) {
     if (!entity.source || entity.kind !== 'model' || entity.meshes.some(m => !(m instanceof Mesh) || !m.getVerticesData('position') || m.getClassName().includes('Splat'))) return tr('Choose a triangle model to separate.');
-    if (entity.rig || entity.optimization) return tr('Revert rigging and optimization before separating this model.');
+    if (entity.optimization) return tr('Revert optimization before editing geometry.');
     return null;
   }
-  start(entity: Entity) { const reason = this.blocker(entity); if (reason) throw new Error(reason); this.stop(); this.editor.anim.pause(entity); this.selection = new FaceSelection(this.editor, entity); this.editor.refreshTool(); return this.selection; }
-  stop() { this.selection?.dispose(); this.selection = null; this.editor.refreshTool(); }
+  start(entity: Entity) { const reason = this.blocker(entity); if (reason) throw new Error(reason); this.stop(); this.editor.anim.pause(entity); this.editor.pose.stop(); this.editor.rigger.toRest(entity); this.selection = new FaceSelection(this.editor, entity); this.selection.prefetch(); this.editor.refreshTool(); return this.selection; }
+  stop() { this.guide?.dispose(); this.guide = null; this.sculptContexts.clear(); this.clearBridge(); this.transform?.dispose(); this.transform = null; this.mode = 'select'; this.selection?.dispose(); this.selection = null; this.editor.refreshTool(); }
   copy(from: Entity, to: Entity) { if (from.separation) this.restore(to, structuredClone(from.separation!)); }
   restore(entity: Entity, state: SeparationState) {
     if (state.meshes.length !== entity.meshes.length) throw new Error(tr('The separated model does not match its source.'));
@@ -52,6 +65,46 @@ export class Separator {
 
   // ---------- Separate mode (one model at a time) ----------
 
+  surfaceBrush: SurfaceBrush | null = null;
+  brushStrength = .3;
+  brushSelected = false;
+  bridgePreview: Mesh | null = null;
+  bridgeReverse = false;
+  bridgeOffset = 0;
+  clearBridge() { if (this.bridgePreview) { this.editor.overlays.delete(this.bridgePreview); this.bridgePreview.dispose(); this.bridgePreview = null; } }
+  previewBridge() {
+    this.clearBridge();
+    const bridge = bridgePart(this.selection!, this.bridgeReverse, this.bridgeOffset);
+    const mesh = new Mesh('Connection preview', this.editor.scene);
+    mesh.overrideMaterialSideOrientation = bridge.mesh.overrideMaterialSideOrientation;
+    applyPart(mesh, bridge.part); mesh.material = bridge.mesh.material; mesh.parent = this.selection!.entity.root; mesh.isPickable = false;
+    this.bridgePreview = mesh; this.editor.overlays.add(mesh); this.editor.invalidate();
+  }
+  connect() {
+    const selection = this.selection!;
+    this.clearBridge();
+    const result = connectBorders(this.editor, selection, this.bridgeReverse, this.bridgeOffset);
+    this.stop(); this.start(result); this.mode = 'surface'; return result;
+  }
+
+  mode: 'select' | 'transform' | 'surface' = 'select';
+  transform: SelectionTransform | null = null;
+  setMode(mode: typeof this.mode) {
+    if (mode !== 'select') { const reason = editBlocker(this.selection!.entity); if (reason) throw new Error(reason); }
+    if (mode === 'transform' && !this.selection!.count) throw new Error(tr('Select faces first.'));
+    this.clearBridge();
+    this.transform?.dispose(); this.transform = null;
+    if (mode === 'transform') this.transform = new SelectionTransform(this.editor, this.selection!);
+    this.mode = mode; this.editor.refreshTool(); this.editor.notify('tool');
+    // Prepare the brushes right away (after this frame), so the first stroke starts instantly
+    if (mode === 'surface') setTimeout(() => {
+      const selection = this.selection;
+      if (!selection || this.mode !== 'surface') return;
+      for (const mesh of selection.faces.keys()) if (!this.sculptContexts.has(mesh)) this.sculptContexts.set(mesh, new SculptContext(mesh, selection));
+      selection.refresh();
+    }, 50);
+  }
+
   tool: SelectTool = 'piece';
   add = true;
   /** Smart selection: 0 strict … 1 loose. */
@@ -70,7 +123,7 @@ export class Separator {
   /** Tap on the model: the connected piece or the smart region under the pointer. */
   tap(x: number, y: number) {
     const selection = this.selection;
-    if (!selection || this.cut) return;
+    if (!selection || this.cut || this.mode !== 'select') return;
     const hit = this.editor.pickSurface(x, y);
     if (!hit || hit.entity !== selection.entity || !(hit.mesh instanceof Mesh) || hit.faceId < 0) return;
     if (this.tool === 'smart') smartSelect(selection, hit.mesh, hit.faceId, this.tolerance, this.add);
@@ -81,10 +134,125 @@ export class Separator {
   /** Lasso (closed shape) or brush (stroke) in CSS pixels over the canvas. */
   stroke(points: ScreenPoint[]) {
     const selection = this.selection;
+    if (selection && this.mode === 'surface' && this.surfaceBrush) {
+      // A whole stroke at once (scripts, or a pointer path that already ended)
+      if (!points.length || !this.brushDown(points[0].x, points[0].y)) return;
+      for (const q of points.slice(1)) this.brushMove(q.x, q.y);
+      this.brushUp();
+      return;
+    }
     if (!selection || points.length < (this.tool === 'lasso' ? 3 : 1)) return;
     selection.checkpoint();
     selectScreen(selection, points, this.tool === 'brush' ? this.radius : null, this.through, this.add);
     this.editor.notify('tool');
+  }
+
+  // ---------- Shapes: conform the surface to one, or add one ----------
+
+  /** The shape being placed (gizmo), or null. */
+  guide: ShapeGuide | null = null;
+  conformMode: ConformMode = 'fill';
+  conformStrength = 1;
+  /** How far outside the shape the surface is still pulled, as a share of the shape's size. */
+  conformReach = 0.15;
+
+  setGuide(shape: GuideShape | null) {
+    this.guide?.dispose();
+    this.guide = null;
+    if (shape && this.selection) {
+      this.guide = new ShapeGuide(this.editor, shape);
+      this.guide.fit(this.selection);
+    }
+    this.editor.refreshTool();
+    this.editor.notify('tool');
+  }
+
+  fitGuide() { if (this.guide && this.selection) { this.guide.fit(this.selection); this.editor.refreshTool(); } }
+
+  /** Moves the surface (selected faces, or all) to the shape: one undo step, saved with the project. */
+  conform() {
+    const selection = this.selection, guide = this.guide;
+    if (!selection || !guide) return 0;
+    const reason = editBlocker(selection.entity); if (reason) throw new Error(reason);
+    const changes = conformToShape(selection, guide, this.conformMode, this.conformStrength, this.conformReach * guide.extent());
+    if (!changes.length) return 0;
+    this.sculptContexts.clear();
+    const entity = selection.entity, previous = entity.separation;
+    const next = { meshes: entity.meshes.map((m) => capturePart(m as Mesh, true)), pivot: previous?.pivot ?? [0, 0, 0], rigSpace: !!entity.rig };
+    entity.separation = next;
+    forgetFaceData(changes.map((c) => c.mesh));
+    selection.refresh();
+    const put = (which: 'before' | 'after', state: typeof previous) => {
+      this.sculptContexts.clear();
+      changes.forEach((c) => Deform.restore(c.mesh, c[which]));
+      entity.separation = state;
+      forgetFaceData(changes.map((c) => c.mesh));
+      this.selection?.refresh(); this.editor.refreshShadowCasters(); this.editor.notify('transform');
+    };
+    this.editor.record({ undo: () => put('before', previous), redo: () => put('after', next) });
+    this.editor.refreshShadowCasters(); this.editor.notify('transform');
+    return changes.length;
+  }
+
+  /**
+   * Adds the shape's volume to the model (boolean union, with Fuse volumes): where the shape is
+   * outside the model it becomes the new surface. Ends edit mode; the fuse preview takes over.
+   */
+  async addGuide() {
+    const selection = this.selection, guide = this.guide;
+    if (!selection || !guide) return;
+    const entity = selection.entity;
+    const { position, rotation, scaling } = primitiveTransform(guide);
+    const shape = guide.shape === 'sphere' ? 'sphere' : guide.shape === 'cylinder' ? 'cylinder' : 'box';
+    this.cancel();
+    const piece = this.editor.addPrimitive(shape, { select: false });
+    piece.root.position.copyFrom(position);
+    piece.root.rotationQuaternion = rotation;
+    piece.root.scaling.copyFrom(scaling);
+    piece.root.computeWorldMatrix(true);
+    // The added piece takes the model's look
+    const material = entity.meshes[0]?.material;
+    if (material) piece.meshes[0].material = material;
+    this.editor.select(entity);
+    this.editor.select(piece, true);
+    await this.editor.fusion.start([entity, piece]);
+  }
+
+  // ---------- Surface brushes, live while dragging ----------
+
+  private sculpting: SculptStroke | null = null;
+  /** Per-mesh brush setup for this session (dropped when the geometry changes or the mode ends). */
+  private sculptContexts = new Map<Mesh, SculptContext>();
+
+  /** Finger/button down with a surface brush: true when the model was under it. */
+  brushDown(x: number, y: number) {
+    const selection = this.selection;
+    if (!selection || this.mode !== 'surface' || !this.surfaceBrush) return false;
+    this.sculpting = SculptStroke.begin(this.editor, selection, this.sculptContexts, x, y, this.surfaceBrush, this.radius, this.brushStrength, this.brushSelected);
+    return !!this.sculpting;
+  }
+
+  brushMove(x: number, y: number) { this.sculpting?.move(x, y); }
+
+  /** End of a stroke: one undo step, and the edited geometry is saved with the project. */
+  brushUp() {
+    const stroke = this.sculpting;
+    this.sculpting = null;
+    const result = stroke?.end();
+    if (!result) return;
+    const entity = this.selection!.entity, previous = entity.separation;
+    const next = { meshes: entity.meshes.map((m) => capturePart(m as Mesh, true)), pivot: previous?.pivot ?? [0, 0, 0], rigSpace: !!entity.rig };
+    entity.separation = next;
+    forgetFaceData([result.mesh]);
+    const put = (state: typeof result.before, separation: typeof previous) => {
+      this.sculptContexts.clear();
+      applyStrokeState(result.mesh, state);
+      entity.separation = separation;
+      forgetFaceData([result.mesh]);
+      this.selection?.refresh(); this.editor.notify('transform');
+    };
+    this.editor.record({ undo: () => put(result.before, previous), redo: () => put(result.after, next) });
+    this.editor.notify('transform');
   }
 
   edit(fn: (selection: FaceSelection) => void) {
@@ -93,6 +261,57 @@ export class Separator {
     this.editor.notify('tool');
   }
   ring(grow: boolean) { this.edit((s) => selectionRing(s, grow)); }
+
+  /** Publish a full geometry edit using the existing separation persistence format. */
+  applyGeometry(parts: MeshPart[]) {
+    const selection = this.selection!;
+    const entity = selection.entity;
+    const reason = editBlocker(entity); if (reason) throw new Error(reason);
+    const before = entity.meshes.map(m => capturePart(m as Mesh, true)), previous = entity.separation;
+    const next = { meshes: parts, pivot: previous?.pivot ?? [0, 0, 0], rigSpace: !!entity.rig };
+    const apply = (state: typeof previous, meshes: MeshPart[]) => {
+      meshes.forEach((p, i) => applyPart(entity.meshes[i] as Mesh, p)); entity.separation = state;
+      selection.invalidateTopology(); selection.refresh(); this.editor.refreshShadowCasters(); this.editor.notify('transform');
+    };
+    apply(next, parts);
+    this.editor.record({ undo: () => apply(previous, before), redo: () => apply(next, parts) });
+  }
+
+  repairMaterial = 0;
+  /** Closes the openings next to the selected faces; returns how many were closed and skipped. */
+  fillHoles(material = this.repairMaterial) {
+    const sel = this.selection!;
+    if (!sel.count) throw new Error(tr('Select faces first.'));
+    const report = { closed: 0, skipped: 0 };
+    let firstError: unknown = null;
+    const parts = sel.entity.meshes.map(m => {
+      const mesh = m as Mesh, part = capturePart(mesh, true), faces = sel.faces.get(mesh)!;
+      if (!faces.size) return part;
+      // Work on the faces along open edges only (a small local part), then put the caps back
+      const topology = sel.neighbors(mesh), { faces: border, open } = openEdges(topology, part.indices);
+      if (!border.length) return part;
+      const { local, globalOf } = compactFaces(part, border);
+      const chosen = { has: (f: number) => faces.has(border[f]) };
+      // A skeleton from the file stores vertices in its bind pose: shape the cap on what's shown
+      let shown: Float32Array | undefined;
+      if (mesh.skeleton && !sel.entity.rig) {
+        const all = mesh.getPositionData(true, true);
+        if (all) { shown = new Float32Array(globalOf.length * 3); for (let i = 0; i < globalOf.length; i++) for (let c = 0; c < 3; c++) shown[i * 3 + c] = all[globalOf[i] * 3 + c]; }
+      }
+      try {
+        const cap = Math.min(material, Math.max(0, ...part.materials.map(s => s.material)));
+        const welded = Uint32Array.from(globalOf, (v) => topology.weld[v]);
+        const result = fillHoles(local, chosen, 0, undefined, shown, report, (f, j) => open(border[f], j), welded);
+        return mergeLocal(part, local, result, globalOf, cap);
+      } catch (error) {
+        firstError ??= error;
+        return part;
+      }
+    });
+    if (!report.closed) throw firstError ?? new Error(tr('Select faces next to an open border.'));
+    this.applyGeometry(parts);
+    return report;
+  }
 
   setCut(on: boolean) {
     if (!this.selection || on === !!this.cut) return;
@@ -159,11 +378,14 @@ export class Separator {
         entity.root.computeWorldMatrix(true);
       }
       const total = Vector3.FromArray(entity.separation?.pivot ?? [0, 0, 0]).add(fit ? delta : Vector3.Zero());
-      entity.separation = { meshes, pivot: total.asArray() };
+      entity.separation = { meshes, pivot: total.asArray(), rigSpace: !!entity.rig };
     };
     this.stop();
     this.editor.group(() => {
-      apply(source, remaining); apply(copy, selected);
+      apply(source, remaining);
+      // A part of a model rigged in the app keeps the skeleton (its weights come with its geometry)
+      if (source.rig) this.editor.rigger.copySkeleton(source, copy);
+      apply(copy, selected);
       const afterRoot = source.root.position.clone(), afterFit = fitNode(source)?.position.clone(), after = source.separation;
       const place = (root: Vector3, fit?: Vector3) => { source.root.position.copyFrom(root); if (fit) fitNode(source)?.position.copyFrom(fit); };
       this.editor.record({
@@ -182,54 +404,3 @@ function fitNode(entity: Entity) {
   return entity.root.getChildren((n) => n.name === 'fit', true)[0] as TransformNode | undefined;
 }
 
-/** Arrays are moved to a binary body (Float32 for vertex data, Uint32 for indices). */
-export function encodeSeparation(state: SeparationState): Uint8Array {
-  const chunks: ArrayBufferView[] = [];
-  let offset = 0;
-  const put = (values: number[], type: 'f' | 'u') => {
-    const array = type === 'f' ? Float32Array.from(values) : Uint32Array.from(values);
-    chunks.push(array);
-    const ref = { o: offset, n: values.length, t: type };
-    offset += array.byteLength;
-    return ref;
-  };
-  const attributes = (a?: Record<string, number[]>) => a && Object.fromEntries(Object.entries(a).map(([k, v]) => [k, put(v, 'f')]));
-  const header = {
-    pivot: state.pivot,
-    meshes: state.meshes.map((m) => ({
-      indices: put(m.indices, 'u'),
-      materials: m.materials,
-      attributes: attributes(m.attributes),
-      morphs: m.morphs?.map((t) => ({ name: t.name, influence: t.influence, attributes: attributes(t.attributes) })),
-    })),
-  };
-  const json = new TextEncoder().encode(JSON.stringify(header));
-  const out = new Uint8Array(4 + json.length + offset);
-  new DataView(out.buffer).setUint32(0, json.length, true);
-  out.set(json, 4);
-  let at = 4 + json.length;
-  for (const c of chunks) {
-    out.set(new Uint8Array(c.buffer, c.byteOffset, c.byteLength), at);
-    at += c.byteLength;
-  }
-  return out;
-}
-
-export function decodeSeparation(data: Uint8Array): SeparationState {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const length = view.getUint32(0, true);
-  const header = JSON.parse(new TextDecoder().decode(data.subarray(4, 4 + length)));
-  const body = data.slice(4 + length);
-  type Ref = { o: number; n: number; t: 'f' | 'u' };
-  const get = (r: Ref) => Array.from(r.t === 'f' ? new Float32Array(body.buffer, r.o, r.n) : new Uint32Array(body.buffer, r.o, r.n));
-  const attributes = (a?: Record<string, Ref>) => a && Object.fromEntries(Object.entries(a).map(([k, r]) => [k, get(r)]));
-  return {
-    pivot: header.pivot,
-    meshes: header.meshes.map((m: { indices: Ref; materials: MeshPart['materials']; attributes?: Record<string, Ref>; morphs?: { name: string; influence: number; attributes: Record<string, Ref> }[] }) => ({
-      indices: get(m.indices),
-      materials: m.materials,
-      attributes: attributes(m.attributes),
-      morphs: m.morphs?.map((t) => ({ name: t.name, influence: t.influence, attributes: attributes(t.attributes)! })),
-    })),
-  };
-}

@@ -89,6 +89,7 @@ export function analyzeScene(editor: Editor) {
   let triangles = 0;
   const textures = new Map<BaseTexture, TextureCost>();
   for (const e of editor.entities) {
+    if (e.groupMembers) continue;
     if (e.kind === 'light' || !e.visible) continue;
     const c = analyzeEntity(editor, e);
     triangles += c.triangles;

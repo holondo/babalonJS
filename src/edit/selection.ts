@@ -1,16 +1,42 @@
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import { Geometry } from '@babylonjs/core/Meshes/geometry.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
-import { weld } from '../rigging/skinMath';
+import { computeTopology } from './faceTopology';
+import type { FaceTopology } from './faceTopology';
+export type { FaceTopology } from './faceTopology';
 import type { Entity, Editor } from '../core/editor';
+
+/**
+ * Selected faces of one mesh: a byte per face instead of a Set (a 2M-triangle model would need a
+ * 2M-entry Set). Same interface as a Set of face numbers, so callers don't change.
+ */
+export class FaceSet implements Iterable<number> {
+  mask: Uint8Array;
+  size = 0;
+  constructor(count: number) { this.mask = new Uint8Array(count); }
+  has(f: number) { return this.mask[f] === 1; }
+  add(f: number) { if (this.mask[f] !== 1 && f >= 0 && f < this.mask.length) { this.mask[f] = 1; this.size++; } return this; }
+  delete(f: number) { if (this.mask[f] === 1) { this.mask[f] = 0; this.size--; return true; } return false; }
+  clear() { this.mask.fill(0); this.size = 0; }
+  fill() { this.mask.fill(1); this.size = this.mask.length; }
+  clone() { const c = new FaceSet(this.mask.length); c.mask.set(this.mask); c.size = this.size; return c; }
+  *[Symbol.iterator]() { const m = this.mask; for (let f = 0; f < m.length; f++) if (m[f]) yield f; }
+  values() { return this[Symbol.iterator](); }
+}
+
+function buildTopology(mesh: Mesh): FaceTopology {
+  return computeTopology(Float32Array.from(mesh.getVerticesData('position')!), mesh.getIndices()!);
+}
 
 /** Faces are addressed in the current index buffer, never by a vertex position. */
 export class FaceSelection {
-  readonly faces = new Map<Mesh, Set<number>>();
-  private history: Map<Mesh, Set<number>>[] = [];
-  private overlays: Mesh[] = [];
+  readonly faces = new Map<Mesh, FaceSet>();
+  private history: Map<Mesh, FaceSet>[] = [];
+  /** One highlight mesh per mesh, sharing its vertex buffers; only its indices change. */
+  private overlays = new Map<Mesh, Mesh>();
   private material: StandardMaterial;
-  private topology = new Map<Mesh, number[][]>();
+  private topology = new Map<Mesh, FaceTopology>();
   readonly editor: Editor;
   readonly entity: Entity;
   constructor(editor: Editor, entity: Entity) {
@@ -23,53 +49,124 @@ export class FaceSelection {
     this.material.disableLighting = true;
     this.material.backFaceCulling = false;
     this.material.zOffset = -2;
-    for (const mesh of entity.meshes) if (mesh instanceof Mesh && mesh.getIndices()) this.faces.set(mesh, new Set());
+    this.reset();
+  }
+  /** Sizes the selection to the current geometry, keeping it where the face count didn't change. */
+  reset() {
+    for (const mesh of this.entity.meshes) {
+      if (!(mesh instanceof Mesh) || !mesh.getIndices()) continue;
+      const count = mesh.getTotalIndices() / 3, current = this.faces.get(mesh);
+      if (current?.mask.length === count) continue;
+      this.faces.set(mesh, new FaceSet(count));
+    }
   }
   get count() { let n = 0; for (const faces of this.faces.values()) n += faces.size; return n; }
-  checkpoint() { this.history.push(new Map([...this.faces].map(([m, s]) => [m, new Set(s)]))); if (this.history.length > 30) this.history.shift(); }
+  checkpoint() { this.history.push(new Map([...this.faces].map(([m, s]) => [m, s.clone()]))); if (this.history.length > 20) this.history.shift(); }
   undo() { const state = this.history.pop(); if (state) { for (const [m, s] of state) this.faces.set(m, s); this.refresh(); } }
   all(invert = false) {
     this.checkpoint();
-    for (const [m, selected] of this.faces) { const next = new Set<number>(); for (let f = 0; f < m.getTotalIndices() / 3; f++) if (!invert || !selected.has(f)) next.add(f); this.faces.set(m, next); }
+    for (const set of this.faces.values()) {
+      if (!invert) { set.fill(); continue; }
+      const m = set.mask; let n = 0;
+      for (let f = 0; f < m.length; f++) { m[f] ^= 1; n += m[f]; }
+      set.size = n;
+    }
     this.refresh();
   }
   clear() { this.checkpoint(); for (const s of this.faces.values()) s.clear(); this.refresh(); }
-  mesh(mesh: Mesh, add: boolean) { this.checkpoint(); const faces = this.faces.get(mesh); if (!faces) return; for (let f = 0; f < mesh.getTotalIndices() / 3; f++) if (add) faces.add(f); else faces.delete(f); this.refresh(); }
+  mesh(mesh: Mesh, add: boolean) { this.checkpoint(); const faces = this.faces.get(mesh); if (!faces) return; if (add) faces.fill(); else faces.clear(); this.refresh(); }
   apply(mesh: Mesh, ids: Iterable<number>, add = true) { const set = this.faces.get(mesh); if (!set) return; for (const f of ids) if (add) set.add(f); else set.delete(f); }
+  /** After an edit changed the geometry: topology and face numbers are no longer valid. */
+  invalidateTopology() { this.topology.clear(); this.reset(); }
   neighbors(mesh: Mesh) {
-    let neighbors = this.topology.get(mesh); if (neighbors) return neighbors;
-    const indices = mesh.getIndices()!;
-    const { map } = weld(Float32Array.from(mesh.getVerticesData('position')!));
-    neighbors = Array.from({ length: indices.length / 3 }, () => [] as number[]);
-    const edges = new Map<string, number[]>();
-    for (let f = 0; f < neighbors.length; f++) for (let e = 0; e < 3; e++) {
-      const a = map[indices[f * 3 + e]], b = map[indices[f * 3 + (e + 1) % 3]];
-      const key = a < b ? `${a},${b}` : `${b},${a}`;
-      const others = edges.get(key) ?? [];
-      for (const other of others) { neighbors[f].push(other); neighbors[other].push(f); }
-      others.push(f); edges.set(key, others);
+    let t = this.topology.get(mesh);
+    if (!t) this.topology.set(mesh, (t = buildTopology(mesh)));
+    return t;
+  }
+  /**
+   * Builds the connectivity of every mesh in a worker right away (entering edit mode), so the
+   * first tap doesn't wait for it; a tap before it's ready still computes it on the spot.
+   */
+  prefetch() {
+    for (const mesh of this.faces.keys()) {
+      if (this.topology.has(mesh) || mesh.getTotalIndices() < 30000) continue;
+      const geometry = mesh.geometry;
+      const worker = new Worker(new URL('./topology.worker.ts', import.meta.url), { type: 'module' });
+      const positions = Float32Array.from(mesh.getVerticesData('position')!), indices = Uint32Array.from(mesh.getIndices()!);
+      worker.onmessage = (ev: MessageEvent<FaceTopology>) => {
+        worker.terminate();
+        // Only if nothing changed meanwhile
+        if (mesh.geometry === geometry && !this.topology.has(mesh) && this.faces.has(mesh)) this.topology.set(mesh, ev.data);
+      };
+      worker.onerror = () => worker.terminate();
+      worker.postMessage({ positions, indices }, [positions.buffer, indices.buffer]);
     }
-    this.topology.set(mesh, neighbors); return neighbors;
   }
   island(mesh: Mesh, face: number, add = true) {
-    this.checkpoint(); const neighbors = this.neighbors(mesh); if (!neighbors[face]) return;
-    const seen = new Set([face]), queue = [face];
-    for (let i = 0; i < queue.length; i++) for (const n of neighbors[queue[i]]) if (!seen.has(n)) { seen.add(n); queue.push(n); }
-    this.apply(mesh, seen, add); this.refresh();
+    const set = this.faces.get(mesh); if (!set) return;
+    this.checkpoint();
+    const { offsets, list } = this.neighbors(mesh);
+    const seen = new Uint8Array(offsets.length - 1), queue = new Uint32Array(offsets.length - 1);
+    let head = 0, tail = 0;
+    seen[face] = 1; queue[tail++] = face;
+    while (head < tail) {
+      const f = queue[head++];
+      for (let k = offsets[f]; k < offsets[f + 1]; k++) { const g = list[k]; if (!seen[g]) { seen[g] = 1; queue[tail++] = g; } }
+    }
+    for (let i = 0; i < tail; i++) if (add) set.add(queue[i]); else set.delete(queue[i]);
+    this.refresh();
   }
   refresh() {
-    this.overlays.forEach(m => { this.editor.overlays.delete(m); m.dispose(false, false); }); this.overlays = [];
     for (const [mesh, faces] of this.faces) {
-      if (!faces.size) continue;
-      const indices = mesh.getIndices()!, chosen: number[] = [];
-      for (const f of faces) chosen.push(indices[f * 3], indices[f * 3 + 1], indices[f * 3 + 2]);
-      const overlay = new Mesh('Face selection', this.editor.scene);
-      mesh.geometry?.applyToMesh(overlay); overlay.makeGeometryUnique(); overlay.setIndices(chosen);
-      overlay.parent = mesh; overlay.skeleton = mesh.skeleton; overlay.morphTargetManager = mesh.morphTargetManager;
-      overlay.material = this.material; overlay.isPickable = false; overlay.alwaysSelectAsActiveMesh = true;
-      this.editor.overlays.add(overlay); this.overlays.push(overlay);
+      let overlay = this.overlays.get(mesh);
+      if (!faces.size) { overlay?.setEnabled(false); continue; }
+      const indices = mesh.getIndices()!, chosen = new Uint32Array(faces.size * 3), m = faces.mask;
+      for (let f = 0, k = 0; f < m.length; f++) if (m[f]) { chosen[k++] = indices[f * 3]; chosen[k++] = indices[f * 3 + 1]; chosen[k++] = indices[f * 3 + 2]; }
+      // A new geometry or new position buffer (edits make them updatable) needs a new highlight
+      if (!overlay || overlay.metadata?.source !== mesh.getVertexBuffer('position')) {
+        if (overlay) this.disposeOverlay(overlay);
+        overlay = this.createOverlay(mesh);
+        this.overlays.set(mesh, overlay);
+      }
+      overlay.setIndices(chosen, mesh.getTotalVertices(), true);
+      overlay.setEnabled(true);
     }
     this.editor.invalidate();
   }
-  dispose() { for (const mesh of this.overlays) { this.editor.overlays.delete(mesh); mesh.dispose(false, false); } this.overlays = []; this.material.dispose(); this.topology.clear(); this.editor.invalidate(); }
+  private createOverlay(mesh: Mesh) {
+    const overlay = sharedMesh(mesh, 'Face selection');
+    overlay.material = this.material;
+    this.editor.overlays.add(overlay);
+    return overlay;
+  }
+  private disposeOverlay(overlay: Mesh) {
+    this.editor.overlays.delete(overlay);
+    disposeShared(overlay);
+  }
+  dispose() { for (const o of this.overlays.values()) this.disposeOverlay(o); this.overlays.clear(); this.material.dispose(); this.topology.clear(); this.editor.invalidate(); }
+}
+
+/**
+ * A mesh drawing some triangles of another one with the same GPU vertex buffers (no copy of a
+ * large model): selection highlights, cut previews. Only its index list is its own.
+ */
+export function sharedMesh(mesh: Mesh, name: string) {
+  const scene = mesh.getScene();
+  const shared = new Mesh(name, scene);
+  const geometry = new Geometry(`${name}-${mesh.uniqueId}`, scene, undefined, true, shared);
+  for (const kind of ['position', 'normal', 'matricesIndices', 'matricesWeights', 'matricesIndicesExtra', 'matricesWeightsExtra']) {
+    const buffer = mesh.getVertexBuffer(kind);
+    if (buffer) geometry.setVerticesBuffer(buffer, mesh.getTotalVertices(), false);
+  }
+  shared.metadata = { source: mesh.getVertexBuffer('position'), shared: true };
+  shared.parent = mesh; shared.skeleton = mesh.skeleton; shared.numBoneInfluencers = mesh.numBoneInfluencers;
+  shared.isPickable = false; shared.alwaysSelectAsActiveMesh = true;
+  return shared;
+}
+
+/** Disposes a shared mesh without disposing the vertex buffers it borrows. */
+export function disposeShared(shared: Mesh) {
+  const geometry = shared.geometry as unknown as { _vertexBuffers?: Record<string, unknown> } | null;
+  if (geometry) geometry._vertexBuffers = {};
+  shared.dispose(false, false);
 }

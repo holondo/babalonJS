@@ -7,10 +7,22 @@ const base = process.env.BASE_PATH || '/';
 
 export default defineConfig({
   base,
+  // Prebundle the lazy GLB factory and newly used Babylon modules before the first
+  // upload. Discovering them mid-import otherwise invalidates Vite's module URLs.
+  // This affects development only; production keeps these modules loaded on demand.
+  optimizeDeps: {
+    include: [
+      '@babylonjs/loaders/glTF/2.0/glTFLoader.pure.js',
+      '@babylonjs/core/Meshes/instancedMesh.pure.js',
+      '@babylonjs/core/Cameras/universalCamera.js',
+      '@babylonjs/serializers/glTF/2.0/glTFExporter.js',
+      '@babylonjs/serializers/glTF/2.0/glTFSerializer.js',
+    ],
+  },
   plugins: [
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['favicon.ico', 'icons/apple-touch-icon.png', 'brand/lettering.webp', 'brand/lettering.png'],
+      includeAssets: ['licenses/earcut.txt', 'licenses/manifold-3d.txt', 'favicon.ico', 'icons/apple-touch-icon.png', 'brand/lettering.webp', 'brand/lettering.png'],
       manifest: {
         id: base,
         name: 'babalon JS',
@@ -68,7 +80,7 @@ export default defineConfig({
         importScripts: ['share-target.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,webp,svg,wasm}'],
         // The texture encoder (3 MB) is only needed when optimizing textures: cached on first use
-        globIgnores: ['**/basis_encoder*.wasm'],
+        globIgnores: ['**/basis_encoder*.wasm', '**/manifold*.wasm'],
         // Babylon.js is one big chunk; precache it so the app works offline
         maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
         navigateFallback: 'index.html',
@@ -94,7 +106,7 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/basis_encoder[^/]*\.wasm$/.test(url.pathname),
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/(?:basis_encoder|manifold)[^/]*\.wasm$/.test(url.pathname),
             handler: 'CacheFirst',
             options: { cacheName: 'encoders', expiration: { maxEntries: 4 }, cacheableResponse: { statuses: [200] } },
           },
