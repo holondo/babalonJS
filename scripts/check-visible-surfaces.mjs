@@ -23,7 +23,7 @@ function moduleURL(filename){
  code=code.replace(/from ['"]([^'"]+)['"]/g,(_,id)=>`from '${id.startsWith('.')?moduleURL(path.resolve(path.dirname(filename),id+'.ts')):pathToFileURL(require.resolve(id)).href}'`);
  const url='data:text/javascript;base64,'+Buffer.from(code).toString('base64');urls.set(filename,url);return url;
 }
-const {prepareSurface,invalidateSurfaces,surfacePositions}=await import(moduleURL('src/core/surface.ts'));
+const {prepareSurface,invalidateSurfaces,surfacePositions,surfaceNormal}=await import(moduleURL('src/core/surface.ts'));
 const {smartSelect}=await import(moduleURL('src/edit/smartSelect.ts'));
 const {FaceSelection}=await import(moduleURL('src/edit/selection.ts'));
 const engine=new NullEngine({renderWidth:512,renderHeight:512}),scene=new Scene(engine);
@@ -36,6 +36,9 @@ bone.updateMatrix(Matrix.Translation(3,0,0),false,true);skeleton.prepare(true);s
 assert.equal(scene.pick(256,256,m=>m===mesh)?.hit,false);
 let refreshes=0;const refresh=mesh.refreshBoundingInfo.bind(mesh);mesh.refreshBoundingInfo=(...args)=>{refreshes++;return refresh(...args)};
 prepareSurface(mesh);assert.equal(scene.pick(256,256,m=>m===mesh)?.hit,true);prepareSurface(mesh);assert.equal(refreshes,1,'Repeated picks in one frame reuse preparation');
+scene.render();prepareSurface(mesh);assert.equal(refreshes,1,'Camera-only frames must not reskin unchanged vertices');
+const getPositionData=mesh.getPositionData;mesh.getPositionData=()=>{throw Error('Normal must not reskin the mesh')};
+assert.ok(surfaceNormal(mesh,0));mesh.getPositionData=getPositionData;
 bone.updateMatrix(Matrix.Translation(5,0,0),false,true);invalidateSurfaces();prepareSurface(mesh);assert.equal(refreshes,2);assert.ok(mesh.getBoundingInfo().boundingBox.minimum.x>4);
 const morph=CreateSphere('morph',{diameter:1,segments:12},scene),manager=new MorphTargetManager(scene),target=MorphTarget.FromMesh(morph,'shift',1);const positions=Float32Array.from(morph.getVerticesData('position'));for(let i=0;i<positions.length;i+=3)positions[i]+=3;target.setPositions(positions);manager.addTarget(target);morph.morphTargetManager=manager;
 invalidateSurfaces();prepareSurface(morph);assert.equal(scene.pick(256,256,m=>m===morph)?.hit,true,'Morph-only model picking follows its visible geometry');

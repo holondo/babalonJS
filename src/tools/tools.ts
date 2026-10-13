@@ -110,6 +110,8 @@ export class Tools {
   private readonly pendingMarker: Mesh;
   private dragging: { m: Measurement; end: 'a' | 'b' } | null = null;
   private smartLines: GreasedLineBaseMesh[] = [];
+  private snapBounds: { entity: Entity; position: Vector3; own: ReturnType<Editor['boundsOf']>; others: ReturnType<Editor['boundsOf']>[] } | null = null;
+  private guideDrag: { guide: Guide; candidates: number[]; bounds: ReturnType<Editor['sceneBounds']> } | null = null;
   private readonly editor: Editor;
 
   constructor(editor: Editor) {
@@ -575,7 +577,7 @@ export class Tools {
 
   setGuideValue(g: Guide, value: number) {
     g.value = value;
-    const b = this.editor.sceneBounds();
+    const b = this.guideDrag?.guide === g ? this.guideDrag.bounds : this.editor.sceneBounds();
     const c = b?.center ?? this.editor.camera.target;
     const span = b ? Math.max(b.size.x, b.size.z) : 2;
     const size = Math.max(3, span * 1.8);
@@ -590,7 +592,21 @@ export class Tools {
       g.node.position.set(c.x, 0, value);
       g.node.scaling.set(size, height, 1);
     }
+    this.editor.invalidate();
   }
+
+  beginGuideDrag(guide: Guide) {
+    const boxes = this.editor.entities.filter(e => e.kind !== 'light' && e.visible).map(e => this.editor.boundsOf(e));
+    const candidates = guide.axis === 'y' ? [0] : [];
+    const min = new Vector3(Infinity, Infinity, Infinity), max = new Vector3(-Infinity, -Infinity, -Infinity);
+    for (const box of boxes) {
+      candidates.push(box.min[guide.axis], box.center[guide.axis], box.max[guide.axis]);
+      min.minimizeInPlace(box.min); max.maximizeInPlace(box.max);
+    }
+    this.guideDrag = { guide, candidates, bounds: boxes.length ? { min, max, center: min.add(max).scale(.5), size: max.subtract(min) } : null };
+  }
+
+  endGuideDrag() { this.guideDrag = null; }
 
   /** Where a guide's drag handle sits: just beside the objects, on the guide itself. */
   guideHandle(g: Guide) {
@@ -643,8 +659,9 @@ export class Tools {
     let value = ray.origin.add(ray.direction.scale(d))[g.axis];
 
     const threshold = this.editor.worldPerPixel(handle) * 10;
-    const candidates = g.axis === 'y' ? [0] : [];
-    for (const e of this.editor.entities) {
+    const cached = this.guideDrag?.guide === g ? this.guideDrag : null;
+    const candidates = cached?.candidates ?? (g.axis === 'y' ? [0] : []);
+    if (!cached) for (const e of this.editor.entities) {
       if (e.kind === 'light' || !e.visible) continue;
       const b = this.editor.boundsOf(e);
       candidates.push(b.min[g.axis], b.center[g.axis], b.max[g.axis]);
@@ -695,14 +712,14 @@ export class Tools {
    * `pos` is the proposed root position; only the axes in `axes` may change.
    */
   snap(entity: Entity, pos: Vector3, axes: Record<Axis, boolean>): Vector3 {
-    this.clearSmartLines();
-    if (!this.smartGuides || entity.kind === 'light') return pos;
-    const own = this.editor.boundsOf(entity);
-    const offset = pos.subtract(entity.root.position);
+    if (!this.smartGuides || entity.kind === 'light') { this.clearSmartLines(); return pos; }
+    const cached = this.snapBounds?.entity === entity ? this.snapBounds : null;
+    const own = cached?.own ?? this.editor.boundsOf(entity);
+    const offset = pos.subtract(cached?.position ?? entity.root.position);
     const moving = { min: own.min.add(offset), max: own.max.add(offset), center: own.center.add(offset) };
     const threshold = this.editor.worldPerPixel(moving.center) * 8;
     const selection = new Set(this.editor.selection);
-    const others = this.editor.entities.filter((e) => e.kind !== 'light' && e.visible && !selection.has(e)).map((e) => this.editor.boundsOf(e));
+    const others = cached?.others ?? this.editor.entities.filter((e) => e.kind !== 'light' && e.visible && !selection.has(e)).map((e) => this.editor.boundsOf(e));
     const out = pos.clone();
     const lines: Vector3[][] = [];
 
@@ -723,9 +740,11 @@ export class Tools {
       out[axis] += found.delta;
       if (found.other) lines.push(this.smartLine(axis, found.value, moving, found.other));
     }
-    for (const pts of lines) {
-      this.smartLines.push(this.screenLine('smartGuide', pts, SMART_COLOR, 2, true));
+    for (let i = 0; i < lines.length; i++) {
+      if (this.smartLines[i]) this.smartLines[i].setPoints(lines[i]);
+      else this.smartLines.push(this.screenLine('smartGuide', lines[i], SMART_COLOR, 2, true));
     }
+    while (this.smartLines.length > lines.length) { const line = this.smartLines.pop()!; this.editor.overlays.delete(line); line.dispose(); }
     return out;
   }
 
@@ -752,6 +771,15 @@ export class Tools {
     }
     this.smartLines = [];
   }
+
+  /** Stable snap targets for one gesture; animations keep rendering independently. */
+  beginSnap(entity: Entity) {
+    if (!this.smartGuides || entity.kind === 'light') return;
+    const selection = new Set(this.editor.selection);
+    this.snapBounds = { entity, position: entity.root.position.clone(), own: this.editor.boundsOf(entity), others: this.editor.entities.filter(e => e.kind !== 'light' && e.visible && !selection.has(e)).map(e => this.editor.boundsOf(e)) };
+  }
+
+  endSnap() { this.snapBounds = null; }
 
   // ---------- Alignment (needs 2+ selected; the first selected is the reference) ----------
 
@@ -859,6 +887,8 @@ export class Tools {
   }
 
   clear() {
+    this.endSnap();
+    this.endGuideDrag();
     const wasLoading = this.loading;
     this.loading = true;
     try {

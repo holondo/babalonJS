@@ -1,0 +1,33 @@
+// Regression: transforms and Guides must not rebuild scene geometry on every pointer move.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import {pathToFileURL} from 'node:url';
+import ts from 'typescript';
+import {NullEngine} from '@babylonjs/core/Engines/nullEngine.js';
+import {Scene} from '@babylonjs/core/scene.js';
+import {ArcRotateCamera} from '@babylonjs/core/Cameras/arcRotateCamera.js';
+import {Vector3} from '@babylonjs/core/Maths/math.vector.js';
+import {CreateBox} from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
+import {Observable} from '@babylonjs/core/Misc/observable.js';
+import '@babylonjs/core/Culling/ray.js';
+const require=createRequire(import.meta.url),urls=new Map();
+function moduleURL(filename){filename=path.resolve(filename);if(urls.has(filename))return urls.get(filename);let code=ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2023,module:ts.ModuleKind.ESNext}}).outputText;code=code.replace(/from ['"]([^'"]+)['"]/g,(_,id)=>`from '${id.startsWith('.')?moduleURL(path.resolve(path.dirname(filename),id+'.ts')):pathToFileURL(require.resolve(id)).href}'`);const url='data:text/javascript;base64,'+Buffer.from(code).toString('base64');urls.set(filename,url);return url;}
+const {Tools}=await import(moduleURL('src/tools/tools.ts'));
+const engine=new NullEngine({renderWidth:512,renderHeight:512}),scene=new Scene(engine),camera=new ArcRotateCamera('camera',0,Math.PI/4,8,Vector3.Zero(),scene);
+engine.getRenderingCanvas=()=>({clientWidth:512,clientHeight:512});
+const first=CreateBox('first',{},scene),second=CreateBox('second',{},scene);second.position.x=2;
+const a={root:first,meshes:[first],kind:'shape',visible:true},b={root:second,meshes:[second],kind:'shape',visible:true};let reads=0,frames=0;
+const editor={scene,camera,engine,entities:[a,b],selected:a,selection:[a],overlays:new Set(),changed:new Observable(),cleanView:false,snap:false,beginEdit(){},endEdit(){},refreshTool(){},invalidate(){frames++},worldPerPixel(){return .02},boundsOf(e){reads++;e.root.computeWorldMatrix(true);const box=e.root.getBoundingInfo().boundingBox,min=box.minimumWorld.clone(),max=box.maximumWorld.clone();return {min,max,center:min.add(max).scale(.5),size:max.subtract(min)}},sceneBounds(){return this.boundsOf(b)}};
+const tools=new Tools(editor);tools.beginSnap(a);const afterBegin=reads;
+const firstSnap=tools.snap(a,new Vector3(.99,0,0),{x:true,y:false,z:false});assert.equal(firstSnap.x,1);
+const line=tools.smartLines[0];assert.ok(line);
+for(let i=0;i<60;i++)assert.equal(tools.snap(a,new Vector3(.99,0,0),{x:true,y:false,z:false}).x,1);
+assert.equal(reads,afterBegin,'Snapping must reuse gesture bounds');assert.equal(tools.smartLines[0],line,'Alignment line geometry must be reused');
+tools.endSnap();tools.clearSmartLines();assert.equal(line.isDisposed(),true);
+const guide=tools.addGuide('x',0);tools.beginGuideDrag(guide);const beforeGuide=reads,beforeFrames=frames;
+for(let i=0;i<60;i++)tools.dragGuide(guide,256+i,256);
+assert.equal(reads,beforeGuide,'Guide drag must reuse snap targets and scene bounds');assert.ok(frames>=beforeFrames+60,'Every guide movement must wake render-on-demand');
+tools.endGuideDrag();tools.setGuideValue(guide,1);assert.ok(reads>beforeGuide,'After the gesture, guide layout must read fresh bounds');
+scene.dispose();engine.dispose();console.log('Gesture bounds, smart-line reuse, fresh guide layout and render-on-demand invalidation pass.');

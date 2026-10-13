@@ -932,6 +932,7 @@ body.photo .panel {
     touch-action: none;
   }
   .panel-grip::after { content: ''; width: 40px; height: 4px; border-radius: 4px; background: currentColor; }
+  body { --safe-b: calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-inset, 0px)); }
   .panel-grip:focus-visible { outline: 2px solid var(--gold); outline-offset: -4px; }
   .panel.sheet-dragging { transition: none; }
   .panel > .panel-head, .panel > .segmented, .panel > .panel-foot { flex-shrink: 0; }

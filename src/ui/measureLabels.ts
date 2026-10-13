@@ -74,19 +74,21 @@ export class MeasureLabels {
       const handle = this.ui.editor.toScreen(tools.guideHandle(g));
       offset = { x: ev.clientX - rect.left - handle.x, y: ev.clientY - rect.top - handle.y };
       this.draggingGuide = g;
+      tools.beginGuideDrag(g);
       el.classList.add('dragging');
     });
     el.addEventListener('pointermove', (ev) => {
       if (this.draggingGuide !== g) return;
       if (!moved && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 4) return;
+      if (!moved) tools.beginEdit();
       moved = true;
       const rect = this.ui.editor.engine.getRenderingCanvas()!.getBoundingClientRect();
-      tools.beginEdit();
       tools.dragGuide(g, ev.clientX - rect.left - offset.x, ev.clientY - rect.top - offset.y);
     });
     const end = () => {
       if (this.draggingGuide !== g) return;
       this.draggingGuide = null;
+      tools.endGuideDrag();
       el.classList.remove('dragging');
       // A tap (no drag) expands/collapses the chip
       if (!moved) tools.setActiveGuide(tools.activeGuide === g ? null : g);

@@ -1147,9 +1147,7 @@ export class UI {
     const tab: Tab | null = ed.photoMode ? (this.photoPanel ? 'photo' : null) : this.tab;
     this.panel.classList.toggle('show', !!tab);
     document.body.classList.toggle('panel-open', !!tab);
-    // The bubbles sit above an open panel on phones (again once its slide-in ends)
-    requestAnimationFrame(() => this.contextBar.layout());
-    setTimeout(() => this.contextBar.layout(), 250);
+    this.panelSheet.scheduleLayout();
     if (!tab) {
       this.panel.replaceChildren();
       if (ed.rigger.active) this.renderSelbar();

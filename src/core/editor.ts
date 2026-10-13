@@ -720,9 +720,11 @@ export class Editor {
   beginTransform(entities = this.selection) {
     if (this.pending || !entities.length) return;
     this.pending = entities.map((entity) => ({ entity, before: this.snapshot(entity) }));
+    if (this.selected && this.tool === 'move') this.tools.beginSnap(this.selected);
   }
 
   endTransform() {
+    this.tools.endSnap();
     if (!this.pending) return;
     const changes = this.pending
       .map(({ entity, before }) => ({ entity, before, after: this.snapshot(entity) }))
@@ -1543,6 +1545,8 @@ export class Editor {
     this.gizmos.positionGizmoEnabled = move;
     this.gizmos.rotationGizmoEnabled = rotate;
     this.gizmos.scaleGizmoEnabled = scale;
+    // The manager only propagates this setting to controls that already exist.
+    this.gizmos.scaleRatio = isTouch ? 1.5 : 1.1;
     const g = this.gizmos.gizmos;
     for (const gz of [g.positionGizmo, g.rotationGizmo, g.scaleGizmo]) {
       if (!gz || this.configuredGizmos.has(gz)) continue;
