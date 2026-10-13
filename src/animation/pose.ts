@@ -346,6 +346,7 @@ export class Poser {
     if (!map[u] || !map[m] || !map[bone]) return;
     this.begin();
     solveTwoBone(map[u]!, map[m]!, map[bone]!, this.ikTarget.position);
+    this.editor.invalidate();
   }
 
   /** Turns the selected joint by `deg` around a character axis, from a remembered rotation. */

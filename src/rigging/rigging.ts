@@ -389,6 +389,7 @@ export class Rigger {
     this.joints.get(id)!.copyFrom(p);
     this.mirrorFrom(id);
     this.derive();
+    this.editor.invalidate();
   }
 
   endHandleDrag() {
@@ -463,6 +464,7 @@ export class Rigger {
     cur.copyFrom(next);
     this.mirrorFrom(id);
     this.derive();
+    this.editor.invalidate();
   }
 
   /** After a drag: the joint goes to the middle of the body part under it. */

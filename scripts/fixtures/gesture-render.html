@@ -1,0 +1,20 @@
+<!doctype html><html><body><div id="app"><canvas id="scene"></canvas></div><button id="test" style="position:fixed;top:70px;z-index:9999">Test gesture rendering</button><pre id="result" style="position:fixed;top:110px;z-index:9999;background:white;color:black"></pre><script type="module">
+import '/src/ui/style.css';
+import {Editor} from '/src/core/editor';
+import {FaceSelection} from '/src/edit/selection';
+import {PlaneCut} from '/src/edit/planeCut';
+const editor=new Editor(document.querySelector('canvas'));
+function wakes(fn){editor.cameraTween=null;editor.scene.render();editor.activeUntil=0;editor.needsRender();const idle=!editor.needsRender();fn();return idle&&editor.needsRender();}
+document.querySelector('#test').onclick=async()=>{try{
+const entity=editor.editableModel(editor.addPrimitive('sphere'));await editor.gizmoLoad;
+const transforms=wakes(()=>editor.editTransform(root=>root.position.x+=.1));editor.endTransform();
+editor.rigger.start(entity);
+const rigJoint=wakes(()=>editor.rigger.dragJoint('hips',240,300));editor.rigger.selected='hips';editor.rigger.placeHandle();editor.rigger.handle.position.x+=.1;
+const rigHandle=wakes(()=>editor.rigger.dragHandle());await editor.rigger.bind();editor.rigger.confirm();editor.pose.start(entity);const hand=editor.pose.joints().find(j=>j.bone==='leftHand');if(!hand)throw Error('Missing IK hand');editor.pose.selectJoint(hand);editor.pose.ikTarget.position.x+=.1;const ik=wakes(()=>editor.pose.dragIk());editor.pose.end();editor.pose.stop();
+const selection=new FaceSelection(editor,entity),cut=new PlaneCut(editor,selection);
+const style=cut.gizmos.gizmos.positionGizmo.scaleRatio===editor.gizmos.gizmos.positionGizmo.scaleRatio;
+cut.dispose();selection.dispose();
+document.querySelector('#result').textContent=JSON.stringify({transforms,rigJoint,rigHandle,ik,cutStyle:style,result:transforms&&rigJoint&&rigHandle&&ik&&style?'passed':'failed'});
+}catch(error){document.querySelector('#result').textContent=error.stack}};
+</script></body></html>
+

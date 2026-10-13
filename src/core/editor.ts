@@ -37,6 +37,7 @@ import { Material } from '@babylonjs/core/Materials/material.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { invalidateSurfaces, prepareSurface, surfaceNormal } from './surface';
+import { applyTransformGizmoStyle, TRANSFORM_GIZMO_THICKNESS } from './gizmoStyle';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
 import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder.js';
@@ -720,7 +721,6 @@ export class Editor {
   beginTransform(entities = this.selection) {
     if (this.pending || !entities.length) return;
     this.pending = entities.map((entity) => ({ entity, before: this.snapshot(entity) }));
-    if (this.selected && this.tool === 'move') this.tools.beginSnap(this.selected);
   }
 
   endTransform() {
@@ -749,6 +749,7 @@ export class Editor {
 
   /** Remembers where the other selected objects are, so they follow the primary one while dragging. */
   private startFollow() {
+    if (this.selected) this.tools.beginSnap(this.selected);
     this.primaryStart = this.selected?.root.position.clone() ?? null;
     this.followStart = this.extra.map((entity) => ({ entity, pos: entity.root.position.clone() }));
   }
@@ -764,6 +765,7 @@ export class Editor {
       const delta = p.subtract(this.primaryStart);
       for (const f of this.followStart) f.entity.root.position.copyFrom(f.pos.add(delta));
     }
+    this.invalidate();
   }
 
   // ---------- Entities ----------
@@ -1523,10 +1525,9 @@ export class Editor {
     this.gizmoLoading = true;
     this.gizmoError = null;
     this.gizmoLoad = import('@babylonjs/core/Gizmos/gizmoManager.js').then(({ GizmoManager }) => {
-      const manager = this.gizmos = new GizmoManager(this.scene, isTouch ? 2 : 1.5);
+      const manager = this.gizmos = new GizmoManager(this.scene, TRANSFORM_GIZMO_THICKNESS);
       manager.usePointerToAttachGizmos = false;
       manager.clearGizmoOnEmptyPointerEvent = false;
-      manager.scaleRatio = isTouch ? 1.5 : 1.1;
       this.applyTool();
       this.invalidate();
     }).catch(error => {
@@ -1546,7 +1547,7 @@ export class Editor {
     this.gizmos.rotationGizmoEnabled = rotate;
     this.gizmos.scaleGizmoEnabled = scale;
     // The manager only propagates this setting to controls that already exist.
-    this.gizmos.scaleRatio = isTouch ? 1.5 : 1.1;
+    applyTransformGizmoStyle(this.gizmos);
     const g = this.gizmos.gizmos;
     for (const gz of [g.positionGizmo, g.rotationGizmo, g.scaleGizmo]) {
       if (!gz || this.configuredGizmos.has(gz)) continue;
@@ -1746,6 +1747,7 @@ export class Editor {
     if (!this.selected) return;
     this.beginTransform();
     fn(this.selected.root);
+    this.invalidate();
     if (commit) this.endTransform();
   }
 

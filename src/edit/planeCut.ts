@@ -6,6 +6,7 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { GizmoManager } from '@babylonjs/core/Gizmos/gizmoManager.js';
+import { applyTransformGizmoStyle, TRANSFORM_GIZMO_THICKNESS } from '../core/gizmoStyle';
 import type { Editor, Entity } from '../core/editor';
 import type { FaceLookup, MeshPart } from './parts';
 import { capturePart, compactFaces, mergeLocal } from './parts';
@@ -178,7 +179,7 @@ export class PlaneCut {
     this.plane.isPickable = false; editor.overlays.add(this.plane);
     for (const color of ['#bb98df', '#e6b94a', '#44216b']) { const m = new StandardMaterial('Cut preview', editor.scene); m.diffuseColor = m.emissiveColor = Color3.FromHexString(color); m.alpha = 0.34; m.disableLighting = true; m.backFaceCulling = false; m.zOffset = -3; this.materials.push(m); }
     this.plane.material = this.materials[0]; this.plane.position.copyFrom(bounds.min.add(bounds.max).scale(0.5)); this.snap('horizontal');
-    this.gizmos = new GizmoManager(editor.scene); this.gizmos.usePointerToAttachGizmos = false; this.gizmos.positionGizmoEnabled = true; this.gizmos.rotationGizmoEnabled = true; this.gizmos.attachToMesh(this.plane);
+    this.gizmos = new GizmoManager(editor.scene, TRANSFORM_GIZMO_THICKNESS); this.gizmos.usePointerToAttachGizmos = false; this.gizmos.positionGizmoEnabled = true; this.gizmos.rotationGizmoEnabled = true; applyTransformGizmoStyle(this.gizmos); this.gizmos.attachToMesh(this.plane);
     this.observer = editor.scene.onBeforeRenderObservable.add(() => { const key = this.plane.position.asArray().join() + this.plane.rotationQuaternion?.asArray().join() + this.exact + this.limited + this.cap; if (key !== this.signature) { this.signature = key; clearTimeout(this.timer); this.timer = window.setTimeout(() => this.preview(), 150); } });
     this.preview();
   }
