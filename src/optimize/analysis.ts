@@ -38,6 +38,15 @@ export interface Budget {
 
 const MB = 1024 * 1024;
 
+/** Conservative encoding budget: deviceMemory is approximate, not available tab memory. */
+export function textureWorkerLimit(width: number, height: number, cores: number, memory: number | undefined, phone: boolean) {
+  if (phone || (memory !== undefined && memory <= 4)) return 1;
+  const budget = memory === undefined ? 512 * MB : Math.min(1024, memory * 1024 * .1) * MB;
+  // Retain source RGBA and stitched output; reserve ~192 MB for each 2K WASM encoder.
+  const available = budget - width * height * 5;
+  return Math.max(1, Math.min(3, Math.floor((cores || 2) / 2), Math.floor(available / (192 * MB))));
+}
+
 /**
  * Device budgets (decision D7): phones keep the scene under ~500k triangles and 256 MB of
  * textures (AR also draws the camera feed); desktops allow 3M triangles and 1 GB.
@@ -89,6 +98,7 @@ export function analyzeScene(editor: Editor) {
   let triangles = 0;
   const textures = new Map<BaseTexture, TextureCost>();
   for (const e of editor.entities) {
+    if (e.groupMembers) continue;
     if (e.kind === 'light' || !e.visible) continue;
     const c = analyzeEntity(editor, e);
     triangles += c.triangles;

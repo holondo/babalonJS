@@ -4,7 +4,7 @@ import type { Material } from '@babylonjs/core/Materials/material.js';
 import type { Scene } from '@babylonjs/core/scene.js';
 import type { Editor, Entity } from '../core/editor';
 import { tr } from '../core/i18n';
-import { textureBytes } from './analysis';
+import { deviceBudget, textureBytes, textureWorkerLimit } from './analysis';
 import { read, write } from 'ktx-parse';
 import type { KTX2Container } from 'ktx-parse';
 
@@ -92,8 +92,9 @@ export interface TextureOptimization {
 export class TextureOptimizer {
   private readonly editor: Editor;
   /** Encoding workers running now (cancel stops them all). */
-  private readonly workers = new Set<Worker>();
+  private readonly workers = new Map<Worker, () => void>();
   progress: number | null = null;
+  entity: Entity | null = null;
 
   constructor(editor: Editor) {
     this.editor = editor;
@@ -104,9 +105,8 @@ export class TextureOptimizer {
   }
 
   cancel() {
-    for (const w of this.workers) w.terminate();
-    this.workers.clear();
     this.cancelled = true;
+    for (const abort of this.workers.values()) abort();
   }
 
   private cancelled = false;
@@ -119,22 +119,31 @@ export class TextureOptimizer {
     const unique = [...new Set(slots.map((s) => s.texture))];
     if (!unique.length) throw new Error(tr('This model has no textures to optimize.'));
     this.progress = 0;
+    this.entity = e;
     this.cancelled = false;
-    this.editor.notify('optimize');
+    this.editor.notify('activity');
     const encoded: EncodedTexture[] = [];
     try {
       for (const [i, texture] of unique.entries()) {
+        this.checkCancelled();
         const slot = slots.find((s) => s.texture === texture)!;
         const job = await readTexture(texture, settings, slot.color, !!slot.normal);
+        this.checkCancelled();
         const result = await this.encode(job, (p) => {
           this.progress = (i + p) / unique.length;
-          this.editor.notify('optimize');
+          this.editor.notify('activity');
         });
         encoded.push({ original: texture, ...result, replacement: makeTexture(this.editor.scene, texture, result.data, result.format) });
       }
+      this.checkCancelled();
+    } catch (error) {
+      this.cancel();
+      for (const texture of encoded) texture.replacement.dispose();
+      throw error;
     } finally {
       this.progress = null;
-      this.editor.notify('optimize');
+      this.entity = null;
+      this.editor.notify('activity');
     }
     if (this.cancelled) throw new DOMException('Cancelled', 'AbortError');
     const before = e.textureOptimization;
@@ -246,7 +255,11 @@ export class TextureOptimizer {
     this.editor.notify('optimize');
   }
 
-  /** Downscale (if asked), then KTX2 or PNG; large images in parallel tiles. */
+  private checkCancelled() {
+    if (this.cancelled) throw new DOMException('Cancelled', 'AbortError');
+  }
+
+  /** Downscale (if asked), then KTX2 or PNG; bounded tile encoding. */
   private async encode(job: TextureJob, onProgress: (p: number) => void) {
     let { pixels, width, height } = job;
     if (job.maxSize && Math.max(width, height) > job.maxSize) {
@@ -260,19 +273,21 @@ export class TextureOptimizer {
     const base = { color: job.color, normalMap: job.normalMap };
     if (!job.compress) {
       const data = await this.run({ ...base, pixels, width, height, format: 'png', mipmaps: false, supercompress: false });
+      onProgress(1);
       return { data, format: 'png' as const, width, height };
     }
     const data =
       width * height <= ENCODER_LIMIT
         ? await this.run({ ...base, pixels, width, height, format: 'ktx2', mipmaps: true, supercompress: true })
         : write(await this.encodeLarge(pixels, width, height, base, onProgress));
+    onProgress(1);
     return { data, format: 'ktx2' as const, width, height };
   }
 
   /**
    * Images over the encoder limit (4K and up), kept at full resolution: UASTC encodes every 4×4
-   * block on its own, so the full-size level is encoded in tiles (in parallel) and the blocks are
-   * stitched together; the smaller mipmap levels come from the half-size image.
+   * block on its own. Stitch each tile immediately with a device-dependent worker limit.
+   * Encode mipmaps afterwards, so their encoder does not add to the parallel tile budget.
    */
   private async encodeLarge(pixels: Uint8Array, width: number, height: number, base: { color: boolean; normalMap: boolean }, onProgress: (p: number) => void): Promise<KTX2Container> {
     if (width % 4 || height % 4) throw new Error(tr('Texture size must be a multiple of 4 to compress at full resolution. Choose a maximum size.'));
@@ -280,31 +295,36 @@ export class TextureOptimizer {
     for (let y = 0; y < height; y += TILE) for (let x = 0; x < width; x += TILE) tiles.push({ x, y, w: Math.min(TILE, width - x), h: Math.min(TILE, height - y) });
     let done = 0;
     const step = () => onProgress(++done / (tiles.length + 1));
-    const half = resize(pixels, width, height, width / 2, height / 2).then(async (h) => {
-      const c = (width / 2) * (height / 2) <= ENCODER_LIMIT ? read(await this.run({ ...base, pixels: h, width: width / 2, height: height / 2, format: 'ktx2', mipmaps: true, supercompress: false })) : await this.encodeLarge(h, width / 2, height / 2, base, () => {});
-      step();
-      return c;
-    });
-    const parts = await pool(
-      tiles.map((t) => async () => {
+    const blocksW = width / 4;
+    const level0 = new Uint8Array(blocksW * (height / 4) * 16);
+    let out: KTX2Container | undefined;
+    let next = 0;
+    const limit = Math.min(tiles.length, this.workerLimit(width, height));
+    await Promise.all(Array.from({ length: limit }, async () => {
+      while (next < tiles.length) {
+        const t = tiles[next++];
+        this.checkCancelled();
         const tile = new Uint8Array(t.w * t.h * 4);
         for (let y = 0; y < t.h; y++) tile.set(pixels.subarray(((t.y + y) * width + t.x) * 4, ((t.y + y) * width + t.x + t.w) * 4), y * t.w * 4);
         const c = read(await this.run({ ...base, pixels: tile, width: t.w, height: t.h, format: 'ktx2', mipmaps: false, supercompress: false }));
+        const blocks = c.levels[0].levelData;
+        const tbw = t.w / 4;
+        for (let r = 0; r < t.h / 4; r++) level0.set(blocks.subarray(r * tbw * 16, (r + 1) * tbw * 16), ((t.y / 4 + r) * blocksW + t.x / 4) * 16);
+        if (!out) {
+          out = c;
+          // Keep metadata, not the first tile's backing buffer.
+          out.levels = [];
+        }
         step();
-        return c;
-      }),
-      Math.max(1, Math.min(tiles.length, (navigator.hardwareConcurrency || 4) - 1)),
-    );
-    const blocksW = width / 4;
-    const level0 = new Uint8Array(blocksW * (height / 4) * 16);
-    parts.forEach((c, k) => {
-      const t = tiles[k];
-      const blocks = c.levels[0].levelData;
-      const tbw = t.w / 4;
-      for (let r = 0; r < t.h / 4; r++) level0.set(blocks.subarray(r * tbw * 16, (r + 1) * tbw * 16), ((t.y / 4 + r) * blocksW + t.x / 4) * 16);
-    });
-    const rest = await half;
-    const out = parts[0];
+      }
+    }));
+    this.checkCancelled();
+    const h = await resize(pixels, width, height, width / 2, height / 2);
+    const rest = (width / 2) * (height / 2) <= ENCODER_LIMIT
+      ? read(await this.run({ ...base, pixels: h, width: width / 2, height: height / 2, format: 'ktx2', mipmaps: true, supercompress: false }))
+      : await this.encodeLarge(h, width / 2, height / 2, base, () => {});
+    step();
+    if (!out) throw new Error('No texture tiles');
     out.pixelWidth = width;
     out.pixelHeight = height;
     out.levels = [{ levelData: level0, uncompressedByteLength: level0.length }, ...rest.levels];
@@ -313,15 +333,24 @@ export class TextureOptimizer {
     return out;
   }
 
-  /** One image in its own worker (several can run at once). */
+  private workerLimit(width: number, height: number) {
+    return textureWorkerLimit(width, height, navigator.hardwareConcurrency,
+      (navigator as Navigator & { deviceMemory?: number }).deviceMemory, deviceBudget().phone);
+  }
+
+  /** One image in a disposable worker, releasing its WASM heap after encoding. */
   private run(request: EncodeRequest) {
     return new Promise<Uint8Array>((resolve, reject) => {
+      this.checkCancelled();
       const worker = new Worker(new URL('./textures.worker.ts', import.meta.url), { type: 'module' });
-      this.workers.add(worker);
       const end = () => {
         worker.terminate();
         this.workers.delete(worker);
       };
+      this.workers.set(worker, () => {
+        end();
+        reject(new DOMException('Cancelled', 'AbortError'));
+      });
       worker.onmessage = (ev) => {
         end();
         if (ev.data.type === 'done') resolve(ev.data.data);
@@ -331,24 +360,14 @@ export class TextureOptimizer {
         end();
         reject(new Error(ev.message || 'Worker error'));
       };
-      worker.postMessage(request, [request.pixels.buffer as ArrayBuffer]);
+      try {
+        worker.postMessage(request, [request.pixels.buffer as ArrayBuffer]);
+      } catch (error) {
+        end();
+        reject(error);
+      }
     });
   }
-}
-
-/** Runs tasks with at most `limit` at a time; results in task order. */
-async function pool<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
-  const results = new Array<T>(tasks.length);
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: limit }, async () => {
-      while (next < tasks.length) {
-        const i = next++;
-        results[i] = await tasks[i]();
-      }
-    }),
-  );
-  return results;
 }
 
 /** High-quality resampling of RGBA pixels. */
@@ -358,9 +377,15 @@ async function resize(pixels: Uint8Array, width: number, height: number, w: numb
     resizeHeight: h,
     resizeQuality: 'high',
   });
-  const ctx = new OffscreenCanvas(w, h).getContext('2d')!;
-  ctx.drawImage(bitmap, 0, 0);
-  return new Uint8Array(ctx.getImageData(0, 0, w, h).data.buffer);
+  const canvas = new OffscreenCanvas(w, h);
+  try {
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(bitmap, 0, 0);
+    return new Uint8Array(ctx.getImageData(0, 0, w, h).data.buffer);
+  } finally {
+    bitmap.close();
+    canvas.width = canvas.height = 1;
+  }
 }
 
 /** Pixels of a texture as stored on the GPU (RGBA8, first row as uploaded). */
@@ -369,7 +394,7 @@ async function readTexture(t: BaseTexture, settings: TextureSettings, color: boo
   const data = await t.readPixels(0, 0, null, true, false);
   if (!data) throw new Error(tr('Could not read the texture {name}.', { name: t.name }));
   const pixels = data instanceof Uint8Array ? data : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-  return { pixels: new Uint8Array(pixels), width: size.width, height: size.height, maxSize: settings.maxSize, compress: settings.compress, color, normalMap };
+  return { pixels, width: size.width, height: size.height, maxSize: settings.maxSize, compress: settings.compress, color, normalMap };
 }
 
 /**
@@ -378,7 +403,9 @@ async function readTexture(t: BaseTexture, settings: TextureSettings, color: boo
  */
 function makeTexture(scene: Scene, original: BaseTexture, data: Uint8Array, format: 'ktx2' | 'png') {
   const url = URL.createObjectURL(new Blob([data as Uint8Array<ArrayBuffer>], { type: format === 'ktx2' ? 'image/ktx2' : 'image/png' }));
-  const t = new Texture(url, scene, { noMipmap: false, invertY: false, forcedExtension: format === 'ktx2' ? '.ktx2' : '.png' });
+  const release = () => URL.revokeObjectURL(url);
+  const t = new Texture(url, scene, { noMipmap: false, invertY: false, buffer: data, forcedExtension: format === 'ktx2' ? '.ktx2' : '.png', onLoad: release, onError: release });
+  t.onDisposeObservable.addOnce(release);
   t.name = `${original.name} (${format.toUpperCase()})`;
   const o = original as Texture;
   t.wrapU = o.wrapU;

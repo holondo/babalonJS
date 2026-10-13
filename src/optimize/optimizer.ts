@@ -8,6 +8,7 @@ import { tr } from '../core/i18n';
 import { simplifyMeshes } from './simplify';
 import type { SimplifyMesh } from './simplify';
 import { bakeNormals, bakedPng, bakedTexture, normalMapOf, pngTexture, setNormalMap } from './bake';
+import { capturePart } from '../edit/parts';
 
 /**
  * Optimized variants of models: fewer triangles, same look. Non-destructive and reversible
@@ -80,6 +81,8 @@ export class ModelOptimizer {
   /** Running computation (one at a time). */
   private task: { cancel: () => void } | null = null;
   progress: number | null = null;
+  entity: Entity | null = null;
+  phase: 'geometry' | 'bake' = 'geometry';
 
   constructor(editor: Editor) {
     this.editor = editor;
@@ -112,12 +115,14 @@ export class ModelOptimizer {
     // Simplify from the original geometry even when an optimization is active
     const sources = meshes.map((m) => this.originalOf(e, m));
     this.progress = 0;
-    this.editor.notify('optimize');
+    this.entity = e;
+    this.phase = 'geometry';
+    this.editor.notify('activity');
     const simplify = simplifyMeshes(
       { meshes: sources.map((g, i) => simplifyInput(g ?? meshes[i].geometry!)), ratios, lockBorder: settings.lockBorder },
       (p) => {
         this.progress = p;
-        this.editor.notify('optimize');
+        this.editor.notify('activity');
       },
     );
     this.task = simplify;
@@ -134,7 +139,8 @@ export class ModelOptimizer {
     } finally {
       this.task = null;
       this.progress = null;
-      this.editor.notify('optimize');
+      this.entity = null;
+      this.editor.notify('activity');
     }
   }
 
@@ -166,6 +172,9 @@ export class ModelOptimizer {
 
   /** Bakes the original's surface detail onto each optimized mesh that has UVs and a material. */
   private async bake(o: Optimization, size: number) {
+    this.phase = 'bake';
+    this.progress = 0;
+    this.editor.notify('activity');
     const targets = o.meshes.filter((v) => normalMapOf(v.mesh.material) && (v.original ?? v.mesh.geometry)?.getVerticesData('uv'));
     if (!targets.length) throw new Error(tr('Baking needs a material and UVs.'));
     for (const [k, v] of targets.entries()) {
@@ -191,7 +200,7 @@ export class ModelOptimizer {
         },
         (p) => {
           this.progress = (k + p) / targets.length;
-          this.editor.notify('optimize');
+          this.editor.notify('activity');
         },
       );
       this.task = job;
@@ -327,6 +336,43 @@ export class ModelOptimizer {
   }
 
   /** Replaces one optimization state with another (either can be none). */
+  /**
+   * Makes the optimized geometry the model's own, so its surface can be edited: levels of detail
+   * are dropped (they would no longer match) and the geometry is saved like an edited mesh.
+   * A baked normal map becomes the material's normal texture. Undo goes back to the
+   * optimization, with the original still available.
+   */
+  async freeze(e: Entity) {
+    const o = e.optimization;
+    if (!o || o.session) return;
+    // Baked normals live in the optimization: keep them as the material's own texture
+    for (const v of o.meshes) {
+      if (!v.normal) continue;
+      const file = new File([v.normal.png as Uint8Array<ArrayBuffer>], `${v.mesh.name || 'mesh'}-normals.png`, { type: 'image/png' });
+      await this.editor.setMaterialTexture(v.normal.material, 'normal', file);
+    }
+    const previous = e.separation;
+    const frozen = () => {
+      for (const v of o.meshes) {
+        for (const lod of v.lodMeshes) {
+          v.mesh.removeLODLevel(lod);
+          lod.setEnabled(false);
+        }
+        v.mesh.useLODScreenCoverage = false;
+      }
+      e.optimization = undefined;
+      e.separation = { meshes: e.meshes.map((m) => capturePart(m as Mesh, true)), pivot: previous?.pivot ?? [0, 0, 0] };
+      this.editor.notify('optimize');
+      this.editor.notify('entities');
+    };
+    const unfrozen = () => {
+      e.separation = previous;
+      this.swap(e, undefined, o);
+    };
+    frozen();
+    this.editor.record({ undo: unfrozen, redo: frozen });
+  }
+
   private swap(e: Entity, from: Optimization | undefined, to: Optimization | undefined) {
     for (const v of from?.meshes ?? []) {
       for (const lod of v.lodMeshes) {

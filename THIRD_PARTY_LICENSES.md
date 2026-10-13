@@ -11,3 +11,7 @@ babalon JS is free software (GPL-3.0-or-later). Every third-party file bundled w
 The files are generated from `AnimationLibrary_Godot_Standard.glb` in the pack by `scripts/build-animation-library.mjs` (clips split into one file each, constant channels and redundant keys removed). See `docs/animation_sources.md` for details.
 
 The other sample models in the app are loaded from `assets.babylonjs.com` when the user picks them; they are not bundled.
+
+Geometry triangulation uses [Earcut](https://github.com/mapbox/earcut), Copyright Mapbox, under the ISC license.
+
+Optional solid fusion uses [Manifold](https://github.com/elalish/manifold), under the Apache-2.0 license. Its WASM module is cached on first use.

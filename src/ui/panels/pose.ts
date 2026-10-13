@@ -26,7 +26,7 @@ export class PosePanel {
   /** Show the manual bone mapping even when nothing is missing. */
   mapBones = false;
 
-  /** Selection bar while posing: the joint, how to move it, and Done. */
+  /** The posing bubble: the joint, how to move it, and Done. */
   renderPoseBar() {
     const p = this.ui.editor.pose;
     const j = p.joint;
@@ -51,7 +51,11 @@ export class PosePanel {
     const ed = this.ui.editor;
     const p = ed.pose;
     const r = ed.rigger;
-    if (r.active && r.step === 'place' && !ed.cleanView) return this.ui.rigUI.renderRigOverlay();
+    if (r.active && r.step === 'place' && !ed.cleanView) {
+      if (this.ui.rigUI) this.ui.rigUI.renderRigOverlay();
+      else void this.ui.loadRigUI().catch(() => {});
+      return;
+    }
     if (!p.active || ed.cleanView) return this.ui.jointOverlay.clear();
     const joints = p.joints();
     const map = p.human;

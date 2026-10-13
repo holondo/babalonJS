@@ -23,9 +23,9 @@ export class ObjectsPanel {
       ...ed.entities.map((e) =>
         h(
           'li',
-          { class: e === ed.selected ? 'active' : '', onClick: () => ed.select(e) },
+          { class: e === ed.selected ? 'active' : '', onClick: () => ed.select(e, ed.multiSelect) },
           icon(KIND_ICON[e.kind], 16),
-          h('span', {}, e.name),
+          h('span', {}, `${e.groupParent ? '↳ ' : ''}${e.name}`),
           iconButton(e.visible ? Eye : EyeOff, e.visible ? tr('Hide') : tr('Show'), () => ed.setVisible(e, !e.visible), { cls: 'mini' }),
         ),
       ),

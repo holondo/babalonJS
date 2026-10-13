@@ -7,7 +7,7 @@ import type { WeightMethod } from '../../rigging/rigging';
 import { SKIN_TREATMENTS } from '../../rigging/skinTreatments';
 import type { SkinTreatment } from '../../rigging/skinTreatments';
 import { tr } from '../../core/i18n';
-import { button, progressBar, stepper, h, hint, iconButton, row, section, select, slider, toggle } from '../dom';
+import { button, stepper, h, hint, iconButton, row, section, select, slider, toggle } from '../dom';
 import type { UI } from '../ui';
 
 /** Objects → Rig: the three rigging steps, their actions (panel footer or floating bar) and the joint handles. */
@@ -31,13 +31,7 @@ export class RigPanel {
     return r.step === 'check' ? 3 : this.rigStage === 'skin' ? 2 : 1;
   }
 
-  /** The Rig part is on screen (then the steps and actions live in the panel, not the bar). */
-  get rigPanelShown() {
-    const ed = this.ui.editor;
-    return !ed.photoMode && this.ui.tab === 'objects' && this.ui.segment.objects === 'rig' && ed.rigger.entity === ed.selected;
-  }
-
-  /** Actions of the current rigging step (shared by the panel footer and the floating bar). */
+  /** Actions of the current rigging step (shared by the panel footer and the rigging bubble). */
   rigActions(): HTMLElement[] {
     const r = this.ui.editor.rigger;
     if (r.progress !== null || r.comparing) return [button(tr('Stop'), () => r.stopComputing(), { icon: X, cls: 'small' })];
@@ -53,18 +47,13 @@ export class RigPanel {
     }
   }
 
-  /** Floating bar while rigging, only when the Rig panel is closed (e.g. on a phone). */
+  /** The rigging bubble: the step, its actions, and Cancel. */
   renderRigBar() {
     const r = this.ui.editor.rigger;
-    if (this.rigPanelShown) {
-      this.ui.selbar.classList.remove('show');
-      return this.ui.selbar.replaceChildren();
-    }
-    this.ui.selbar.classList.add('show');
     const titles = ['', tr('Joints'), tr('Skin'), tr('Check')];
     const computing = r.progress !== null || r.comparing;
     this.ui.selbar.replaceChildren(
-      h(
+      computing ? this.ui.activitySummary(Bone, tr('Computing weights…'), r.progress) : h(
         'div',
         { class: 'sel-name always' },
         h('b', { class: 'step-count' }, `${this.rigStep}/3`),
@@ -95,7 +84,7 @@ export class RigPanel {
 
   setRigStage(stage: 'joints' | 'skin') {
     this.rigStage = stage;
-    this.renderRigBar();
+    this.ui.renderSelbar();
     this.ui.poseUI.renderPoseOverlay();
     if (this.ui.tab === 'objects') this.ui.renderPanel();
   }
@@ -194,10 +183,10 @@ export class RigPanel {
             this.rigOutput = v === 'compare' ? 'comparison' : 'single';
             if (v !== 'compare') r.treatment = v as SkinTreatment;
             this.ui.renderPanel();
-            this.renderRigBar();
+            this.ui.renderSelbar();
           }),
           hint(tr(description)),
-          busy ? progressBar(r.progress ?? 0, tr('Computing weights… {pct}%', { pct: Math.round((r.progress ?? 0) * 100) })) : null,
+          busy ? this.ui.operationProgress('rig', r.progress ?? 0) : null,
         ),
       ];
     }

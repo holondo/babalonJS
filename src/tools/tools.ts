@@ -3,7 +3,9 @@ import { CreateGreasedLine } from '@babylonjs/core/Meshes/Builders/greasedLineBu
 import { GreasedLineMeshMaterialType } from '@babylonjs/core/Materials/GreasedLine/greasedLineMaterialInterfaces.js';
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
-import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
+import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder.js';
+import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
+import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder.js';
 import { Observable } from '@babylonjs/core/Misc/observable.js';
 import { Plane } from '@babylonjs/core/Maths/math.plane.js';
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
@@ -79,6 +81,16 @@ interface AnchorJSON {
 export class Tools {
   readonly changed = new Observable<void>();
   measureMode = false;
+  private measurePaused = false;
+  /** A measurement can stay open while another context receives scene input. */
+  get measuring() { return this.measureMode && !this.measurePaused; }
+
+  setMeasurePaused(paused: boolean) {
+    if (this.measurePaused === paused) return;
+    this.measurePaused = paused;
+    this.editor.refreshTool();
+    this.editor.invalidate();
+  }
   measurements: Measurement[] = [];
   /** Ephemeral XR geometry: never enters editor history or project serialization. */
   readonly sessionMeasurements: Measurement[] = [];
@@ -179,7 +191,9 @@ export class Tools {
   setMeasureMode(on: boolean) {
     this.measureMode = on;
     if (!on) this.cancelPending();
-    if (on) this.editor.select(null);
+    this.measurePaused = false;
+    this.editor.refreshTool();
+    this.editor.invalidate();
     this.changed.notifyObservers();
   }
 
@@ -227,13 +241,13 @@ export class Tools {
       case PointerEventTypes.POINTERTAP:
       case PointerEventTypes.POINTERDOUBLETAP: {
         // Two quick taps arrive as TAP + DOUBLETAP: in measure mode both must place points
-        if (info.type === PointerEventTypes.POINTERDOUBLETAP && !this.measureMode) return false;
+        if (info.type === PointerEventTypes.POINTERDOUBLETAP && !this.measuring) return false;
         const hit = scene.pick(x, y, (m) => m.metadata?.measureId !== undefined && m.isEnabled());
         if (hit?.pickedMesh) {
           this.setActive(this.measurements.find((mm) => mm.id === hit.pickedMesh!.metadata.measureId) ?? null);
           return true;
         }
-        if (!this.measureMode) {
+        if (!this.measuring) {
           // Tapping elsewhere collapses expanded labels/chips (and still selects normally)
           if (this.active || this.activeGuide) {
             this.active = null;
@@ -350,7 +364,7 @@ export class Tools {
   }
 
   private createMarker() {
-    const marker = MeshBuilder.CreateSphere('measurePoint', { diameter: 1, segments: 12 }, this.scene);
+    const marker = CreateSphere('measurePoint', { diameter: 1, segments: 12 }, this.scene);
     marker.material = this.markerMat;
     marker.renderingGroupId = ON_TOP;
     this.editor.overlays.add(marker);
@@ -535,14 +549,14 @@ export class Tools {
     let plane: Mesh;
     let lines: Vector3[][];
     if (axis === 'y') {
-      plane = MeshBuilder.CreateGround('guidePlane', { width: 1, height: 1 }, scene);
+      plane = CreateGround('guidePlane', { width: 1, height: 1 }, scene);
       lines = [
         [v(-0.5, 0, -0.5), v(0.5, 0, -0.5), v(0.5, 0, 0.5), v(-0.5, 0, 0.5), v(-0.5, 0, -0.5)],
         [v(-0.5, 0, 0), v(0.5, 0, 0)],
         [v(0, 0, -0.5), v(0, 0, 0.5)],
       ];
     } else {
-      plane = MeshBuilder.CreatePlane('guidePlane', { width: 1, height: 1, sideOrientation: Mesh.DOUBLESIDE }, scene);
+      plane = CreatePlane('guidePlane', { width: 1, height: 1, sideOrientation: Mesh.DOUBLESIDE }, scene);
       plane.position.y = 0.5;
       if (axis === 'x') plane.rotation.y = Math.PI / 2;
       lines =

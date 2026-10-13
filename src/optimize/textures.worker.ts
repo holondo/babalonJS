@@ -2,7 +2,7 @@
 /**
  * Texture encoding off the main thread (decision D2: Basis Universal UASTC in KTX2, near-lossless,
  * 4–8× less GPU memory than RGBA). One image per message; textures.ts splits large images into
- * tiles and runs several of these workers in parallel. The encoder WASM loads only here.
+ * tiles with a bounded, device-dependent concurrency. The encoder WASM loads only here.
  */
 import { encodeToKTX2 } from 'ktx2-encoder';
 import type { EncodeRequest } from './textures';

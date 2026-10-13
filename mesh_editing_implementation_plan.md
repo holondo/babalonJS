@@ -42,14 +42,17 @@ One finger edits; two fingers navigate, following Separate mode. Provide visible
 - Group and combine are distinct from welding. Combining preserves disconnected surfaces. Border connection creates triangles; boolean fusion rebuilds intersections.
 - One action or gesture is one history entry. Build expensive results off-scene, publish atomically, and leave originals unchanged on failure or cancellation. Keep history-owned resources alive until no longer needed.
 - New saved fields are optional. Store original files once and cache generated binary data per immutable state, following `blobOf` and separation serialization. Older projects continue opening without a breaking version bump.
-- Grouping supports animated objects. Initial geometry editing/combining targets static triangle meshes. Detect imported skeletons and morph targets as well as app rigs. Offer an explicit static-copy conversion where implemented; never silently discard animation data.
+- Grouping supports animated objects. In-place edits (cut, region transform, brushes, closing openings) work on optimized, app-rigged, skinned and animated models: skin weights are vertex attributes and travel with the edit, and the model is shown in its rest pose while editing. Only shape keys block in-place edits (they store absolute positions). Combine, fuse and connect create a new object and still refuse skeletons and animations with an explanation; never silently discard animation data.
+- An optimized model is frozen before editing (`ModelOptimizer.freeze`: the optimized geometry becomes the model, levels of detail are dropped, baked normals become a material texture; one undo step goes back to the optimization). Geometry edited on an app rig is saved with `rigSpace` and re-applied after the rig on reopen; removing the rig keeps the edit in mesh space.
+- Closing openings skips curved or irregular ones and reports them instead of failing the whole action; real meshes with a few non-manifold edges are accepted.
+- Performance on dense meshes (measured on a 2M-triangle model): selection uses a byte per face (`FaceSet`) and compact typed connectivity (`faceTopology.ts`, prefetched in a worker on entering edit mode); highlights and cut previews borrow the model's GPU buffers; region transforms and brushes edit vertices in place through `Deform` (only moved vertices, normals around them, changed GPU range); exact cuts only clip crossed triangles; closing and connecting work on the faces along open edges (`compactFaces`/`mergeLocal`, with the whole mesh's weld and open-edge test). Never copy a whole mesh into plain arrays or rebuild its geometry per frame.
 - Heavy topology operations use cancellable workers loaded on demand. Ordinary local vertex edits stay interactive. Do not reduce resolution or topology quality automatically.
 
 ## Implementation steps
 
 ### P01 — Combine parts into one object (first MVP)
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective:** Attach an arm from model A visually to torso B, with both selectable and transformable as one object.
 
@@ -67,7 +70,7 @@ One finger edits; two fingers navigate, following Separate mode. Provide visible
 
 ### P02 — Group without changing geometry
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective:** Move several objects together and later ungroup them.
 
@@ -85,7 +88,7 @@ One finger edits; two fingers navigate, following Separate mode. Provide visible
 
 ### P03 — Transform a selected region
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective:** Scale, move or rotate only selected geometry, optionally with a soft transition.
 
@@ -103,7 +106,7 @@ One finger edits; two fingers navigate, following Separate mode. Provide visible
 
 ### P04 — Close cuts and simple openings
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective:** Cap a plane cut or close a selected simple hole.
 
@@ -121,7 +124,7 @@ One finger edits; two fingers navigate, following Separate mode. Provide visible
 
 ### P05 — Connect an arm to another torso
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective:** Create a continuous seam between two open borders after positioning the parts.
 
@@ -139,7 +142,7 @@ One finger edits; two fingers navigate, following Separate mode. Provide visible
 
 ### P06 — Surface brushes
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective:** Pull, inflate, smooth or flatten an existing surface with a brush.
 
@@ -157,7 +160,7 @@ One finger edits; two fingers navigate, following Separate mode. Provide visible
 
 ### P07 — Fuse overlapping solids (later phase)
 
-**Status:** TODO
+**Status:** VERIFIED
 
 **Objective:** Offer true volume union for suitable intersecting static meshes.
 
@@ -189,10 +192,11 @@ No new approval gate is required for routine local implementation when requested
 
 | Step | Status | Evidence / commit | Human approval | Notes |
 | --- | --- | --- | --- | --- |
-| P01 | TODO | | Not required for local work | First complete MVP |
-| P02 | TODO | | Not required for local work | M1 |
-| P03 | TODO | | Not required for local work | Reuse selection |
-| P04 | TODO | | Not required for local work | Planar openings first |
-| P05 | TODO | | Not required for local work | M2 |
-| P06 | TODO | | Not required for local work | Fixed topology |
-| P07 | TODO | | Not required for local work | M3; later phase |
+| P01 | VERIFIED | Chair + cube combined; undo/redo; save/reopen with nothing missing | Not required for local work | First complete MVP |
+| P02 | VERIFIED | Group, move, ungroup keeps world placement | Not required for local work | M1 |
+| P03 | VERIFIED | Gizmo scale of a selected part (1.0 → 1.25 top) leaves the rest unchanged | Not required for local work | Reuse selection |
+| P04 | VERIFIED | Cut + cap on the Poly Haven chair leaves 0 open loops; close opening on a cut sphere. Fixed: real meshes with a few non-manifold edges were refused entirely | Not required for local work | Planar openings first |
+| P05 | VERIFIED | Two sphere halves bridged into a closed capsule (200-triangle seam) | Not required for local work | M2 |
+| P06 | VERIFIED | Live while dragging: 2–13 ms per move on a 2M-triangle model; one undo step per stroke | Not required for local work | Fixed topology |
+| P07 | VERIFIED | Two overlapping spheres fused in 2.2 s (interior removed, one surface per source material); Manifold WASM loads on demand, not precached | Not required for local work | M3; later phase |
+| P08 | VERIFIED | Conform to shape: grooved sphere 0.424..0.503 → 0.496..0.503 (fill), bumps cut to 0.45 (flatten), 50% strength halfway; Add shape: box fused into the sphere, undo restores both | Not required for local work | Sphere/cylinder/box guide with gizmo; cast (keeps UVs/skin) or union via Fuse |

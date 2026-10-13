@@ -1,4 +1,9 @@
+import { reparent, setAffineTransform } from '../edit/groups';
+import { Fusion } from '../edit/fuse';
+import { Shrinkwrap } from '../edit/shrinkwrap';
 import type { LibraryAttribution } from '../library/polyhaven';
+import { combine } from '../edit/combine';
+import type { Composite } from '../edit/combine';
 import { Separator } from '../edit/separate';
 import type { SeparationState } from '../edit/separate';
 import { loadEnvironment } from './environments';
@@ -24,7 +29,7 @@ import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight.js';
 import { Engine } from '@babylonjs/core/Engines/engine.js';
 import { FilesInputStore } from '@babylonjs/core/Misc/filesInputStore.js';
 import { Frustum } from '@babylonjs/core/Maths/math.frustum.js';
-import { GizmoManager } from '@babylonjs/core/Gizmos/gizmoManager.js';
+import type { GizmoManager } from '@babylonjs/core/Gizmos/gizmoManager.js';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js';
 import { ImageProcessingConfiguration } from '@babylonjs/core/Materials/imageProcessingConfiguration.js';
 import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader.js';
@@ -32,7 +37,12 @@ import { Material } from '@babylonjs/core/Materials/material.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js';
-import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
+import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
+import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder.js';
+import { CreateDisc } from '@babylonjs/core/Meshes/Builders/discBuilder.js';
+import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder.js';
+import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder.js';
+import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder.js';
 import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js';
 import { Observable } from '@babylonjs/core/Misc/observable.js';
 import { Plane } from '@babylonjs/core/Maths/math.plane.js';
@@ -81,7 +91,7 @@ export type Tool = 'move' | 'rotate' | 'scale';
 export type LightType = 'point' | 'spot' | 'directional';
 export type PrimitiveType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | 'plane';
 export type GroundMode = 'shadow' | 'solid' | 'none';
-export type ChangeKind = 'selection' | 'entities' | 'transform' | 'history' | 'env' | 'photo' | 'tool' | 'animation' | 'pose' | 'rig' | 'optimize';
+export type ChangeKind = 'selection' | 'entities' | 'transform' | 'history' | 'env' | 'photo' | 'tool' | 'animation' | 'pose' | 'rig' | 'optimize' | 'activity';
 
 export interface Entity {
   id: number;
@@ -108,6 +118,9 @@ export interface Entity {
   textureOptimization?: TextureOptimization;
   /** Part of a model separated from the rest (triangle subsets or cut geometry). */
   separation?: SeparationState;
+  composite?: Composite;
+  groupMembers?: Entity[];
+  groupParent?: Entity;
   castShadows: boolean;
   visible: boolean;
   light?: ShadowLight;
@@ -135,6 +148,9 @@ export interface AssetRef {
 }
 
 export interface AddOptions {
+  /** Place and size the new shape to fill this world box (instead of the free spot in view). */
+  fit?: { center: Vector3; size: Vector3 };
+  publish?: boolean;
   record?: boolean;
   select?: boolean;
 }
@@ -143,6 +159,7 @@ interface TransformSnapshot {
   p: Vector3;
   q: Quaternion;
   s: Vector3;
+  pre: Matrix;
 }
 
 interface Command {
@@ -310,7 +327,10 @@ export class Editor {
   env: EnvSettings = { ...DEFAULT_ENV };
   photo: PhotoSettings = { ...DEFAULT_PHOTO };
 
-  private readonly gizmos: GizmoManager;
+  private gizmos: GizmoManager | null = null;
+  private gizmoLoad: Promise<void> | null = null;
+  gizmoLoading = false;
+  gizmoError: string | null = null;
   private readonly outline: SelectionOutlineLayer;
   private readonly drag: PointerDragBehavior;
   private readonly hemi: HemisphericLight;
@@ -336,6 +356,8 @@ export class Editor {
   readonly rigger = new Rigger(this);
   /** Optimized variants of heavy models. */
   readonly optimizer = new ModelOptimizer(this);
+  readonly fusion = new Fusion(this);
+  readonly wrap = new Shrinkwrap(this);
   readonly separator = new Separator(this);
   readonly textureOptimizer = new TextureOptimizer(this);
   /** Other selected objects besides `selected` (which is the reference for alignment). */
@@ -383,12 +405,12 @@ export class Editor {
     this.hemi.intensity = this.env.ambient;
     this.hemi.groundColor = new Color3(0.15, 0.15, 0.18);
 
-    this.ground = MeshBuilder.CreateDisc('ground', { radius: 60, tessellation: 96 }, scene);
+    this.ground = CreateDisc('ground', { radius: 60, tessellation: 96 }, scene);
     this.ground.rotation.x = Math.PI / 2;
     this.ground.isPickable = false;
     this.ground.receiveShadows = true;
 
-    this.grid = MeshBuilder.CreateGround('grid', { width: 60, height: 60 }, scene);
+    this.grid = CreateGround('grid', { width: 60, height: 60 }, scene);
     const gridMat = new GridMaterial('gridMat', scene);
     gridMat.mainColor = new Color3(0, 0, 0);
     gridMat.lineColor = new Color3(0.55, 0.58, 0.65);
@@ -412,55 +434,6 @@ export class Editor {
     this.pipeline.imageProcessing.toneMappingEnabled = true;
     this.pipeline.imageProcessing.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
     this.applyPhoto();
-
-    this.gizmos = new GizmoManager(scene, isTouch ? 2 : 1.5);
-    this.gizmos.usePointerToAttachGizmos = false;
-    this.gizmos.clearGizmoOnEmptyPointerEvent = false;
-    this.gizmos.scaleRatio = isTouch ? 1.5 : 1.1;
-    this.gizmos.positionGizmoEnabled = true;
-    this.gizmos.rotationGizmoEnabled = true;
-    this.gizmos.scaleGizmoEnabled = true;
-    const g = this.gizmos.gizmos;
-    g.positionGizmo!.planarGizmoEnabled = true;
-    for (const gz of [g.positionGizmo!, g.rotationGizmo!, g.scaleGizmo!]) {
-      gz.onDragStartObservable.add(() => (this.rigger.active ? this.rigger.remember() : this.pose.active ? this.pose.begin() : this.beginTransform()));
-      gz.onDragEndObservable.add(() => {
-        if (this.rigger.active) return this.rigger.endHandleDrag();
-        if (this.pose.active) return this.pose.end();
-        this.tools.clearSmartLines();
-        this.endTransform();
-      });
-    }
-    // Position gizmo: track the raw position ourselves so grid snapping and smart guides don't get "sticky"
-    const pg = g.positionGizmo!;
-    let raw: Vector3 | null = null;
-    pg.onDragStartObservable.add(() => {
-      if (this.pose.active || this.rigger.active) return;
-      raw = this.selected?.root.position.clone() ?? null;
-      this.startFollow();
-    });
-    const axisGizmos: [{ dragBehavior: PointerDragBehavior }, Record<Axis, boolean>][] = [
-      [pg.xGizmo, { x: true, y: false, z: false }],
-      [pg.yGizmo, { x: false, y: true, z: false }],
-      [pg.zGizmo, { x: false, y: false, z: true }],
-      [pg.xPlaneGizmo, { x: false, y: true, z: true }],
-      [pg.yPlaneGizmo, { x: true, y: false, z: true }],
-      [pg.zPlaneGizmo, { x: true, y: true, z: false }],
-    ];
-    for (const [gizmo, axes] of axisGizmos) {
-      gizmo.dragBehavior.onDragObservable.add((ev) => {
-        // Posing: the gizmo drags the IK target, the arm/leg follows
-        if (this.rigger.active) return this.rigger.dragHandle();
-        if (this.pose.active) return this.pose.dragIk();
-        const e = this.selected;
-        if (!e || !raw) return;
-        raw.addInPlace(ev.delta);
-        this.moveTo(e, raw.clone(), axes);
-      });
-    }
-    this.gizmos.positionGizmoEnabled = false;
-    this.gizmos.rotationGizmoEnabled = false;
-    this.gizmos.scaleGizmoEnabled = false;
 
     // Drag the selected object straight across the floor (touch friendly)
     this.drag = new PointerDragBehavior({ dragPlaneNormal: Vector3.Up() });
@@ -492,22 +465,25 @@ export class Editor {
       if (this.tools.handlePointer(info)) return;
       // Separate mode: taps select faces of the model being separated
       if (this.separator.active) {
-        if (info.type === PointerEventTypes.POINTERTAP) this.separator.tap(scene.pointerX, scene.pointerY);
+        if (info.type === PointerEventTypes.POINTERTAP) {
+          const ev = info.event as PointerEvent;
+          this.separator.tap(scene.pointerX, scene.pointerY, ev.shiftKey ? 'add' : ev.ctrlKey || ev.metaKey || ev.altKey ? 'remove' : null);
+        }
         return;
       }
       // Rigging: a missed tap must not drop the joints being placed
       if (this.rigger.active) {
         // Tapping away from the joints (and the gizmo) drops the joint selection
-        if (info.type === PointerEventTypes.POINTERTAP && this.rigger.selected && !this.gizmos.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY)?.hit) this.rigger.selectJoint(null);
+        if (info.type === PointerEventTypes.POINTERTAP && this.rigger.selected && !this.gizmos?.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY)?.hit) this.rigger.selectJoint(null);
         return;
       }
       if (info.type === PointerEventTypes.POINTERTAP) {
-        if (this.tools.measureMode) return;
+        if (this.tools.measuring) return;
         const ev = info.event as PointerEvent;
         // "Hovered" only means something for a mouse: after a touch drag on a gizmo it stays
         // stuck and would swallow every later tap. The geometric pick below covers touch.
-        if (ev.pointerType === 'mouse' && this.gizmos.isHovered) return;
-        const util = this.gizmos.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY);
+        if (ev.pointerType === 'mouse' && this.gizmos?.isHovered) return;
+        const util = this.gizmos?.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY);
         if (util?.hit) return;
         const pick = scene.pick(scene.pointerX, scene.pointerY, this.pickable);
         const entity = pick?.pickedMesh ? this.entityOf(pick.pickedMesh) : null;
@@ -549,7 +525,7 @@ export class Editor {
     this.pose = new Poser(this);
 
     // A flat ring facing the camera
-    this.pivotRing = MeshBuilder.CreateTorus('pivotRing', { diameter: 1, thickness: 0.06, tessellation: 48 }, scene);
+    this.pivotRing = CreateTorus('pivotRing', { diameter: 1, thickness: 0.06, tessellation: 48 }, scene);
     this.pivotRing.rotation.x = Math.PI / 2;
     this.pivotRing.bakeCurrentTransformIntoVertices();
     this.pivotRing.billboardMode = Mesh.BILLBOARDMODE_ALL;
@@ -569,10 +545,13 @@ export class Editor {
     scene.skipPointerMovePicking = true;
 
     // Draw on demand: only while something changes, so an idle editor doesn't heat the phone
-    this.changed.add(() => this.invalidate());
+    this.changed.add(kind => { if (kind !== 'activity') this.invalidate(); });
     scene.onAfterAnimationsObservable.add(() => this.rigger.updateHelpers());
-    this.loading.add(() => this.invalidate());
-    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'input', 'change']) {
+    canvas.addEventListener('pointermove', event => {
+      if (event.buttons) this.invalidate();
+      else if (this.selected && !this.cleanView) this.invalidate(33);
+    }, { passive: true });
+    for (const type of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'input', 'change']) {
       window.addEventListener(type, () => this.invalidate(), { capture: true, passive: true });
     }
     this.engine.runRenderLoop(() => {
@@ -700,6 +679,7 @@ export class Editor {
   }
 
   undo() {
+    if (this.fusion.busy || this.fusion.preview) this.fusion.cancel();
     this.commitEdits();
     // While placing a rig's joints, undo/redo step through the joint moves
     if (this.rigger.active) return this.rigger.undo();
@@ -712,6 +692,7 @@ export class Editor {
   }
 
   redo() {
+    if (this.fusion.busy || this.fusion.preview) this.fusion.cancel();
     this.commitEdits();
     if (this.rigger.active) return this.rigger.redo();
     const cmd = this.redoStack.pop();
@@ -723,10 +704,11 @@ export class Editor {
   }
 
   private snapshot(e: Entity): TransformSnapshot {
-    return { p: e.root.position.clone(), q: e.root.rotationQuaternion!.clone(), s: e.root.scaling.clone() };
+    return { p: e.root.position.clone(), q: e.root.rotationQuaternion!.clone(), s: e.root.scaling.clone(), pre: e.root.getPivotMatrix().clone() };
   }
 
   private restore(e: Entity, t: TransformSnapshot) {
+    e.root.setPreTransformMatrix(t.pre);
     e.root.position.copyFrom(t.p);
     e.root.rotationQuaternion!.copyFrom(t.q);
     e.root.scaling.copyFrom(t.s);
@@ -786,7 +768,7 @@ export class Editor {
     let node: Node | null = mesh;
     while (node) {
       const id = node.metadata?.entityId;
-      if (id) return this.entities.find((e) => e.id === id) ?? null;
+      if (id) { const e = this.entities.find((e) => e.id === id); return e?.groupParent ?? e ?? null; }
       node = node.parent;
     }
     return null;
@@ -812,12 +794,13 @@ export class Editor {
   private readonly detachedClips = new WeakMap<Entity, ClipState>();
 
   private attach(entity: Entity) {
-    entity.root.setEnabled(true);
+    entity.root.setEnabled(!entity.groupMembers || entity.visible);
     const clip = this.detachedClips.get(entity);
     if (clip) this.anim.apply(entity, clip);
     this.motions.resume(entity);
     if (entity.light) entity.light.setEnabled(true);
     if (!this.entities.includes(entity)) this.entities.push(entity);
+    if (entity.groupParent) entity.groupParent.meshes = entity.groupParent.groupMembers!.filter(e => this.entities.includes(e)).flatMap(e => e.meshes);
     this.refreshShadows();
     this.emit('entities');
   }
@@ -831,6 +814,7 @@ export class Editor {
     this.motions.suspend(entity);
     entity.animationGroups.forEach((a) => a.stop());
     this.entities = this.entities.filter((e) => e !== entity);
+    if (entity.groupParent) entity.groupParent.meshes = entity.groupParent.groupMembers!.filter(e => this.entities.includes(e)).flatMap(e => e.meshes);
     this.refreshShadows();
     this.emit('entities');
   }
@@ -895,6 +879,8 @@ export class Editor {
     this.loading.notifyObservers({ name: asset.name, progress: 0 });
     try {
       if (asset.main) for (const f of [asset.main, ...(asset.deps ?? [])]) FilesInputStore.FilesToLoad[f.name.toLowerCase()] = f;
+      // GLB scene exports can contain cameras; the loader needs their constructor registration.
+      await import('@babylonjs/core/Cameras/universalCamera.js');
       const container = await LoadAssetContainerAsync(asset.main ?? asset.url!, this.scene, {
         rootUrl: asset.main ? 'file:' : undefined,
         // Animations start on the instances placed in the scene, never on the hidden template
@@ -904,6 +890,13 @@ export class Editor {
           if (ev.lengthComputable) this.loading.notifyObservers({ name: asset.name, progress: ev.loaded / ev.total });
         },
       });
+      for (const node of [...container.transformNodes, ...container.meshes]) {
+        const matrix = node.metadata?.gltf?.extras?.babalonAffine;
+        if (Array.isArray(matrix) && matrix.length === 16 && matrix.every(Number.isFinite)) {
+          node.rotationQuaternion ??= Quaternion.Identity();
+          setAffineTransform(node, Matrix.FromArray(matrix));
+        }
+      }
       container.animationGroups.forEach((g) => g.stop());
       return container;
     } finally {
@@ -924,7 +917,7 @@ export class Editor {
   /** Creates a scene object from an already loaded model (used when opening projects). */
   spawnModel(container: AssetContainer, name: string, source: ModelSource | null, asset: AssetRef, opts: AddOptions = {}) {
     const entity = this.instantiate(container, name, source, asset);
-    this.register(entity, opts.record ?? true, opts.select ?? true);
+    if (opts.publish !== false) this.register(entity, opts.record ?? true, opts.select ?? true);
     return entity;
   }
 
@@ -933,7 +926,15 @@ export class Editor {
     const fit = new TransformNode('fit', this.scene);
     fit.parent = root;
     const inst = container.instantiateModelsToScene((n) => n, true, { doNotInstantiate: true });
-    for (const n of inst.rootNodes) n.parent = fit;
+    for (const n of inst.rootNodes) {
+      n.parent = fit;
+      for (const node of [n, ...n.getDescendants()]) if (node instanceof TransformNode) {
+        const matrix = node.metadata?.gltf?.extras?.babalonAffine;
+        if (Array.isArray(matrix) && matrix.length === 16 && matrix.every(Number.isFinite)) {
+          node.rotationQuaternion ??= Quaternion.Identity(); setAffineTransform(node, Matrix.FromArray(matrix));
+        }
+      }
+    }
     const meshes = root.getChildMeshes(false).filter((m) => m.getTotalVertices() > 0 || m.getClassName().includes('Splat'));
 
     if (!source) {
@@ -979,27 +980,27 @@ export class Editor {
     let mesh: Mesh;
     switch (type) {
       case 'box':
-        mesh = MeshBuilder.CreateBox('box', { size: 1 }, this.scene);
+        mesh = CreateBox('box', { size: 1 }, this.scene);
         mesh.position.y = 0.5;
         break;
       case 'sphere':
-        mesh = MeshBuilder.CreateSphere('sphere', { diameter: 1, segments: 48 }, this.scene);
+        mesh = CreateSphere('sphere', { diameter: 1, segments: 48 }, this.scene);
         mesh.position.y = 0.5;
         break;
       case 'cylinder':
-        mesh = MeshBuilder.CreateCylinder('cylinder', { height: 1, diameter: 1, tessellation: 64 }, this.scene);
+        mesh = CreateCylinder('cylinder', { height: 1, diameter: 1, tessellation: 64 }, this.scene);
         mesh.position.y = 0.5;
         break;
       case 'cone':
-        mesh = MeshBuilder.CreateCylinder('cone', { height: 1, diameterTop: 0, diameterBottom: 1, tessellation: 64 }, this.scene);
+        mesh = CreateCylinder('cone', { height: 1, diameterTop: 0, diameterBottom: 1, tessellation: 64 }, this.scene);
         mesh.position.y = 0.5;
         break;
       case 'torus':
-        mesh = MeshBuilder.CreateTorus('torus', { diameter: 1, thickness: 0.3, tessellation: 64 }, this.scene);
+        mesh = CreateTorus('torus', { diameter: 1, thickness: 0.3, tessellation: 64 }, this.scene);
         mesh.position.y = 0.15;
         break;
       case 'plane':
-        mesh = MeshBuilder.CreateGround('plane', { width: 2, height: 2 }, this.scene);
+        mesh = CreateGround('plane', { width: 2, height: 2 }, this.scene);
         mesh.position.y = 0.001;
         break;
     }
@@ -1021,10 +1022,43 @@ export class Editor {
       visible: true,
       primitive: type,
     };
-    this.placeNew(entity);
+    if (opts.fit) this.fitShape(entity, opts.fit.center, opts.fit.size);
+    else this.placeNew(entity);
     this.register(entity, opts.record ?? true, opts.select ?? true);
     if ((opts.record ?? true) && !this.isInView(entity)) this.frameAll();
     return entity;
+  }
+
+  /** Sizes and places a shape in a world box: round shapes stay round across their round axes. */
+  private fitShape(entity: Entity, center: Vector3, size: Vector3) {
+    const own = this.boundsOf(entity).size, t = size.clone();
+    const type = entity.primitive;
+    if (type === 'sphere') t.setAll(Math.max(t.x, t.y, t.z));
+    else if (type === 'cylinder' || type === 'cone' || type === 'torus') t.x = t.z = Math.max(t.x, t.z);
+    const s = (target: number, base: number) => (base > 1e-6 ? Math.max(target, 1e-3) / base : 1);
+    entity.root.scaling.set(s(t.x, own.x), type === 'plane' ? 1 : s(t.y, own.y), s(t.z, own.z));
+    const b = this.boundsOf(entity);
+    entity.root.position.addInPlace(center.subtract(b.center));
+    entity.root.computeWorldMatrix(true);
+  }
+
+  /**
+   * Quick shape on what's selected (Blender adds at the 3D cursor; here the selection is the
+   * cursor): fitted to the selected faces in mesh mode (which then ends), otherwise half the size of
+   * the selected object, in its middle. With a target, both end up selected, the target first, ready
+   * for Boolean or Shrinkwrap.
+   */
+  addShapeOnSelection(type: PrimitiveType) {
+    const faces = this.separator.active ? this.separator.selection : null;
+    const target = faces ? faces.entity : this.selected && this.selected.kind !== 'light' ? this.selected : null;
+    let fit: AddOptions['fit'];
+    const box = faces?.count ? faces.bounds() : null;
+    if (box) fit = { center: box.center, size: box.size };
+    else if (target) { const b = this.boundsOf(target); fit = { center: b.center, size: b.size.scale(0.5) }; }
+    if (faces) this.separator.cancel();
+    const shape = this.addPrimitive(type, { fit, select: !target });
+    if (target) { this.select(target); this.select(shape, true); }
+    return shape;
   }
 
   addLight(
@@ -1038,12 +1072,12 @@ export class Editor {
     const proxyMat = new StandardMaterial('lightProxy', this.scene);
     proxyMat.disableLighting = true;
     proxyMat.emissiveColor = color;
-    const bulb = MeshBuilder.CreateSphere('bulb', { diameter: 0.22, segments: 12 }, this.scene);
+    const bulb = CreateSphere('bulb', { diameter: 0.22, segments: 12 }, this.scene);
     bulb.material = proxyMat;
     bulb.parent = root;
     const parts: AbstractMesh[] = [bulb];
     if (type !== 'point') {
-      const arrow = MeshBuilder.CreateCylinder('arrow', { height: 0.5, diameterTop: 0, diameterBottom: 0.12, tessellation: 12 }, this.scene);
+      const arrow = CreateCylinder('arrow', { height: 0.5, diameterTop: 0, diameterBottom: 0.12, tessellation: 12 }, this.scene);
       arrow.rotation.x = Math.PI / 2;
       arrow.position.z = 0.32;
       arrow.material = proxyMat;
@@ -1091,7 +1125,7 @@ export class Editor {
   }
 
   private refreshShadows() {
-    const casters = this.entities.filter((e) => e.kind !== 'light' && e.castShadows && e.visible).flatMap((e) => e.meshes);
+    const casters = [...new Set(this.entities.filter((e) => e.kind !== 'light' && !e.groupMembers && e.castShadows && e.visible && e.root.isEnabled()).flatMap((e) => e.meshes))];
     const shadowLights = this.entities.filter((e) => e.shadowGen);
     for (const l of shadowLights) {
       const map = l.shadowGen!.getShadowMap()!;
@@ -1131,6 +1165,18 @@ export class Editor {
       entity = this.selected ?? undefined;
     }
     if (!entity) return;
+    if (entity.groupMembers) {
+      let result: Entity | undefined;
+      this.group(() => {
+        const copies = entity.groupMembers!.filter(e => this.entities.includes(e)).map(e => this.duplicate(e)).filter((e): e is Entity => !!e);
+        result = this.groupObjects(copies);
+        result.root.rotationQuaternion!.copyFrom(entity.root.rotationQuaternion!);
+        result.root.scaling.copyFrom(entity.root.scaling);
+        result.root.position.copyFrom(entity.root.position).addInPlace(new Vector3(.6, 0, .6));
+        copies.forEach((e, i) => this.restore(e, this.snapshot(entity.groupMembers![i])));
+      });
+      return result;
+    }
     let copy: Entity;
     if (entity.kind === 'model' && entity.source) {
       copy = this.createModelCopy(entity);
@@ -1153,11 +1199,77 @@ export class Editor {
     if (entity.rig) this.rigger.copy(entity, copy);
     if (entity.motion) this.motions.set(copy, { ...entity.motion }, false);
     if (entity.kind !== 'model' || entity.rig) this.copyAnimationState(entity, copy);
+    copy.root.setPreTransformMatrix(entity.root.getPivotMatrix().clone());
     copy.root.rotationQuaternion!.copyFrom(entity.root.rotationQuaternion!);
     copy.root.scaling.copyFrom(entity.root.scaling);
     copy.root.position.copyFrom(entity.root.position).addInPlace(new Vector3(0.6, 0, 0.6));
     this.select(copy);
     return copy;
+  }
+
+  spawnGroup(members: Entity[], name = tr('Group'), opts: AddOptions = {}, preserveWorld = true) {
+    const root = this.createRoot(this.uniqueName(name));
+    const group: Entity = { id: this.nextId++, name: root.name, kind: 'model', root, meshes: members.flatMap(e => e.meshes), animationGroups: [], castShadows: true, visible: true, groupMembers: members };
+    if (preserveWorld) {
+      const bounds = members.map(e => this.boundsOf(e));
+      const min = bounds[0].min.clone(), max = bounds[0].max.clone();
+      bounds.forEach(b => { min.minimizeInPlace(b.min); max.maximizeInPlace(b.max); });
+      root.position.set((min.x + max.x) / 2, min.y, (min.z + max.z) / 2);
+    }
+    for (const e of members) {
+      if (preserveWorld) reparent(e.root, root);
+      else e.root.parent = root;
+      e.groupParent = group;
+    }
+    this.register(group, opts.record ?? true, opts.select ?? true);
+    return group;
+  }
+
+  groupObjects(members = this.selection) {
+    if (members.length < 2) throw new Error(tr('Select at least two objects.'));
+    if (members.some(e => e.groupMembers || e.groupParent || e.kind === 'light')) throw new Error(tr('Ungroup these objects before creating another group.'));
+    const group = this.spawnGroup(members, tr('Group'), { record: false });
+    const parent = (on: boolean) => {
+      for (const e of members) { reparent(e.root, on ? group.root : null); e.groupParent = on ? group : undefined; }
+      if (on) this.attach(group); else this.detach(group);
+      this.select(on ? group : members[0]);
+    };
+    this.push({ undo: () => parent(false), redo: () => parent(true), entities: [group, ...members] });
+    return group;
+  }
+
+  ungroup(group = this.selected) {
+    if (!group?.groupMembers) return;
+    const members = group.groupMembers;
+    const local = members.map(e => this.snapshot(e));
+    const apply = (on: boolean) => {
+      for (const [i, e] of members.entries()) {
+        if (on) { e.root.parent = group.root; this.restore(e, local[i]); }
+        else reparent(e.root, null);
+        e.groupParent = on ? group : undefined;
+      }
+      if (on) this.attach(group); else this.detach(group);
+      this.select(on ? group : members[0]);
+    };
+    apply(false);
+    this.push({ undo: () => apply(true), redo: () => apply(false), entities: [group, ...members] });
+  }
+
+  editableModel(entity: Entity) {
+    if (entity.kind === 'model') return entity;
+    const result = combine(this, [entity], 1); this.rename(result, entity.name); return result;
+  }
+
+  combine(entities = this.selection) { return combine(this, entities); }
+
+  /**
+   * Before editing geometry: an optimized model becomes its optimized version (undoable), instead
+   * of refusing. Returns how many models were frozen (to tell the user).
+   */
+  async prepareGeometryEdit(entities: Entity[]) {
+    let frozen = 0;
+    for (const e of entities) if (e.optimization && !e.optimization.session) { await this.optimizer.freeze(e); frozen++; }
+    return frozen;
   }
 
   private copyMaterials(entity: Entity, copy: Entity) {
@@ -1187,9 +1299,11 @@ export class Editor {
     if (!entity.source) throw new Error(tr('This model cannot be copied.'));
     const copy = this.instantiate(entity.source.container, entity.name.replace(/ \d+$/, ''), entity.source);
     copy.castShadows = entity.castShadows;
+    copy.root.setPreTransformMatrix(entity.root.getPivotMatrix().clone());
     copy.root.rotationQuaternion!.copyFrom(entity.root.rotationQuaternion!);
     copy.root.scaling.copyFrom(entity.root.scaling);
     copy.root.position.copyFrom(entity.root.position);
+    copy.composite = entity.composite;
     this.copyMaterials(entity, copy);
     if (entity.boneMap) { copy.boneMap = { ...entity.boneMap }; forgetHumanoid(copy); }
     if (entity.separation) this.separator.copy(entity, copy);
@@ -1224,6 +1338,11 @@ export class Editor {
       entity = this.selected ?? undefined;
     }
     if (!entity) return;
+    if (entity.groupMembers) return this.group(() => {
+      entity!.groupMembers!.filter(e => this.entities.includes(e)).forEach(e => this.remove(e));
+      this.detach(entity!);
+      this.push({ undo: () => this.attach(entity!), redo: () => this.detach(entity!), entities: [entity!] });
+    });
     this.detach(entity);
     this.push({ undo: () => this.attach(entity), redo: () => this.detach(entity), entities: [entity] });
   }
@@ -1235,6 +1354,7 @@ export class Editor {
 
   setVisible(entity: Entity, visible: boolean) {
     entity.visible = visible;
+    if (entity.groupMembers) { entity.root.setEnabled(visible); this.refreshShadows(); this.emit('entities'); return; }
     for (const m of entity.meshes) m.isVisible = visible;
     if (entity.light) entity.light.setEnabled(visible);
     this.refreshShadows();
@@ -1243,6 +1363,7 @@ export class Editor {
 
   setCastShadows(entity: Entity, on: boolean) {
     entity.castShadows = on;
+    entity.groupMembers?.forEach(e => { e.castShadows = on; });
     this.refreshShadows();
   }
 
@@ -1271,6 +1392,9 @@ export class Editor {
 
   /** Really deletes everything (including what the undo history holds) to start/open another project. */
   resetScene() {
+    this.fusion.cancel();
+    this.wrap.cancel();
+    this.separator.cancel();
     this.edits.clear();
     this.select(null);
     this.tools.clear();
@@ -1309,8 +1433,18 @@ export class Editor {
     return this.selected ? [this.selected, ...this.extra] : [];
   }
 
+  /** Selects every object (Blender's A). */
+  selectAll() {
+    const all = this.entities.filter((e) => !e.groupParent);
+    if (!all.length) return;
+    this.select(all[0]);
+    for (const e of all.slice(1)) this.select(e, true);
+  }
+
   /** Selects an object. With `additive`, toggles it in a multi-selection instead. */
   select(entity: Entity | null, additive = false) {
+    if (entity && entity !== this.selected && (this.fusion.busy || this.fusion.preview)) this.fusion.cancel();
+    if (additive && entity && this.selection.some(e => e === entity.groupParent || e.groupParent === entity)) additive = false;
     if (additive && entity && this.selected) {
       if (entity === this.selected) {
         // Removing the primary: the next selected object becomes the reference
@@ -1378,49 +1512,228 @@ export class Editor {
     this.applyTool();
   }
 
+  private readonly configuredGizmos = new WeakSet<object>();
+  private readonly configuredTools = new Set<Tool>();
+
+  private loadGizmos() {
+    this.gizmoLoading = true;
+    this.gizmoError = null;
+    this.gizmoLoad = import('@babylonjs/core/Gizmos/gizmoManager.js').then(({ GizmoManager }) => {
+      const manager = this.gizmos = new GizmoManager(this.scene, isTouch ? 2 : 1.5);
+      manager.usePointerToAttachGizmos = false;
+      manager.clearGizmoOnEmptyPointerEvent = false;
+      manager.scaleRatio = isTouch ? 1.5 : 1.1;
+      this.applyTool();
+      this.invalidate();
+    }).catch(error => {
+      this.gizmoError = error instanceof Error ? error.message : String(error);
+    }).finally(() => {
+      this.gizmoLoad = null;
+      this.gizmoLoading = false;
+      this.notify('activity');
+    });
+    this.notify('activity');
+  }
+
+  /** Allocate each tool on first use and bind its observers exactly once. */
+  private enableGizmos(move: boolean, rotate: boolean, scale: boolean) {
+    if (!this.gizmos) return;
+    this.gizmos.positionGizmoEnabled = move;
+    this.gizmos.rotationGizmoEnabled = rotate;
+    this.gizmos.scaleGizmoEnabled = scale;
+    const g = this.gizmos.gizmos;
+    for (const gz of [g.positionGizmo, g.rotationGizmo, g.scaleGizmo]) {
+      if (!gz || this.configuredGizmos.has(gz)) continue;
+      this.configuredGizmos.add(gz);
+      gz.onDragStartObservable.add(() => (this.separator.transform ? this.separator.transform.begin() : this.rigger.active ? this.rigger.remember() : this.pose.active ? this.pose.begin() : this.beginTransform()));
+      gz.onDragEndObservable.add(() => {
+        if (this.separator.transform) return this.separator.transform.end();
+        if (this.rigger.active) return this.rigger.endHandleDrag();
+        if (this.pose.active) return this.pose.end();
+        this.tools.clearSmartLines();
+        this.endTransform();
+      });
+    }
+    if (g.scaleGizmo && !this.configuredTools.has('scale')) {
+      this.configuredTools.add('scale');
+      // Scale gizmo: with Shift (or the option) one axis handle scales all three, keeping proportions
+      const sg = g.scaleGizmo!;
+      let scaleStart: Vector3 | null = null;
+      sg.onDragStartObservable.add(() => { scaleStart = (sg.attachedNode as TransformNode | null)?.scaling.clone() ?? null; });
+      for (const axis of [sg.xGizmo, sg.yGizmo, sg.zGizmo]) {
+        axis.dragBehavior.onDragObservable.add(() => {
+          const node = sg.attachedNode as TransformNode | null;
+          if (!this.proportional || !node || !scaleStart) return;
+          // The axis that changed most sets the factor for all
+          let ratio = 1;
+          for (const k of ['x', 'y', 'z'] as Axis[]) {
+            const r = scaleStart[k] ? node.scaling[k] / scaleStart[k] : 1;
+            if (Math.abs(r - 1) > Math.abs(ratio - 1)) ratio = r;
+          }
+          node.scaling.copyFrom(scaleStart).scaleInPlace(ratio);
+        });
+      }
+    }
+    if (g.positionGizmo && !this.configuredTools.has('move')) {
+      this.configuredTools.add('move');
+      g.positionGizmo.planarGizmoEnabled = true;
+      // Position gizmo: track the raw position ourselves so grid snapping and smart guides don't get "sticky"
+      const pg = g.positionGizmo!;
+      let raw: Vector3 | null = null;
+      pg.onDragStartObservable.add(() => {
+        if (this.pose.active || this.rigger.active || this.separator.active) return;
+        raw = this.selected?.root.position.clone() ?? null;
+        this.startFollow();
+      });
+      const axisGizmos: [{ dragBehavior: PointerDragBehavior }, Record<Axis, boolean>][] = [
+        [pg.xGizmo, { x: true, y: false, z: false }],
+        [pg.yGizmo, { x: false, y: true, z: false }],
+        [pg.zGizmo, { x: false, y: false, z: true }],
+        [pg.xPlaneGizmo, { x: false, y: true, z: true }],
+        [pg.yPlaneGizmo, { x: true, y: false, z: true }],
+        [pg.zPlaneGizmo, { x: true, y: true, z: false }],
+      ];
+      for (const [gizmo, axes] of axisGizmos) {
+        gizmo.dragBehavior.onDragObservable.add((ev) => {
+          // Posing: the gizmo drags the IK target, the arm/leg follows
+          if (this.fusion.busy || this.fusion.preview) return;
+          if (this.separator.active) { this.invalidate(); return; }
+          if (this.rigger.active) return this.rigger.dragHandle();
+          if (this.pose.active) return this.pose.dragIk();
+          const e = this.selected;
+          if (!e || !raw) return;
+          raw.addInPlace(ev.delta);
+          this.moveTo(e, raw.clone(), axes);
+        });
+      }
+    }
+  }
+
   private applyTool() {
     const e = this.selected;
+    if (!this.gizmos) {
+      if (e && !this.cleanView && !this.gizmoLoad) this.loadGizmos();
+      return;
+    }
+    if (this.fusion.busy || this.fusion.preview) {
+      this.enableGizmos(false, false, false);
+      this.gizmos.attachToMesh(null); e?.root.removeBehavior(this.drag); return;
+    }
     if (this.rigger?.active) {
       // Rigging: joints are dragged on screen; a selected joint also gets the move gizmo (one axis at a time)
       const handle = this.rigger.gizmoHandle();
-      this.gizmos.rotationGizmoEnabled = this.gizmos.scaleGizmoEnabled = false;
-      this.gizmos.positionGizmoEnabled = !!handle && !this.cleanView;
-      this.gizmos.gizmos.positionGizmo!.snapDistance = 0;
+      this.enableGizmos(!!handle && !this.cleanView, false, false);
+      if (this.gizmos.gizmos.positionGizmo) this.gizmos.gizmos.positionGizmo.snapDistance = 0;
       this.gizmos.attachToNode(handle && !this.cleanView ? handle : null);
+      e?.root.removeBehavior(this.drag);
+      return;
+    }
+    if (this.separator?.active) {
+      // The selected region's handle takes the gizmo
+      const handle = this.separator.transform?.handle;
+      const show = !!handle && !this.cleanView;
+      this.enableGizmos(show && this.tool === 'move', show && this.tool === 'rotate', show && this.tool === 'scale');
+      this.gizmos.attachToMesh(show ? handle! : null);
       e?.root.removeBehavior(this.drag);
       return;
     }
     const posing = this.pose?.active && this.pose.entity === e && !this.cleanView;
     if (posing || this.pose?.active) {
       const target = posing ? this.pose.gizmoTarget() : null;
-      this.gizmos.positionGizmoEnabled = target?.mode === 'move';
-      this.gizmos.rotationGizmoEnabled = target?.mode === 'rotate';
-      this.gizmos.scaleGizmoEnabled = false;
+      this.enableGizmos(target?.mode === 'move', target?.mode === 'rotate', false);
       const g = this.gizmos.gizmos;
-      g.rotationGizmo!.snapDistance = 0;
-      g.positionGizmo!.snapDistance = 0;
+      if (g.rotationGizmo) g.rotationGizmo.snapDistance = 0;
+      if (g.positionGizmo) g.positionGizmo.snapDistance = 0;
       // Joint axes are arbitrary: turn joints around the world axes
-      g.rotationGizmo!.updateGizmoRotationToMatchAttachedMesh = false;
+      if (g.rotationGizmo) g.rotationGizmo.updateGizmoRotationToMatchAttachedMesh = false;
       this.gizmos.attachToNode(target?.node ?? null);
       e?.root.removeBehavior(this.drag);
       return;
     }
     const tool = e?.kind === 'light' && this.tool === 'scale' ? 'move' : this.tool;
-    const show = !!e && !this.cleanView && !this.tools?.measureMode && !this.separator?.active;
-    this.gizmos.positionGizmoEnabled = show && tool === 'move';
-    this.gizmos.rotationGizmoEnabled = show && tool === 'rotate';
-    this.gizmos.scaleGizmoEnabled = show && tool === 'scale';
+    const show = !!e && !this.cleanView && !this.tools?.measuring && !this.separator?.active;
+    this.enableGizmos(show && tool === 'move', show && tool === 'rotate', show && tool === 'scale');
     const g = this.gizmos.gizmos;
-    g.positionGizmo!.snapDistance = 0; // grid snapping is done in moveTo()
-    g.rotationGizmo!.snapDistance = this.snap ? Math.PI / 12 : 0;
-    g.rotationGizmo!.updateGizmoRotationToMatchAttachedMesh = true;
-    g.scaleGizmo!.snapDistance = this.snap ? 0.1 : 0;
+    if (g.positionGizmo) g.positionGizmo.snapDistance = 0; // grid snapping is done in moveTo()
+    if (g.rotationGizmo) g.rotationGizmo.snapDistance = this.snap ? Math.PI / 12 : 0;
+    if (g.rotationGizmo) g.rotationGizmo.updateGizmoRotationToMatchAttachedMesh = true;
+    if (g.scaleGizmo) g.scaleGizmo.snapDistance = this.snap ? 0.1 : 0;
     this.gizmos.attachToMesh(show ? e!.root : null);
     if (e) {
       e.root.removeBehavior(this.drag);
       if (show && tool === 'move') e.root.addBehavior(this.drag);
     }
   }
+
+  /** Scaling keeps the proportions (Shift while dragging the gizmo). */
+  proportional = false;
+
+  // ---------- Live transform (slider bar, G/R/S keys): the selected objects or faces ----------
+
+  private live: { faces: boolean; center: Vector3; start: { entity: Entity | null; p: Vector3; q: Quaternion; s: Vector3 }[] } | null = null;
+
+  /**
+   * Starts a transform driven by a control instead of the gizmo. In mesh mode it moves the
+   * selected faces; otherwise the selected objects, around their middle (Blender's median point).
+   * Returns the center, or null when there's nothing to transform.
+   */
+  beginLive(): Vector3 | null {
+    if (this.live) return this.live.center;
+    const faces = this.separator.transform;
+    if (faces) {
+      faces.begin();
+      const h = faces.handle;
+      this.live = { faces: true, center: h.position.clone(), start: [{ entity: null, p: h.position.clone(), q: h.rotationQuaternion!.clone(), s: h.scaling.clone() }] };
+      return this.live.center;
+    }
+    if (this.separator.active) return null;
+    const entities = this.selection;
+    if (!entities.length) return null;
+    this.beginTransform(entities);
+    const start = entities.map((entity) => ({ entity, p: entity.root.position.clone(), q: entity.root.rotationQuaternion!.clone(), s: entity.root.scaling.clone() }));
+    const center = start.reduce((sum, t) => sum.addInPlace(t.p), Vector3.Zero()).scaleInPlace(1 / start.length);
+    this.live = { faces: false, center, start };
+    return center;
+  }
+
+  /** Sets the live change from where it began: a move, a scale per world axis, a turn around a world axis. */
+  setLive(change: { move?: Vector3; scale?: Vector3; axis?: Vector3; angle?: number }) {
+    const live = this.live;
+    if (!live) return;
+    const turn = change.axis && change.angle ? Quaternion.RotationAxis(change.axis, change.angle) : Quaternion.Identity();
+    const scale = change.scale ?? Vector3.One(), move = change.move ?? Vector3.Zero();
+    const turnMatrix = Matrix.FromQuaternionToRef(turn, new Matrix());
+    for (const t of live.start) {
+      const node = t.entity ? t.entity.root : this.separator.transform?.handle;
+      if (!node) continue;
+      // Position around the center: scaled, turned, then moved
+      const offset = t.p.subtract(live.center).multiplyInPlace(scale);
+      node.position.copyFrom(live.center.add(Vector3.TransformCoordinates(offset, turnMatrix)).addInPlace(move));
+      node.rotationQuaternion = turn.multiply(t.q);
+      node.scaling.copyFrom(t.s).multiplyInPlace(scale);
+    }
+    this.invalidate();
+  }
+
+  /** Ends the live change: one undo step, or back to where it began. */
+  endLive(cancel = false) {
+    const live = this.live;
+    if (!live) return;
+    this.live = null;
+    if (cancel) {
+      for (const t of live.start) {
+        const node = t.entity ? t.entity.root : this.separator.transform?.handle;
+        if (!node) continue;
+        node.position.copyFrom(t.p); node.rotationQuaternion = t.q.clone(); node.scaling.copyFrom(t.s);
+      }
+    }
+    if (live.faces) this.separator.transform?.end(cancel);
+    else this.endTransform();
+    this.emit('transform');
+    this.invalidate();
+  }
+
+  get liveActive() { return !!this.live; }
 
   /** Applies a transform change coming from UI controls (sliders/buttons). */
   editTransform(fn: (root: Mesh) => void, commit = false) {
@@ -1794,6 +2107,8 @@ export class Editor {
   }
 
   setPhotoMode(on: boolean) {
+    if (on && (this.fusion.busy || this.fusion.preview)) this.fusion.cancel();
+    if (on) this.wrap.cancel();
     this.photoMode = on;
     this.applyCleanView();
     this.emit('photo');
@@ -1906,6 +2221,8 @@ export class Editor {
    * meshopt-compressed (loaded on demand); otherwise the original models, as they were loaded.
    */
   async exportGLB(compact = false): Promise<Blob> {
+    if (this.fusion.preview || this.fusion.busy) this.fusion.cancel();
+    this.wrap.cancel();
     this.rigger.difference.clear();
     for (const e of this.entities) if (e.rig) updateHelperBones(e.rig);
     const exclude = new Set<Node>([this.ground, this.grid, ...this.helpers, ...this.overlays]);
@@ -1924,6 +2241,8 @@ export class Editor {
     for (const e of original) this.optimizer.preview(e, true);
     const textures = this.textureOptimizer.forExport(compact);
     let glb: Blob;
+    const { affineExport } = await import('../edit/affineExport');
+    const restoreAffineExport = affineExport(this.scene);
     try {
       const { GLTF2Export } = await import('@babylonjs/serializers/glTF/2.0/glTFSerializer.js');
       const data = await GLTF2Export.GLBAsync(this.scene, 'scene', {
@@ -1934,6 +2253,7 @@ export class Editor {
       });
       glb = data.files['scene.glb'] as Blob;
     } finally {
+      restoreAffineExport();
       textures.restore();
       for (const e of original) this.optimizer.preview(e, false);
       this.invalidate();
@@ -1946,7 +2266,7 @@ export class Editor {
 
 /** The environment as a background (same as Babylon's default PBR skybox, without its ≈420 KB scene helpers). */
 function createSkybox(scene: Scene, environment: BaseTexture, blur: number) {
-  const box = MeshBuilder.CreateBox('hdrSkyBox', { size: 1000 }, scene);
+  const box = CreateBox('hdrSkyBox', { size: 1000 }, scene);
   const material = new PBRMaterial('skyBox', scene);
   material.backFaceCulling = false;
   material.reflectionTexture = environment.clone();

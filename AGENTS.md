@@ -12,6 +12,10 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 ```
 
 - There is no test runner. Verify every change with `npm run build` and in a browser (see [Verifying changes](#verifying-changes)).
+- Startup/cache regression: `node scripts/check-lazy-cache.mjs` after a build. Project ZIP compatibility and worker checks: `node scripts/check-project-archive.mjs`.
+- Installed PWA downloads/resume and version checks: `node scripts/check-offline-install.mjs` after a build. The ordinary site caches features on use; installed apps additionally cache all tool code, workers, WASM and model decoders without evaluating them. Models and libraries stay opt-in.
+- Surface-edit regression: `node scripts/check-surface-brushes.mjs` verifies skinned picking, brush coordinates, visible bounds, repeated strokes, face transforms with undo/redo and isolation of shared geometry.
+- Browser project-switch regression: run the dev server on a fresh port, open `/scripts/fixtures/mesh-project-switch.html` and click "Test project switch". Verifies restoration of the Object cursor and camera controls after Sculpt, Lasso, Brush and a new scene.
 - Rigging has focused checks (Node, no browser): `node scripts/check-leg-junction.mjs`, `check-skin-treatments.mjs`, `check-helper-bones.mjs`, `check-skin-visibility.mjs`. Optimization: `node scripts/check-simplify.mjs`. `node scripts/check-rig-deformation.mjs <model.glb> <envelope|heat> [comparison]` audits final deformation on a model you provide (meshopt-compressed GLB); no model is bundled for it.
 - GitHub Pages deploys on every push to `main` (`.github/workflows/deploy.yml`). The build runs with `BASE_PATH=/<repo>/`.
 
@@ -23,11 +27,14 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | --- | --- | --- |
 | `core/` | `editor.ts` | Core with no UI: scene, camera, loading, entities, selection, gizmos, lights, shadows, environment, post-processing, capture, export, undo history, render-on-demand, AR scene state |
 | | `project.ts` | `.babalon` save/open and browser autosave (IndexedDB) |
+| | `projectArchive.ts`, `projectArchive.worker.ts` | On-demand ZIP encoding and decoding in one disposable worker, preserving the existing project format |
 | | `presets.ts` | Shared data: lighting presets, photo filters, pose presets, animation library |
 | | `files.ts` | Saving, sharing and receiving files (share target) |
 | | `i18n.ts` | Translations |
 | `ui/` | `ui.ts` | The shell: top bar, dock, selection bar, menus, view controls, panel frame, project actions, autosave, keys |
-| | `panels/*.ts` | One class per panel: `add`, `library`, `objects`, `material`, `animate`, `pose`, `rig`, `optimize`, `separate`, `tools`, `light` |
+| | `panels/*.ts` | One class per panel: `add`, `library`, `objects`, `modify`, `material`, `animate`, `pose`, `rig`, `optimize`, `separate` (Mesh mode), `tools`, `light` |
+| | `contextBar.ts` | Context bubbles: pills for every active context, the focused one's controls, placement next to or above the dock, dragging |
+| | `transformBar.ts`, `modalTransform.ts` | Slider bar for Scale / Rotate; Blender's G / R / S keyboard transform. Both drive the editor's live transform (`beginLive` / `setLive` / `endLive`), for objects or faces |
 | | `photo.ts` | Photo mode: its panel, on-screen controls, aspect frame and capture |
 | | `measureLabels.ts` | Measurement and guide labels over the 3D view |
 | | `jointOverlay.ts` | Joint handles over the 3D view (posing, rigging) |
@@ -51,6 +58,8 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | | `export.ts` | Compact GLB export (glTF-Transform, loaded on demand) |
 | `edit/` | `selection.ts`, `separate.ts` | Separating a model into objects: face selection (pieces, overlay) and `Separator` (separate mode, triangle subsets, saving) |
 | | `lasso.ts`, `smartSelect.ts`, `planeCut.ts` | Lasso and brush (with a software depth buffer for visibility), magic wand and grow/shrink, cutting with a plane |
+| | `fuse.ts`, `fuse.worker.ts`, `shrinkwrap.ts` | Operations between objects (Objects → Modify; first selected is the target, the others are tools): boolean union/subtract/intersect (Manifold, in a worker) and live Shrinkwrap |
+| | `deform.ts` | In-place vertex edits with partial GPU uploads; `recordDeform` saves one as an undo step |
 | `library/` | `polyhaven.ts` | Poly Haven CC0 models and HDRIs: index, downloads, cache for offline use, attribution |
 | `capture/` | `camera.ts`, `video.ts` | Live camera as the photo background (lens choice, zoom); turntable and sway videos |
 | `ar/` | `ar.ts`, `arHud.ts` | WebXR AR session / its on-camera overlay (anchors, measuring real objects, depth occlusion) |
@@ -82,6 +91,8 @@ Expensive features are opt-in (AR shadows, room lighting, camera access, FPS cou
 
 ### Performance
 - The scene renders on demand. Anything that changes what's on screen must go through editor methods that emit `changed`, or call `editor.invalidate()`. Camera motion, animations, loading and AR are detected automatically.
+- Worker progress emits `activity`, not persistent scene changes: update the bubbles and progress elements without rendering the scene or scheduling autosave. Emit the domain change when a result is applied.
+- Rig, Mesh, Modify and Optimize panels load through the UI feature loader. Keep lightweight shared data out of panel modules so shell imports do not pull those panels into startup. The PWA precaches the static entry graph and caches feature code on first use.
 - No per-frame allocation-heavy work, no GPU readbacks in the render loop (the theme-color sampler is throttled and paused in AR).
 - `scene.skipPointerMovePicking` is on: pick explicitly when you need what's under the pointer.
 - Rebuild geometry (e.g. lines) only when its data changed.
@@ -100,7 +111,10 @@ Expensive features are opt-in (AR shadows, room lighting, camera access, FPS cou
 Keep it uncluttered and at most one level deep:
 - Top bar: logo (project menu), undo/redo, Edit / Photo / AR mode switch.
 - Dock: Add, Objects, Light, Tools. Long panels split into parts with `segmented` (no nested menus).
-- Selection bar: Move / Rotate / Scale / Delete / More (⋯) / Deselect. Secondary actions go in the More menu.
+- Context bubbles (`ui/contextBar.ts`, like the iPhone's Dynamic Island): everything going on at once (selection, Mesh mode, rigging, posing, measuring, a running Boolean or Shrinkwrap, a recording) is a pill; the focused one is a bubble with its controls, and its panel button opens the full settings in the dock's panel. By default it sits beside the dock as a taskbar (both centered), or above the dock (and above an open panel on phones) when they don't fit; its grip moves it (double-tap resets). A new context is a `UIContext` in `UI.contexts()`, not a new floating bar.
+- Selection bubble: Object | Mesh (Tab) / Move / Rotate / Scale / Delete / More (⋯) / Deselect. The same Move / Rotate / Scale act on objects or, in Mesh mode, on the selected faces; tapping the active Scale or Rotate opens its slider bar. Secondary actions go in the More menu.
+- Geometry operations live in one place: Objects → Modify (quick shapes, Boolean, Shrinkwrap, Combine, Group) and, in Mesh mode, the panel's Select / Sculpt / Modify parts. Tools keeps only aids that don't change geometry (measure, guides, align).
+- Keys follow Blender: Tab (mode), G / R / S (transform with the mouse, X / Y / Z, typed values), Shift+A (quick shapes), A / Alt+A (select all / none), Ctrl+I, Ctrl +/− (faces). Shift keeps proportions while dragging the scale gizmo.
 - Floating view controls (bottom right): frame all, gyro, fullscreen, hide interface.
 - Everything must disappear with "hide interface" (H) — add new floating UI to the `body.ui-hidden` rule in `style.css`.
 

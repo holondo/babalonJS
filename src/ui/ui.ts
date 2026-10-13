@@ -2,8 +2,12 @@ import type { LibraryAttribution, LibraryKind } from '../library/polyhaven';
 import type { LibraryPanel } from './panels/library';
 import { ProjectGallery } from './projectGallery';
 import {
+  Box,
+  Bone,
+  SquaresUnite,
+  Video,
   Camera,
-  Scissors,
+  Triangle,
   ChevronDown,
   Copy,
   Ellipsis,
@@ -41,7 +45,7 @@ import {
 } from 'lucide';
 import type { IconNode } from 'lucide';
 import { MODEL_EXTENSIONS } from '../core/editor';
-import type { Editor, Tool } from '../core/editor';
+import type { Editor, Entity, PrimitiveType, Tool } from '../core/editor';
 import { PROJECT_EXT, fromZip, loadProject, restore, saveProject, snapshot, toZip } from '../core/project';
 import type { ProjectSnapshot } from '../core/project';
 import { JointOverlay } from './jointOverlay';
@@ -51,17 +55,23 @@ import type { GyroControl } from '../device/gyro';
 import { saveAndOfferShare, timestampedName } from '../core/files';
 import { LANGS, getLang, setLang, tr } from '../core/i18n';
 import type { Lang } from '../core/i18n';
-import { button, chips, h, icon, iconButton, menuItem, segmented } from './dom';
+import { button, chips, h, hint, icon, iconButton, menuItem, progressBar, row, section, segmented, scrollableSegmented } from './dom';
 import { AddPanel } from './panels/add';
 import { ObjectsPanel } from './panels/objects';
 import { MaterialPanel } from './panels/material';
 import { AnimatePanel } from './panels/animate';
 import { PosePanel } from './panels/pose';
-import { RigPanel } from './panels/rig';
+import type { RigPanel } from './panels/rig';
 import { ToolsPanel } from './panels/tools';
-import { OptimizePanel } from './panels/optimize';
-import { SeparatePanel } from './panels/separate';
-import { analyzeScene, deviceBudget, formatBytes, overBudget } from '../optimize/analysis';
+import type { OptimizePanel } from './panels/optimize';
+import type { SeparatePanel } from './panels/separate';
+import { TransformBar } from './transformBar';
+import { ContextBar } from './contextBar';
+import type { UIContext } from './contextBar';
+import { ModalTransform } from './modalTransform';
+import type { ModifyPanel } from './panels/modify';
+import { QUICK_SHAPES, shapeLabel } from './quickShapes';
+import { analyzeEntity, analyzeScene, deviceBudget, formatBytes, overBudget } from '../optimize/analysis';
 import { DEFAULT_OPTIMIZE } from '../optimize/optimizer';
 import type { Observer } from '@babylonjs/core/Misc/observable.js';
 import { LightPanel } from './panels/light';
@@ -87,16 +97,28 @@ export class UI {
   readonly materialUI = new MaterialPanel(this);
   readonly animateUI = new AnimatePanel(this);
   readonly poseUI = new PosePanel(this);
-  readonly rigUI = new RigPanel(this);
+  rigUI: RigPanel | null = null;
   readonly toolsUI = new ToolsPanel(this);
   readonly lightUI = new LightPanel(this);
-  readonly optimizeUI = new OptimizePanel(this);
-  readonly separateUI = new SeparatePanel(this);
+  optimizeUI: OptimizePanel | null = null;
+  separateUI: SeparatePanel | null = null;
+  readonly transformBar = new TransformBar(this);
+  /** Context bubbles; created once the selection bar exists. */
+  private contextBar!: ContextBar;
+  modifyUI: ModifyPanel | null = null;
+  private readonly featureLoads = new Map<string, Promise<void>>();
+  private readonly featureErrors = new Map<string, string>();
+  /** G / R / S from the keyboard (created with the keys, once the canvas exists). */
+  private modal!: ModalTransform;
   readonly photoUI = new PhotoMode(this);
   readonly labelsUI = new MeasureLabels(this);
 
   tab: Tab | null = null;
   private busy = false;
+  private activityId = 0;
+  private activityState = '';
+  private readonly activities = new Map<string, { label: string; icon: IconNode; progress: number | null; cancel?: () => void }>();
+  private loadingActivity: ReturnType<UI['beginActivity']> | null = null;
   photoPanel = false;
   /** Selected part of each panel (e.g. Object | Material), remembered per tab. */
   segment: Partial<Record<Tab, string>> = {};
@@ -113,15 +135,17 @@ export class UI {
   /** Secondary actions of the selection ("⋯" in the selection bar). */
   private readonly selMenu = h('div', { class: 'menu selmenu' });
   private selMenuOpen = false;
+  private contextPart = 'tools';
+  private readonly contextParts = new Map<string, { el: HTMLDivElement; trigger: HTMLButtonElement; controls: HTMLDivElement }>();
   /** Floating viewport controls: frame all, gyro, fullscreen, hide interface. */
-  private readonly viewStack = h('div', { class: 'viewstack' });
+  readonly viewStack = h('div', { class: 'viewstack' });
   /** Everything hidden except this button (any screen). */
   private uiHidden = false;
   private readonly uiRestore = h('button', { class: 'ibtn round ui-restore' });
   private readonly projectInput = h('input', { type: 'file', accept: `${PROJECT_EXT},.zip`, hidden: true });
 
-  private readonly topbar = h('header', { class: 'topbar' });
-  private readonly dock = h('nav', { class: 'dock' });
+  readonly topbar = h('header', { class: 'topbar' });
+  readonly dock = h('nav', { class: 'dock' });
   readonly panel = h('aside', { class: 'panel' });
   readonly selbar = h('div', { class: 'selbar' });
   readonly photoHud = h('div', { class: 'photo-hud' });
@@ -170,7 +194,8 @@ export class UI {
     this.setupAutosave();
     document.addEventListener('fullscreenchange', () => this.renderViewStack());
     root.append(this.clipInput);
-    root.append(this.labels, this.jointOverlay.el, this.frame, this.topbar, this.selbar, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
+    this.contextBar = new ContextBar(this);
+    root.append(this.labels, this.jointOverlay.el, this.frame, this.topbar, this.contextBar.el, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
     this.fileInput.addEventListener('change', () => {
       const files = [...(this.fileInput.files ?? [])];
       this.fileInput.value = '';
@@ -180,9 +205,19 @@ export class UI {
     this.setupKeys();
 
     editor.changed.add((kind) => {
+      if (kind === 'activity') {
+        if (editor.gizmoError) { this.toast(editor.gizmoError, 'error'); editor.gizmoError = null; }
+        const state = `${editor.optimizer.busy}:${editor.textureOptimizer.busy}:${editor.rigger.progress !== null}:${editor.rigger.comparing}`;
+        const changed = state !== this.activityState;
+        this.activityState = state;
+        this.renderSelbar();
+        if (changed && this.tab === 'objects') this.renderPanel();
+        else this.updateOperationProgress();
+        return;
+      }
       // Separate mode belongs to one model: leave it if that model is no longer the selection
       const separating = editor.separator.selection?.entity;
-      if (separating && (kind === 'selection' || kind === 'entities' || kind === 'photo') && (editor.selected !== separating || !editor.entities.includes(separating) || editor.photoMode)) this.separateUI.cancel();
+      if (separating && (kind === 'selection' || kind === 'entities' || kind === 'photo') && (editor.selected !== separating || !editor.entities.includes(separating) || editor.photoMode)) this.leaveMesh();
       if (kind === 'history') return this.renderTopbar();
       if (kind === 'photo') {
         this.labelsUI.buildLabels();
@@ -190,10 +225,11 @@ export class UI {
       }
       if (kind === 'tool') {
         this.renderSelbar();
-        if (editor.separator.active && this.tab === 'objects' && !this.busy) this.renderPanel();
+        if (this.tab === 'objects' && !this.busy && (editor.separator.active || this.segment.objects === 'object')) this.renderPanel();
         return;
       }
       if (kind === 'optimize') {
+        this.renderSelbar();
         if (this.tab === 'objects') this.renderPanel();
         return;
       }
@@ -231,6 +267,13 @@ export class UI {
     editor.loading.add((l) => {
       this.loader.classList.toggle('show', !!l);
       if (l) this.loader.replaceChildren(h('div', { class: 'spinner' }), h('span', {}, tr('Loading {name}… {pct}%', { name: l.name, pct: Math.round(l.progress * 100) })));
+      if (l) {
+        this.loadingActivity ??= this.beginActivity(tr('Loading…'), Upload);
+        this.loadingActivity.update(l.progress || null, tr('Loading {name}', { name: l.name }));
+      } else {
+        this.loadingActivity?.finish();
+        this.loadingActivity = null;
+      }
     });
     new ResizeObserver(() => this.photoUI.renderFrame()).observe(root);
     this.renderAll();
@@ -243,6 +286,64 @@ export class UI {
       fn();
     } finally {
       this.busy = false;
+    }
+  }
+
+  /** Registers work that continues independently of whichever panel is on screen. */
+  beginActivity(label: string, node: IconNode = Download, cancel?: () => void) {
+    const id = `activity-${++this.activityId}`;
+    const activity = { label, icon: node, progress: null as number | null, cancel };
+    this.activities.set(id, activity);
+    this.renderSelbar();
+    return {
+      update: (progress: number | null, nextLabel = activity.label) => {
+        if (!this.activities.has(id)) return;
+        if (nextLabel === activity.label && (progress === null ? activity.progress === null : activity.progress !== null && Math.round(progress * 100) === Math.round(activity.progress * 100))) return;
+        activity.progress = progress;
+        activity.label = nextLabel;
+        this.renderSelbar();
+      },
+      finish: () => {
+        if (this.activities.delete(id)) this.renderSelbar();
+      },
+    };
+  }
+
+  private activityContext(id: string, node: IconNode, label: string, progress: number | null, cancel?: () => void): UIContext {
+    const status = progress === null ? label : `${label} · ${Math.round(progress * 100)}%`;
+    return { id, icon: node, label: status, busy: true, progress, render: () => this.selbar.replaceChildren(
+      this.activitySummary(node, label, progress),
+      ...(cancel ? [button(tr('Cancel'), cancel, { cls: 'small' })] : []),
+    ) };
+  }
+
+  /** Shared compact progress layout for background work and mode-specific controls. */
+  activitySummary(node: IconNode, label: string, progress: number | null) {
+    const meter = progressBar(progress, label);
+    meter.classList.add('compact');
+    return h('div', { class: 'ctx-activity' }, icon(node, 18),
+      h('div', { class: 'ctx-activity-copy' },
+        h('div', { class: 'ctx-activity-heading' }, h('span', { title: label }, label),
+          h('span', { class: 'ctx-percent' }, progress === null ? tr('Working…') : `${Math.round(progress * 100)}%`)), meter));
+  }
+
+  operationProgress(kind: 'geometry' | 'textures' | 'rig', progress: number) {
+    const label = tr(kind === 'rig' ? 'Computing weights… {pct}%' : 'Optimizing… {pct}%', { pct: Math.round(progress * 100) });
+    const element = progressBar(progress, label);
+    element.dataset.operationProgress = kind;
+    return element;
+  }
+
+  private updateOperationProgress() {
+    for (const element of this.panel.querySelectorAll<HTMLElement>('[data-operation-progress]')) {
+      const kind = element.dataset.operationProgress;
+      const progress = (kind === 'geometry' ? this.editor.optimizer.progress : kind === 'textures' ? this.editor.textureOptimizer.progress : this.editor.rigger.progress) ?? 0;
+      const percent = Math.round(progress * 100);
+      const label = tr(kind === 'rig' ? 'Computing weights… {pct}%' : 'Optimizing… {pct}%', { pct: percent });
+      element.setAttribute('aria-valuenow', String(percent));
+      element.setAttribute('aria-label', label);
+      element.querySelector('i')!.style.width = `${percent}%`;
+      element.querySelector('span')!.textContent = label;
     }
   }
 
@@ -300,6 +401,13 @@ export class UI {
 
   private ar: ARMode | null = null;
   private arOverlay: HTMLElement | null = null;
+  private arLoader: (() => Promise<void>) | null = null;
+  private arLoading: Promise<void> | null = null;
+
+  setARLoader(loader: () => Promise<void>) {
+    this.arLoader = loader;
+    this.renderTopbar();
+  }
 
   /** Augmented reality: shows the AR button when the device supports it. */
   setAR(ar: ARMode, overlay: HTMLElement) {
@@ -310,8 +418,23 @@ export class UI {
   }
 
   private async enterAR() {
+    if (!this.ar && this.arLoader) {
+      const activity = this.beginActivity(tr('Preparing AR…'), View);
+      try {
+        await (this.arLoading ??= this.arLoader());
+      } catch (error) {
+        this.arLoading = null;
+        this.toast(errorMessage(error), 'error');
+        return;
+      } finally { activity.finish(); }
+      // A slow first download can outlive transient user activation needed by WebXR.
+      if (navigator.userActivation && !navigator.userActivation.isActive) {
+        this.toast(tr('AR is ready. Tap AR to start.'));
+        return;
+      }
+    }
     if (!this.ar || !this.arOverlay) return;
-    if (this.editor.separator.active) this.separateUI.cancel();
+    if (this.editor.separator.active) this.leaveMesh();
     if (!this.arRestore && (await this.lightenForAR())) return;
     try {
       await this.ar.enter(this.arOverlay);
@@ -373,7 +496,10 @@ export class UI {
     if (project) return this.openProjectFile(project);
     try {
       await this.editor.addFiles(files, attribution);
-      this.optimizeUI.checkHeavy(this.editor.selected);
+      const entity = this.editor.selected, budget = deviceBudget();
+      if (entity?.kind === 'model' && overBudget(analyzeEntity(this.editor, entity), budget)) this.toast(
+        tr(budget.phone ? 'This model is heavy for this phone and may run slowly. You can optimize it.' : 'This model is very heavy. You can optimize it.'),
+        'info', { label: tr('Optimize'), run: () => this.openPart('objects', 'optimize') }, 9000);
     } catch (e) {
       this.toast(errorMessage(e), 'error');
     }
@@ -400,12 +526,32 @@ export class UI {
   }
 
   private setupKeys() {
+    this.modal = new ModalTransform(this);
+    // Shift while dragging the scale gizmo keeps the proportions
+    const shift = (e: KeyboardEvent) => { this.editor.proportional = e.shiftKey; };
+    window.addEventListener('keyup', shift);
+    window.addEventListener('blur', () => { this.editor.proportional = false; });
     window.addEventListener('keydown', (e) => {
+      shift(e);
       if (this.editor.recording) { if (e.key === 'Escape') this.photoUI.cancelRecording(); return; }
       const target = e.target as HTMLElement;
       if (target.isContentEditable || target.matches('input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea, select')) return;
       const ed = this.editor;
       const ctrl = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      // Mesh mode: Blender's selection keys
+      const faces = ed.separator.active && ed.separator.mode !== 'surface' ? ed.separator : null;
+      if (e.key === 'Tab' && !ctrl && !e.altKey) {
+        e.preventDefault();
+        if (ed.separator.active) this.leaveMesh();
+        else if (ed.selected) this.startMesh(ed.selected);
+        return;
+      }
+      if (e.shiftKey && !ctrl && key === 'a') { e.preventDefault(); this.showShapeMenu(); return; }
+      if (faces && !ctrl && key === 'a') { e.preventDefault(); faces.edit((x) => (e.altKey ? x.clear() : x.all())); return; }
+      if (faces && ctrl && key === 'i') { e.preventDefault(); faces.edit((x) => x.all(true)); return; }
+      if (faces && ctrl && (e.key === '+' || e.key === '=' || e.key === '-')) { e.preventDefault(); faces.ring(e.key !== '-'); return; }
+      if (!faces && !ed.separator.active && !ctrl && key === 'a') { e.preventDefault(); e.altKey ? ed.select(null) : ed.selectAll(); return; }
       if (ctrl && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         e.shiftKey ? ed.redo() : ed.undo();
@@ -422,7 +568,8 @@ export class UI {
         e.preventDefault();
         ed.duplicate();
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        ed.remove();
+        // Mesh mode never deletes the whole object from the keyboard
+        if (!ed.separator.active) ed.remove();
       } else if (e.key === 'Escape') {
         if (ed.photoMode) ed.setPhotoMode(false);
         else if (ed.tools.pending) ed.tools.cancelPending();
@@ -430,9 +577,12 @@ export class UI {
         else ed.select(null);
       } else if (e.key === 'm') {
         ed.tools.setMeasureMode(!ed.tools.measureMode);
-      } else if (e.key === 'w' || e.key === 'g') ed.setTool('move');
-      else if (e.key === 'e' || e.key === 'r') ed.setTool('rotate');
-      else if (e.key === 's') ed.setTool('scale');
+      } else if (e.key === 'g' || e.key === 'r' || e.key === 's') {
+        // Blender: transform with the mouse; away from the view (or nothing to move) it picks the gizmo tool
+        const kind = e.key === 'g' ? 'move' : e.key === 'r' ? 'rotate' : 'scale';
+        if (!this.modal.begin(kind)) ed.setTool(kind);
+      } else if (e.key === 'w') ed.setTool('move');
+      else if (e.key === 'e') ed.setTool('rotate');
       else if (e.key === 'f') ed.selected ? ed.focus() : ed.frameAll();
       else if (e.key === 'o') ed.orbitAround();
       else if (e.key === 'p') ed.setPhotoMode(!ed.photoMode);
@@ -467,6 +617,7 @@ export class UI {
 
   private renderTopbar() {
     const ed = this.editor;
+    const scroll = this.topbar.querySelector('.top-actions')?.scrollLeft ?? 0;
     const base = import.meta.env.BASE_URL;
     this.topbar.replaceChildren(
       // The logo opens the project menu (new, open, save, export, language, install)
@@ -487,7 +638,7 @@ export class UI {
           [
             { id: 'edit', label: tr('Edit'), icon: Move3d },
             { id: 'photo', label: tr('Photo'), icon: Camera },
-            ...(this.ar?.supported ? [{ id: 'ar', label: 'AR', icon: View }] : []),
+            ...(this.ar?.supported || this.arLoader ? [{ id: 'ar', label: 'AR', icon: View }] : []),
           ],
           this.ar?.active ? 'ar' : ed.photoMode ? 'photo' : 'edit',
           (id) => (id === 'ar' ? this.enterAR() : ed.setPhotoMode(id === 'photo')),
@@ -495,6 +646,9 @@ export class UI {
         ),
       ),
     );
+    this.topbar.style.setProperty('--brand-width', `${this.topbar.querySelector<HTMLElement>('.brand')!.offsetWidth}px`);
+    this.topbar.querySelector('.top-actions')!.scrollLeft = scroll;
+    requestAnimationFrame(() => this.contextBar?.layout());
   }
 
   // ---------- Project ----------
@@ -510,7 +664,7 @@ export class UI {
     if (!open) return;
     const name = h('input', { type: 'text', class: 'name', value: this.projectName, 'aria-label': tr('Project name') });
     name.addEventListener('change', () => { this.projectName = name.value.trim() || tr('my-scene'); this.scheduleAutosave(); });
-    const item = (node: IconNode, label: string, kbd: string, fn: () => void) => menuItem(node, label, () => (this.toggleMenu(false), fn()), { kbd: kbd || undefined });
+    const item = (node: IconNode, label: string, kbd: string, fn: () => void, description?: string) => menuItem(node, label, () => (this.toggleMenu(false), fn()), { kbd: kbd || undefined, description });
     this.menu.replaceChildren(
       h('label', { class: 'menu-name' }, h('span', {}, tr('Project name')), name),
       h('div', { class: 'menu-name' }, h('span', {}, getLang() === 'en' ? 'Language' : `${tr('Language')} · Language`), chips(LANGS, getLang(), (v) => this.setLanguage(v))),
@@ -518,8 +672,9 @@ export class UI {
       item(FilePlus, tr('New project'), '', () => this.run(() => this.newProject())),
       item(FolderOpen, tr('Open project…'), 'Ctrl+O', () => this.projectInput.click()),
       item(Save, tr('Save project'), 'Ctrl+S', () => this.saveProject()),
-      item(Download, tr('Export scene .glb'), '', () => this.exportGLB(false)),
-      item(Download, tr('Export compact .glb'), '', () => this.exportGLB(true)),
+      item(Download, tr('Export scene .glb'), '', () => this.exportGLB(false), tr('Original geometry and textures, before optimization. Best for compatibility.')),
+      item(Download, tr('Export compact .glb'), '', () => this.exportGLB(true), tr('Uses applied optimizations and compresses geometry. Smaller file; requires a compatible viewer.')),
+      h('p', { class: 'hint' }, tr('Compact does not automatically reduce triangles or texture resolution. Apply Optimize first if you want those reductions.')),
       ...(this.installPrompt
         ? [
             item(MonitorDown, tr('Install app'), '', () => {
@@ -539,22 +694,28 @@ export class UI {
   }
 
   private async saveProject() {
+    const activity = this.beginActivity(tr('Preparing project download'), Save);
     try {
       const blob = await toZip(snapshot(this.editor, this.projectName));
       this.deliver(blob, fileSafe(this.projectName) + PROJECT_EXT, tr('Project saved'));
     } catch (e) {
       this.toast(errorMessage(e), 'error');
+    } finally {
+      activity.finish();
     }
   }
 
   private async openProjectFile(file: File) {
     if (this.hasContent() && !confirm(tr('Opening the project will replace the current scene. Continue?'))) return;
+    const activity = this.beginActivity(tr('Opening project: {name}', { name: file.name }), Upload);
     try {
       const snap = await fromZip(file);
       if (!snap.json.name) snap.json.name = file.name.replace(/\.[^.]+$/, '');
       await this.loadSnapshot(snap);
     } catch (e) {
       this.toast(errorMessage(e), 'error');
+    } finally {
+      activity.finish();
     }
   }
 
@@ -598,6 +759,61 @@ export class UI {
   }
 
   get currentProjectId() { return this.projectId; }
+
+  /** Optimized models in the selection become their optimized version before a geometry edit. */
+  /** Objects → Modify: quick shapes, boolean operations and shrinkwrap. */
+  openModify() {
+    this.segment.objects = 'modify';
+    if (this.tab !== 'objects') this.openTab('objects'); else this.renderPanel();
+  }
+
+  /** Adds a quick shape on the selection; with a target it opens Modify, ready for Boolean or Shrinkwrap. */
+  addShape(type: PrimitiveType) {
+    this.run(() => {
+      const ed = this.editor, mesh = ed.separator.active;
+      const shape = ed.addShapeOnSelection(type);
+      if (mesh) {
+        // From selected faces: wrap them onto the shape at once (Blender's Shrinkwrap on a vertex group)
+        this.separateUI?.refresh();
+        const target = ed.separator.lastFaces?.entity;
+        if (target && target !== shape) ed.wrap.start([target, shape], ed.separator.lastFaces!.masks);
+      }
+      if (ed.selection.length > 1 || ed.wrap.active) this.openModify();
+    });
+  }
+
+  /** Shift+A: the quick shapes, in the menu under the selection bar. */
+  showShapeMenu() {
+    this.selMenuOpen = true;
+    this.selMenu.classList.add('show');
+    this.placeMenu();
+    this.selMenu.replaceChildren(...QUICK_SHAPES.map((t) => menuItem(Plus, shapeLabel(t), () => { this.toggleSelMenu(false); this.addShape(t); })));
+  }
+
+  /** The bubble's menu opens beside the context bar: above it when the bar is low, below when high. */
+  private placeMenu() {
+    const r = this.contextBar.el.getBoundingClientRect(), m = this.selMenu, vw = window.innerWidth, vh = window.innerHeight;
+    m.style.transform = 'none';
+    m.style.left = `${Math.min(Math.max(10, r.left + r.width / 2 - 140), vw - 290)}px`;
+    if (r.top > vh / 2) {
+      m.style.top = 'auto'; m.style.bottom = `${vh - r.top + 8}px`;
+      m.style.maxHeight = `${Math.max(48, r.top - this.topbar.getBoundingClientRect().bottom - 16)}px`;
+    } else {
+      m.style.bottom = 'auto'; m.style.top = `${r.bottom + 8}px`;
+      m.style.maxHeight = `${Math.max(48, vh - r.bottom - 18)}px`;
+    }
+  }
+
+  /** A section that needs two or more selected objects: how to select them. */
+  multiSelectHint(title: string, text: string) {
+    const ed = this.editor;
+    return section(title, hint(text),
+      row(button(tr('Multi-select'), () => ed.setMultiSelect(!ed.multiSelect), { icon: Group, cls: `small ${ed.multiSelect ? 'primary' : ''}` })));
+  }
+
+  async freezeForEdit() {
+    if (await this.editor.prepareGeometryEdit(this.editor.selection)) this.toast(tr('The optimized version is now the model, so it can be edited. Undo to go back.'), 'info', undefined, 6000);
+  }
   openProjectPicker() { this.projectInput.click(); }
 
   projectRenamed(id: string, name: string) { if (this.projectId === id) this.projectName = name; }
@@ -671,9 +887,14 @@ export class UI {
   /** Compact: optimized models, compressed geometry and textures (smaller file, same look). */
   private async exportGLB(compact: boolean) {
     await this.run(async () => {
-      const blob = await this.editor.exportGLB(compact);
-      const name = timestampedName(compact ? 'scene-compact' : 'scene', 'glb');
-      this.deliver(blob, name, tr('Scene exported as {name} ({size})', { name, size: formatBytes(blob.size) }));
+      const activity = this.beginActivity(tr(compact ? 'Preparing compact GLB' : 'Preparing scene GLB'));
+      try {
+        // Let the browser paint the activity before serialization starts.
+        await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+        const blob = await this.editor.exportGLB(compact);
+        const name = timestampedName(compact ? 'scene-compact' : 'scene', 'glb');
+        this.deliver(blob, name, tr('Scene exported as {name} ({size})', { name, size: formatBytes(blob.size) }));
+      } finally { activity.finish(); }
     });
   }
 
@@ -697,45 +918,155 @@ export class UI {
     );
   }
 
+  /** Renders the context bubbles (the focused one shows its controls in `selbar`). */
+  get focusedContext() { return this.contextBar.focusedId; }
+
   renderSelbar() {
+    // Scene reset can end Mesh mode directly, without going through the panel's Cancel.
+    if (this.separateUI && !this.editor.separator.active) {
+      this.separateUI.sync();
+      if (this.segment.objects === 'separate') this.segment.objects = 'object';
+    }
+    const previous = this.focusedContext;
+    this.contextBar.render(this.contexts());
+    if (previous !== this.focusedContext) this.toggleSelMenu(false);
+    this.transformBar.render();
+    this.contextBar.layout();
+  }
+
+  refreshContextMenu() { if (this.selMenuOpen) this.placeMenu(); }
+
+  /** One expanded group with finger-sized controls; the other groups remain reachable circles. */
+  renderContextParts(parts: { id: string; icon: IconNode; label: string; content: Node[] }[]) {
+    if (!parts.some((p) => p.id === this.contextPart)) this.contextPart = 'tools';
+    this.selbar.classList.add('ctx-sections');
+    this.selbar.dataset.part = this.contextPart;
+    const nodes = parts.map((p) => {
+      let b = this.contextParts.get(p.id);
+      if (!b) {
+        const controls = h('div', { class: 'ctx-sub-controls' });
+        const trigger = h('button', { class: 'ctx-sub-trigger', onClick: () => { this.contextPart = p.id; this.toggleSelMenu(false); this.renderSelbar(); } });
+        const el = h('div', { class: 'ctx-sub', 'data-part': p.id }, trigger, controls);
+        b = { el, trigger, controls };
+        this.contextParts.set(p.id, b);
+      }
+      const expanded = this.contextPart === p.id;
+      b.el.classList.toggle('expanded', expanded);
+      b.trigger.hidden = expanded;
+      b.controls.hidden = !expanded;
+      b.trigger.title = p.label;
+      b.trigger.setAttribute('aria-label', p.label);
+      b.trigger.setAttribute('aria-expanded', String(expanded));
+      b.trigger.replaceChildren(icon(p.icon));
+      b.controls.replaceChildren(...p.content);
+      return b.el;
+    });
+    this.selbar.replaceChildren(...nodes);
+  }
+
+  contextCameraControls() {
+    const ed = this.editor;
+    return [
+      iconButton(Focus, tr('Focus camera'), () => ed.focus(), { label: tr('Focus camera'), cls: 'tool' }),
+      iconButton(Orbit, tr('Orbit around this object'), () => ed.orbitAround(), { label: tr('Orbit'), cls: 'tool', active: ed.orbitEntity === ed.selected }),
+      iconButton(Ellipsis, tr('More'), () => this.toggleSelMenu(), { label: tr('More'), cls: 'tool more-btn', active: this.selMenuOpen }),
+    ];
+  }
+
+  /** Opens a part of a dock panel (a context's full settings). */
+  private openPart(tab: Tab, part?: string) {
+    if (part) this.segment[tab] = part;
+    if (this.tab !== tab) this.openTab(tab); else this.renderPanel();
+  }
+
+  /**
+   * Everything going on that has controls, most specific first: a recording, rigging, posing,
+   * Mesh mode, measuring, the selection, then running operations (they keep going while the tool
+   * object is shaped).
+   */
+  private contexts(): UIContext[] {
+    const ed = this.editor, out: UIContext[] = [];
+    if (ed.gizmoLoading) out.push(this.activityContext('transform-loading', Move3d, tr('Loading transform controls…'), null));
+    if (ed.separator.cutLoading) out.push(this.activityContext('cut-loading', Triangle, tr('Loading cutting plane…'), null, () => { void this.run(() => ed.separator.setCut(false)); }));
+    for (const [id, activity] of this.activities) out.push(this.activityContext(id, activity.icon, activity.label, activity.progress, activity.cancel));
+    if (ed.optimizer.busy) out.push(this.activityContext('optimize-model', Triangle,
+      tr(ed.optimizer.phase === 'bake' ? 'Baking surface detail: {name}' : 'Optimizing model: {name}', { name: ed.optimizer.entity?.name ?? tr('Scene') }), ed.optimizer.progress, () => ed.optimizer.cancel()));
+    if (ed.textureOptimizer.busy) out.push(this.activityContext('optimize-textures', Layers,
+      tr('Optimizing textures: {name}', { name: ed.textureOptimizer.entity?.name ?? tr('Scene') }), ed.textureOptimizer.progress, () => ed.textureOptimizer.cancel()));
+    const selection = ed.separator.selection;
+    if (selection?.topologyProgress != null) out.push(this.activityContext('mesh-topology', Triangle,
+      tr('Preparing mesh: {name}', { name: selection.entity.name }), selection.topologyProgress, () => selection.cancelPrefetch()));
+    if (ed.recording) out.push({ id: 'recording', icon: Video, label: tr('Recording…'), busy: true, render: () => this.selbar.replaceChildren(
+      this.activitySummary(Video, tr('Recording…'), null),
+      h('div', { class: 'sel-tools' }, button(tr('Cancel'), () => this.photoUI.cancelRecording(), { cls: 'small' })),
+    ) });
+    if (ed.rigger.active && (!ed.photoMode || ed.rigger.progress !== null || ed.rigger.comparing)) out.push({ id: 'rig', icon: Bone,
+      label: ed.rigger.progress !== null ? tr('Rigging {name}: {pct}%', { name: ed.rigger.entity!.name, pct: Math.round(ed.rigger.progress * 100) }) : tr('Rig'),
+      busy: ed.rigger.progress !== null || ed.rigger.comparing, progress: ed.rigger.progress,
+      render: () => this.renderFeatureContext('rig', () => this.rigUI!.renderRigBar()), expand: () => this.openPart('objects', 'rig') });
+    if (ed.photoMode) return out;
+    if (ed.pose.active) out.push({ id: 'pose', icon: PersonStanding, label: tr('Pose'), render: () => this.poseUI.renderPoseBar(), expand: () => this.openPart('objects', 'pose') });
+    if (ed.separator.active) {
+      const n = ed.separator.selection?.count ?? 0;
+      out.push({ id: 'mesh', icon: Triangle, label: n ? tr('{n} faces', { n: n.toLocaleString() }) : tr('Mesh'), render: () => this.renderFeatureContext('separate', () => this.separateUI!.bar()), expand: () => this.openPart('objects', 'separate') });
+    }
+    if (ed.tools.measureMode) out.push({ id: 'measure', icon: Ruler, label: tr('Measure'), render: () => this.selbar.replaceChildren(
+      h('div', { class: 'sel-name measure always' }, icon(Ruler, 16), h('span', {}, ed.tools.pending ? tr('Tap the second point') : tr('Tap the first point'))),
+      h('div', { class: 'sel-tools' }, button(tr('Done'), () => ed.tools.setMeasureMode(false), { cls: 'small primary' })),
+    ), expand: () => this.openPart('tools', 'measure') });
+    if ((ed.selected || ed.multiSelect) && !ed.separator.active && !ed.rigger.active && !ed.pose.active) {
+      const e = ed.selected, n = ed.selection.length;
+      out.push({ id: 'selection', icon: e ? KIND_ICON[e.kind] : Group, label: !e ? tr('Select') : n > 1 ? tr('{n} selected', { n }) : e.name, render: () => this.renderSelectionBar(), expand: e ? () => this.openPart('objects', 'object') : undefined });
+    }
+    const fusion = ed.fusion;
+    if (fusion.busy || fusion.preview) out.push({ id: 'boolean', icon: SquaresUnite, label: tr('Boolean'), busy: fusion.busy, render: () => this.selbar.replaceChildren(
+      fusion.busy ? this.activitySummary(SquaresUnite, tr('Building the new surface…'), null) : h('div', { class: 'sel-name always' }, icon(SquaresUnite, 16), h('span', {}, tr('Boolean'))),
+      h('div', { class: 'sel-tools' },
+        fusion.preview ? button(tr('Apply'), () => { fusion.apply(); this.renderAll(); }, { cls: 'small primary' }) : null,
+        button(tr('Cancel'), () => { fusion.cancel(); this.renderAll(); }, { cls: 'small' })),
+    ), expand: () => this.openPart('objects', 'modify') });
+    const wrap = ed.wrap;
+    if (wrap.active) out.push({ id: 'wrap', icon: Magnet, label: tr('Shrinkwrap'), render: () => this.selbar.replaceChildren(
+      h('div', { class: 'sel-name always' }, icon(Magnet, 16), h('span', {}, tr('{target} onto {tool}', { target: wrap.target!.name, tool: wrap.tools.map((t) => t.name).join(', ') }))),
+      h('div', { class: 'sel-tools' },
+        button(tr('Apply'), () => { const n = wrap.apply(); this.toast(n ? tr('Surface wrapped onto the tool.') : tr('Nothing changed: move the tool over the surface.')); this.renderAll(); }, { cls: 'small primary' }),
+        button(tr('Cancel'), () => { wrap.cancel(); this.renderAll(); }, { cls: 'small' })),
+    ), expand: () => this.openPart('objects', 'modify') });
+    return out;
+  }
+
+  /**
+   * Object | Mesh, like Blender's Tab: the same Move / Rotate / Scale then work on the object or
+   * on the selected faces. Only for one model or shape.
+   */
+  modeSwitch() {
+    const ed = this.editor, e = ed.selected;
+    const mesh = ed.separator.active;
+    if (!mesh && (!e || e.kind === 'light' || e.groupMembers || ed.selection.length > 1)) return null;
+    return h('span', { class: 'objmode' },
+      iconButton(Box, tr('Object mode (Tab)'), () => { if (mesh) this.leaveMesh(); }, { active: !mesh, label: tr('Object'), cls: 'tool' }),
+      iconButton(Triangle, tr('Mesh mode (Tab)'), () => { if (!mesh && e) this.startMesh(e); }, { active: mesh, label: tr('Mesh'), cls: 'tool' }),
+    );
+  }
+
+  /** The selection's bubble: mode, Move / Rotate / Scale, Delete, More, Deselect. */
+  private renderSelectionBar() {
     const ed = this.editor;
     const e = ed.selected;
-    if (ed.tools.measureMode && !ed.photoMode) {
-      this.selbar.classList.add('show');
-      return this.selbar.replaceChildren(
-        h('div', { class: 'sel-name measure' }, icon(Ruler, 16), h('span', {}, ed.tools.pending ? tr('Tap the second point') : tr('Tap the first point'))),
-        h('div', { class: 'sel-tools' }, button(tr('Done'), () => ed.tools.setMeasureMode(false), { cls: 'small primary' })),
-      );
-    }
-    if (ed.separator.active && !ed.photoMode) return this.separateUI.bar();
-    if (ed.rigger.active && !ed.photoMode) return this.rigUI.renderRigBar();
-    if (ed.pose.active && !ed.photoMode) return this.poseUI.renderPoseBar();
     const multi = iconButton(Group, tr('Multi-select (or Shift+click)'), () => ed.setMultiSelect(!ed.multiSelect), { active: ed.multiSelect });
-    this.selbar.classList.toggle('show', (!!e || ed.multiSelect) && !ed.photoMode);
     if (!e) return this.selbar.replaceChildren(h('div', { class: 'sel-name wide' }, h('span', {}, tr('Tap objects to select'))), h('div', { class: 'sel-tools' }, multi));
+    // Tapping the active Scale or Rotate again opens or closes its slider bar
     const toolBtn = (t: Tool, node: IconNode, label: string) =>
-      iconButton(node, label, () => ed.setTool(t), { active: ed.tool === t, label, cls: 'tool' });
-    const count = ed.selection.length;
-    // Only the most used actions stay visible; the rest live in the "⋯" menu
-    this.selbar.replaceChildren(
-      h('div', { class: 'sel-name' }, icon(KIND_ICON[e.kind], 16), h('span', {}, count > 1 ? tr('{n} selected', { n: count }) : e.name)),
-      h(
-        'div',
-        { class: 'sel-tools' },
-        toolBtn('move', Move3d, tr('Move')),
-        toolBtn('rotate', Rotate3d, tr('Rotate')),
-        e.kind !== 'light' ? toolBtn('scale', Scale3d, tr('Scale')) : null,
-        count === 1 && e.animationGroups.length
-          ? ed.anim.isPlaying(e)
-            ? iconButton(Pause, tr('Pause animation'), () => ed.anim.pause(e), { cls: 'play-btn' })
-            : iconButton(Play, tr('Play animation'), () => ed.anim.play(e), { cls: 'play-btn' })
-          : null,
-        h('span', { class: 'sep' }),
-        iconButton(Trash2, tr('Delete (Del)'), () => ed.remove(), { cls: 'danger' }),
-        iconButton(Ellipsis, tr('More'), () => this.toggleSelMenu(), { cls: 'more-btn', active: this.selMenuOpen }),
-        iconButton(X, tr('Deselect (Esc)'), () => ed.select(null)),
-      ),
-    );
+      iconButton(node, t === 'move' ? label : tr('{tool} (tap again for a slider)', { tool: label }), () => (ed.tool === t && t !== 'move' ? this.transformBar.toggle() : ed.setTool(t)), { active: ed.tool === t, label, cls: 'tool' });
+    const mode = this.modeSwitch();
+    this.renderContextParts([
+      ...(mode ? [{ id: 'mode', icon: Box, label: tr('Object / Mesh'), content: [mode] }] : []),
+      { id: 'tools', icon: Move3d, label: tr('Transform'), content: [
+        toolBtn('move', Move3d, tr('Move')), toolBtn('rotate', Rotate3d, tr('Rotate')),
+        ...(e.kind !== 'light' ? [toolBtn('scale', Scale3d, tr('Scale'))] : []),
+      ] },
+      { id: 'view', icon: Focus, label: tr('Camera and actions'), content: this.contextCameraControls() },
+    ]);
     if (this.selMenuOpen) this.toggleSelMenu(true);
   }
 
@@ -745,12 +1076,28 @@ export class UI {
     const e = ed.selected;
     this.selMenuOpen = open && !!e;
     this.selMenu.classList.toggle('show', this.selMenuOpen);
+    this.placeMenu();
     this.selbar.querySelector('.more-btn')?.classList.toggle('active', this.selMenuOpen);
     if (!this.selMenuOpen || !e) return;
     const item = (node: IconNode, label: string, run: () => void, opts: { on?: boolean; keep?: boolean; kbd?: string } = {}) =>
       menuItem(node, label, () => (opts.keep ? null : this.toggleSelMenu(false), run()), opts);
+    if (ed.separator.active) {
+      const s = ed.separator;
+      this.selMenu.replaceChildren(
+        item(Focus, tr('Focus camera'), () => ed.focus(), { kbd: 'F' }),
+        item(Orbit, tr('Orbit around this object'), () => ed.orbitAround(), { on: ed.orbitEntity === e, kbd: 'O' }),
+        item(Undo2, s.mode === 'select' ? tr('Undo selection') : tr('Undo'), () => s.mode === 'select' ? s.edit((sel) => sel.undo()) : ed.undo()),
+        item(X, tr('Done (Tab)'), () => this.leaveMesh()),
+      );
+      return;
+    }
     this.selMenu.replaceChildren(
+      ...(e.groupMembers ? [item(Group, tr('Ungroup'), () => ed.ungroup(e))] : []),
+      item(Plus, tr('Add shape here'), () => this.showShapeMenu(), { kbd: 'Shift+A', keep: true }),
+      ...(ed.selection.length > 1 ? [item(Group, tr('Boolean, shrinkwrap, combine…'), () => this.openModify())] : []),
       item(Copy, tr('Duplicate'), () => ed.duplicate(), { kbd: 'Ctrl+D' }),
+      item(Trash2, tr('Delete (Del)'), () => ed.remove()),
+      item(X, tr('Deselect (Esc)'), () => ed.select(null)),
       item(Focus, tr('Focus camera'), () => ed.focus(), { kbd: 'F' }),
       item(Orbit, tr('Orbit around this object'), () => {
         ed.orbitAround();
@@ -759,8 +1106,7 @@ export class UI {
       ...(e.animationGroups.length && ed.selection.length === 1
         ? [ed.anim.isPlaying(e) ? item(Pause, tr('Pause animation'), () => ed.anim.pause(e)) : item(Play, tr('Play animation'), () => ed.anim.play(e))]
         : []),
-      ...(skeletonsOf(e).length ? [item(PersonStanding, tr('Pose joints'), () => this.poseUI.startPosing(e))] : []),
-      ...(e.kind === 'model' && ed.selection.length === 1 ? [item(Scissors, tr('Separate parts…'), () => this.separateUI.start(e))] : []),
+      ...(!e.groupMembers && skeletonsOf(e).length ? [item(PersonStanding, tr('Pose joints'), () => this.poseUI.startPosing(e))] : []),
       item(Group, tr('Multi-select'), () => (ed.setMultiSelect(!ed.multiSelect), this.toggleSelMenu(true)), { on: ed.multiSelect, keep: true }),
       item(Magnet, tr('Snap to grid'), () => (ed.setSnap(!ed.snap), this.toggleSelMenu(true)), { on: ed.snap, keep: true }),
     );
@@ -786,6 +1132,7 @@ export class UI {
   setUiHidden(on: boolean) {
     this.uiHidden = on;
     document.body.classList.toggle('ui-hidden', on);
+    this.contextBar.setHidden(on);
     if (on) {
       this.toggleMenu(false);
       this.toggleSelMenu(false);
@@ -797,6 +1144,9 @@ export class UI {
     const tab: Tab | null = ed.photoMode ? (this.photoPanel ? 'photo' : null) : this.tab;
     this.panel.classList.toggle('show', !!tab);
     document.body.classList.toggle('panel-open', !!tab);
+    // The bubbles sit above an open panel on phones (again once its slide-in ends)
+    requestAnimationFrame(() => this.contextBar.layout());
+    setTimeout(() => this.contextBar.layout(), 250);
     if (!tab) {
       this.panel.replaceChildren();
       if (ed.rigger.active) this.renderSelbar();
@@ -817,7 +1167,7 @@ export class UI {
       ),
       ...(parts
         ? [
-            segmented(parts, current, (id) => {
+            scrollableSegmented(parts, current, (id) => {
               this.segment[tab] = id;
               this.panel.querySelector('.panel-body')!.scrollTop = 0;
               this.renderPanel();
@@ -825,9 +1175,9 @@ export class UI {
             }),
           ]
         : []),
-      ...(rigging ? [this.rigUI.rigStepper()] : []),
+      ...(rigging && this.rigUI ? [this.rigUI.rigStepper()] : []),
       body,
-      ...(rigging ? [this.rigUI.rigFooter()] : []),
+      ...(rigging && this.rigUI ? [this.rigUI.rigFooter()] : []),
     );
     body.scrollTop = scroll;
     if (ed.rigger.active) this.renderSelbar();
@@ -840,7 +1190,8 @@ export class UI {
       case 'objects': {
         const e = this.editor.selected;
         if (!e || e.kind === 'light') return null;
-        if (this.editor.separator.active) return [{ id: 'separate', label: tr('Separate') }];
+        if (this.editor.separator.active) return [{ id: 'separate', label: tr('Mesh') }];
+        if (e.groupMembers) return [{ id: 'object', label: tr('Object') }, { id: 'material', label: tr('Material') }, { id: 'modify', label: tr('Modify') }];
         return [
           { id: 'object', label: tr('Object') },
           ...(this.editor.materialsOf(e).length ? [{ id: 'material', label: tr('Material') }] : []),
@@ -849,6 +1200,7 @@ export class UI {
             ? [{ id: 'rig', label: tr('Rig') }]
             : skeletonsOf(e).length ? [{ id: 'pose', label: tr('Pose') }] : this.editor.rigger.canRig(e) ? [{ id: 'rig', label: tr('Rig') }] : []),
           ...(e.kind === 'model' ? [{ id: 'optimize', label: tr('Optimize') }] : []),
+          { id: 'modify', label: tr('Modify') },
         ];
       }
       case 'light':
@@ -873,6 +1225,59 @@ export class UI {
   }
 
   private library: LibraryPanel | null = null;
+  loadRigUI() { return this.ensureFeature('rig'); }
+
+  private ensureFeature(name: 'rig' | 'optimize' | 'separate' | 'modify'): Promise<void> {
+    const ready = { rig: this.rigUI, optimize: this.optimizeUI, separate: this.separateUI, modify: this.modifyUI }[name];
+    if (ready) return Promise.resolve();
+    const pending = this.featureLoads.get(name);
+    if (pending) return pending;
+    // Register the promise before rendering its activity, to avoid reentrant duplicate loads.
+    const load = Promise.resolve().then(async () => {
+      const activity = this.beginActivity(tr('Loading {name}', { name: tr({ rig: 'Rig', optimize: 'Optimize', separate: 'Mesh', modify: 'Modify' }[name]) }), Layers);
+      try {
+        if (name === 'rig') this.rigUI = new (await import('./panels/rig')).RigPanel(this);
+        if (name === 'optimize') this.optimizeUI = new (await import('./panels/optimize')).OptimizePanel(this);
+        if (name === 'separate') this.separateUI = new (await import('./panels/separate')).SeparatePanel(this);
+        if (name === 'modify') this.modifyUI = new (await import('./panels/modify')).ModifyPanel(this);
+        this.featureErrors.delete(name);
+      } catch (error) {
+        this.featureErrors.set(name, errorMessage(error));
+        throw error;
+      } finally {
+        this.featureLoads.delete(name);
+        activity.finish();
+        this.renderAll();
+      }
+    });
+    this.featureLoads.set(name, load);
+    return load;
+  }
+
+  private featureContent(name: 'rig' | 'optimize' | 'separate' | 'modify', render: () => (Node | null)[]): (Node | null)[] {
+    if ({ rig: this.rigUI, optimize: this.optimizeUI, separate: this.separateUI, modify: this.modifyUI }[name]) return render();
+    const error = this.featureErrors.get(name);
+    if (error) return [hint(error), button(tr('Try again'), () => { this.featureErrors.delete(name); void this.run(() => this.ensureFeature(name)); this.renderPanel(); })];
+    void this.ensureFeature(name).catch(() => {});
+    return [hint(tr('Loading…'))];
+  }
+
+  private renderFeatureContext(name: 'rig' | 'separate', render: () => void) {
+    if (name === 'rig' ? this.rigUI : this.separateUI) { render(); return; }
+    this.selbar.replaceChildren(...this.featureContent(name, () => []).filter((node): node is Node => node !== null));
+  }
+
+  private startMesh(entity: Entity) {
+    void this.run(async () => {
+      await this.ensureFeature('separate');
+      if (this.editor.selected === entity && this.editor.entities.includes(entity)) this.separateUI!.start(entity);
+    });
+  }
+
+  private leaveMesh() {
+    if (this.separateUI) this.separateUI.cancel();
+    else { this.editor.separator.cancel(); this.renderAll(); }
+  }
   private libraryLoading: Promise<void> | null = null;
   private libraryContent(kind: LibraryKind): Node[] {
     if (this.library) return [this.library.content(kind)];
@@ -887,14 +1292,12 @@ export class UI {
     switch (tab) {
       case 'add':
         return part === 'library' ? this.libraryContent('model') : this.addUI.addPanel();
-      case 'objects':
-        if (part === 'material') return this.materialUI.materialPanel();
-        if (part === 'animate') return this.animateUI.animatePanel();
-        if (part === 'pose') return this.poseUI.posePanel();
-        if (part === 'rig') return this.rigUI.rigPanel();
-        if (part === 'optimize') return this.optimizeUI.optimizePanel();
-        if (part === 'separate') return this.separateUI.panel();
-        return this.objectsUI.scenePanel();
+      case 'objects': {
+        // An operation in progress stays on top of every part until Apply or Cancel
+        const operation = part === 'modify' ? null : this.modifyUI?.operation();
+        const content = this.objectsPart(part);
+        return operation ? [operation, ...content] : content;
+      }
       case 'light':
         return part === 'library' ? this.libraryContent('hdri') : part === 'environment' ? this.lightUI.envPanel() : this.lightUI.lightsPanel();
       case 'photo': {
@@ -907,6 +1310,17 @@ export class UI {
         return [part === 'guides' ? guides : part === 'align' ? align : measure];
       }
     }
+  }
+
+  private objectsPart(part: string): (Node | null)[] {
+    if (part === 'material') return this.materialUI.materialPanel();
+    if (part === 'animate') return this.animateUI.animatePanel();
+    if (part === 'pose') return this.poseUI.posePanel();
+    if (part === 'rig') return this.featureContent('rig', () => this.rigUI!.rigPanel());
+    if (part === 'optimize') return this.featureContent('optimize', () => this.optimizeUI!.optimizePanel());
+    if (part === 'separate') return this.featureContent('separate', () => this.separateUI!.panel());
+    if (part === 'modify') return this.featureContent('modify', () => this.modifyUI!.panel());
+    return this.objectsUI.scenePanel();
   }
 
   /** Runs an action that may fail with a message for the user. */

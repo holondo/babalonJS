@@ -60,7 +60,7 @@ export class AddPanel {
           ),
         ),
       ),
-      section(tr('Shapes'), h('div', { class: 'grid' }, ...prims.map((p) => h('button', { class: 'card', onClick: () => ed.addPrimitive(p.id) }, p.label)))),
+      section(tr('Shapes'), h('div', { class: 'grid' }, ...prims.map((p) => h('button', { class: 'card', onClick: () => this.ui.addShape(p.id) }, p.label)))),
       section(tr('Lights'), h('div', { class: 'grid' }, ...lights.map((l) => h('button', { class: 'card', onClick: () => ed.addLight(l.id) }, l.label)))),
     ];
   }

@@ -6,6 +6,8 @@ import { Skeleton } from '@babylonjs/core/Bones/skeleton.js';
 import { SkeletonViewer } from '@babylonjs/core/Debug/skeletonViewer.js';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js';
+import { capturePart } from '../edit/parts';
+import type { SeparationState } from '../edit/parts';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
 import type { AnimationGroup } from '@babylonjs/core/Animations/animationGroup.js';
 import type { Geometry } from '@babylonjs/core/Meshes/geometry.js';
@@ -61,6 +63,8 @@ interface MeshBackup {
   rotationQuaternion: Quaternion | null;
   scaling: Vector3;
   geometry: Geometry | null;
+  /** Mesh space → rig space, as baked into the vertices when binding. */
+  toRig?: Matrix;
 }
 
 /** A bound rig: skeleton, joint nodes and what's needed to undo/redo the binding. */
@@ -72,6 +76,8 @@ export interface RigState {
   backups: MeshBackup[];
   /** Bound geometry of each mesh (with skin weights). */
   geometries: (Geometry | null)[];
+  /** Edited geometry state at the time the rig was removed (put back if that's undone). */
+  editedSeparation?: SeparationState;
   helpers: { node: TransformNode; driver: TransformNode }[];
 }
 
@@ -137,7 +143,7 @@ export class Rigger {
 
   /** Static models made of regular meshes can be rigged. */
   canRig(e: Entity) {
-    return e.kind === 'model' && !skeletonsOf(e).length && e.meshes.length > 0 && e.meshes.every((m) => m instanceof Mesh && m.getTotalIndices() > 0);
+    return e.kind === 'model' && !e.groupMembers && !skeletonsOf(e).length && e.meshes.length > 0 && e.meshes.every((m) => m instanceof Mesh && m.getTotalIndices() > 0);
   }
 
   // ---------- Placing the joints ----------
@@ -843,6 +849,7 @@ export class Rigger {
       // makeGeometryUnique is a no-op in that case: cancelling would dispose the backup.
       m.geometry?.copy(`rig-${node.uniqueId}-${m.uniqueId}`).applyToMesh(m);
       const toRigSpace = worldMatrix(m).multiply(toRig);
+      backups[backups.length - 1].toRig = toRigSpace.clone();
       m.bakeTransformIntoVertices(toRigSpace);
       m.parent = node;
       m.position.setAll(0);
@@ -914,10 +921,10 @@ export class Rigger {
     const input = this.skinInput(st);
     input.comparison = comparison;
     this.progress = 0;
-    this.editor.notify('rig');
+    this.editor.notify('activity');
     const onProgress = (p: number) => {
       this.progress = p;
-      this.editor.notify('rig');
+      this.editor.notify('activity');
     };
     this.job = computeSkinWeights(input, st.data.method, onProgress);
     try {
@@ -933,6 +940,7 @@ export class Rigger {
     } finally {
       this.job = null;
       this.progress = null;
+      this.editor.notify('activity');
     }
   }
 
@@ -952,15 +960,29 @@ export class Rigger {
 
   /** Puts the meshes back as they were (`dispose`: the rig is gone for good). */
   private unbind(e: Entity, st: RigState, dispose: boolean) {
-    for (const b of st.backups) {
+    let edited = false;
+    st.backups.forEach((b, i) => {
       const m = b.mesh;
       m.skeleton = null;
-      b.geometry?.applyToMesh(m);
+      if (m.geometry && m.geometry !== st.geometries[i] && b.toRig) {
+        // The surface was edited after rigging: keep the edit, back in the mesh's own space
+        // (the edited rig-space geometry is kept for undo)
+        edited = true;
+        st.geometries[i] = m.geometry;
+        m.geometry.copy(`unrig-${m.uniqueId}`).applyToMesh(m);
+        m.removeVerticesData(VertexBuffer.MatricesIndicesKind);
+        m.removeVerticesData(VertexBuffer.MatricesWeightsKind);
+        m.bakeTransformIntoVertices(b.toRig.clone().invert());
+      } else b.geometry?.applyToMesh(m);
       m.parent = b.parent;
       m.position.copyFrom(b.position);
       m.rotation.copyFrom(b.rotation);
       m.rotationQuaternion = b.rotationQuaternion?.clone() ?? null;
       m.scaling.copyFrom(b.scaling);
+    });
+    if (edited && e.separation) {
+      st.editedSeparation = e.separation;
+      e.separation = { meshes: e.meshes.map((m) => capturePart(m as Mesh, true)), pivot: e.separation.pivot };
     }
     if (dispose) {
       st.geometries.forEach((g) => g?.dispose());
@@ -978,6 +1000,7 @@ export class Rigger {
 
   private rebind(e: Entity, st: RigState) {
     st.node.setEnabled(true);
+    if (st.editedSeparation) e.separation = st.editedSeparation;
     st.backups.forEach((b, i) => {
       const m = b.mesh;
       st.geometries[i]?.applyToMesh(m);
@@ -1000,13 +1023,16 @@ export class Rigger {
   /** Saved form of a rig: joints and the skin weights (4 bone indices + 4 weights per vertex, bytes). */
   /** Saved weight bytes per rig state (rebuilt only after the weights change). */
   private readonly savedWeights = new WeakMap<RigState, Uint8Array>();
+  private readonly savedArrays = new WeakMap<RigState, unknown[]>();
 
   serialize(e: Entity): { data: RigData; weights: Uint8Array } | null {
     const st = e.rig;
     if (!st) return null;
     // Weights only change in applyWeights: reuse the bytes (autosave then skips writing them)
     const cached = this.savedWeights.get(st);
-    if (cached) return { data: { ...st.data, joints: { ...st.data.joints } }, weights: cached };
+    // Valid only while the weight arrays are the same ones (a geometry edit replaces them)
+    const current = st.backups.map((b) => b.mesh.getVerticesData(VertexBuffer.MatricesWeightsKind));
+    if (cached && this.savedArrays.get(st)?.every((a, i) => a === current[i])) return { data: { ...st.data, joints: { ...st.data.joints } }, weights: cached };
     const meshes = st.backups.map((b) => b.mesh);
     const total = meshes.reduce((n, m) => n + m.getTotalVertices(), 0);
     const out = new Uint8Array(total * INFLUENCES * 2);
@@ -1021,11 +1047,12 @@ export class Rigger {
       v += m.getTotalVertices();
     }
     this.savedWeights.set(st, out);
+    this.savedArrays.set(st, current);
     return { data: { ...st.data, joints: { ...st.data.joints } }, weights: out };
   }
 
   /** Rebuilds a saved rig on a freshly loaded model (or on a copy). */
-  restore(e: Entity, data: RigData, weights: Uint8Array | null) {
+  restore(e: Entity, data: RigData, weights: Uint8Array | null, placeholder = false) {
     if (!this.canRig(e)) return;
     if (!data.treatment && data.shoulderStrategy) data = { ...data, treatment: data.shoulderStrategy };
     delete data.shoulderStrategy;
@@ -1035,7 +1062,12 @@ export class Rigger {
     const st = this.build(e, positions, { ...data, joints: { ...data.joints } });
     const total = st.backups.reduce((n, b) => n + b.mesh.getTotalVertices(), 0);
     let w: SkinWeights;
-    if (weights && weights.length === total * INFLUENCES * 2) {
+    if (placeholder) {
+      // The caller puts the real weights on right away (with the edited geometry): skip computing them
+      const indices = new Float32Array(total * INFLUENCES), values = new Float32Array(total * INFLUENCES);
+      for (let i = 0; i < total; i++) values[i * INFLUENCES] = 1;
+      w = { indices, weights: values };
+    } else if (weights && weights.length === total * INFLUENCES * 2) {
       const indices = new Float32Array(total * INFLUENCES);
       const values = new Float32Array(total * INFLUENCES);
       for (let i = 0; i < total; i++) {
@@ -1057,6 +1089,20 @@ export class Rigger {
     this.applyWeights(st, w);
     e.rig = st;
     forgetHumanoid(e);
+  }
+
+  /** Same skeleton on a part separated from a rigged model; its weights come with its geometry. */
+  copySkeleton(from: Entity, to: Entity) {
+    const saved = this.serialize(from);
+    if (saved) this.restore(to, { ...saved.data, comparison: undefined }, null, true);
+  }
+
+  /** Puts a model in its rest pose (for editing its surface: what's shown is what's edited). */
+  toRest(e: Entity) {
+    if (e.rig) for (const node of e.rig.joints.values()) node.rotationQuaternion = Quaternion.Identity();
+    for (const m of e.meshes) m.skeleton?.returnToRest();
+    e.posed = false;
+    this.editor.invalidate();
   }
 
   /** Same rig on a duplicate (same model file, so same vertices). */

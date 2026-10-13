@@ -7,7 +7,7 @@ import type { OptimizeSettings } from '../../optimize/optimizer';
 import { BAKE_SIZES } from '../../optimize/bake';
 import { DEFAULT_TEXTURES } from '../../optimize/textures';
 import type { TextureSettings } from '../../optimize/textures';
-import { button, chips, h, hint, progressBar, row, section, select, slider, toggle } from '../dom';
+import { button, chips, h, hint, row, section, select, slider, toggle } from '../dom';
 import type { UI } from '../ui';
 
 /**
@@ -34,24 +34,6 @@ export class OptimizePanel {
   }
 
   /** After a model is added: a heavy one gets a notice with a shortcut here. */
-  checkHeavy(e: Entity | null) {
-    if (!e || e.kind !== 'model') return;
-    const budget = deviceBudget();
-    if (!overBudget(analyzeEntity(this.ui.editor, e), budget)) return;
-    this.ui.toast(
-      tr(budget.phone ? 'This model is heavy for this phone and may run slowly. You can optimize it.' : 'This model is very heavy. You can optimize it.'),
-      'info',
-      { label: tr('Optimize'), run: () => this.open() },
-      9000,
-    );
-  }
-
-  /** Opens Objects → Optimize. */
-  open() {
-    this.ui.segment.objects = 'optimize';
-    this.ui.openTab('objects');
-  }
-
   private costSection(e: Entity) {
     const ed = this.ui.editor;
     const cost = analyzeEntity(ed, e);
@@ -124,7 +106,7 @@ export class OptimizePanel {
           )
         : null,
       toggle(tr('Keep open edges in place'), s.lockBorder, (v) => (this.geometry = { ...this.geometry, lockBorder: v })),
-      busy ? progressBar(opt.progress ?? 0, tr('Optimizing… {pct}%', { pct: Math.round((opt.progress ?? 0) * 100) })) : null,
+      busy ? this.ui.operationProgress('geometry', opt.progress ?? 0) : null,
       blocker ? hint(blocker) : null,
       result,
       row(
@@ -152,7 +134,7 @@ export class OptimizePanel {
       hint(tr('Compressed textures use 4 to 8 times less graphics memory with practically the same image. Reducing the size is optional and loses detail.')),
       toggle(tr('Compress (KTX2)'), s.compress, (v) => (this.textures = { ...this.textures, compress: v })),
       select(tr('Size'), sizes, s.maxSize ? String(s.maxSize) : '', (v) => (this.textures = { ...this.textures, maxSize: v ? +v : null })),
-      busy ? progressBar(opt.progress ?? 0, tr('Optimizing… {pct}%', { pct: Math.round((opt.progress ?? 0) * 100) })) : null,
+      busy ? this.ui.operationProgress('textures', opt.progress ?? 0) : null,
       o
         ? h('ul', { class: 'readout' }, h('li', {}, h('span', {}, tr('Texture memory')), h('b', {}, `${formatBytes(o.before)} → ${formatBytes(o.after)}`)))
         : null,

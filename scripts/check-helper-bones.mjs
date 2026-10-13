@@ -92,7 +92,7 @@ GLTF2Export.GLBAsync=async (...args)=>{
 };
 original.visible=false;original.meshes.forEach(m=>m.isVisible=false);
 try {
-  await Editor.prototype.exportGLB.call({scene,entities:[original,restored,legacy,independent],helpers:new Set(),overlays:new Set(),
+  await Editor.prototype.exportGLB.call({fusion:{busy:false,preview:null},scene,entities:[original,restored,legacy,independent],helpers:new Set(),overlays:new Set(),
     pose:{ikTarget:new TransformNode('ikTarget',scene)},rigger:{handle:new TransformNode('rigHandle',scene),difference:rigger.difference},
     optimizer:{preview(){}},textureOptimizer:{forExport:()=>({ktx2:[],restore(){}})},invalidate(){}});
 } finally {GLTF2Export.GLBAsync=actualExport;}

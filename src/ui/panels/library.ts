@@ -131,15 +131,18 @@ export class LibraryPanel {
       const item = chosen, chosenVariant = variant;
       if (!item || !chosenVariant || progress !== null) return;
       const controller = active = new AbortController();
+      const activity = this.ui.beginActivity(tr('Downloading {name}', { name: item.name }), undefined, () => controller.abort());
       progress = 0; message = '';
       renderBar();
       void (async () => {
         try {
           const result = await downloadLibraryItem(item, kind, chosenVariant, controller.signal, (done, total) => {
             progress = Math.min(1, done / total); renderBar();
+            activity.update(progress);
           });
           controller.signal.throwIfAborted();
           progress = null; message = tr('Loading…'); renderBar();
+          activity.finish();
           await this.ui.openFiles(result.files, result.attribution);
           this.ui.toast(tr('{name} added', { name: item.name }));
           message = '';
@@ -147,6 +150,7 @@ export class LibraryPanel {
         } catch (error) {
           message = fail(error, controller.signal);
         } finally {
+          activity.finish();
           if (active === controller) active = null;
           progress = null;
           renderBar(); renderGrid();
