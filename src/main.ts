@@ -6,6 +6,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { setupSystemBars } from './device/systemBars';
 import { takeSharedFiles } from './core/files';
 import { GyroControl } from './device/gyro';
+import { installedDisplay, prepareOffline } from './core/offline';
 
 document.documentElement.lang = locale();
 
@@ -32,16 +33,71 @@ if (navigator.xr) navigator.xr.isSessionSupported('immersive-ar').then(async (su
 ui.setGyro(new GyroControl(editor));
 
 // PWA: offline cache + "new version" notice (the update is applied only when the user accepts)
+let warmingCode: Promise<void> | null = null;
+function cacheUsedCode() {
+  if (!('serviceWorker' in navigator) || !('caches' in window)) return Promise.resolve();
+  return warmingCode ??= (async () => {
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) await new Promise<void>(resolve => {
+      const finish = () => {
+        navigator.serviceWorker.removeEventListener('controllerchange', finish);
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = window.setTimeout(finish, 5000);
+      navigator.serviceWorker.addEventListener('controllerchange', finish, { once: true });
+    });
+    if (!navigator.serviceWorker.controller) return;
+    // First-visit shaders can load before the newly installed worker controls this page.
+    // Preserve only code already used, fetching from the HTTP cache without evaluating it again.
+    const paths = new Set(performance.getEntriesByType('resource').map(entry => entry.name));
+    for (const path of paths) {
+      const url = new URL(path);
+      const localCode = url.origin === location.origin && url.pathname.startsWith(`${import.meta.env.BASE_URL}assets/`) && /\.(?:js|css)$/.test(url.pathname);
+      const usedEnvironment = url.hostname === 'assets.babylonjs.com' && /\.env$/.test(url.pathname);
+      if (!localCode && !usedEnvironment) continue;
+      if (!(await caches.match(path))) await fetch(path, { cache: 'force-cache' });
+    }
+  })().finally(() => { warmingCode = null; });
+}
+navigator.serviceWorker?.addEventListener('controllerchange', () => { void cacheUsedCode().catch(() => {}); });
+let installedThisSession = false;
+let offlinePreparation: Promise<void> | null = null;
+function prepareInstalledApp() {
+  if ((!installedThisSession && !installedDisplay()) || !('serviceWorker' in navigator) || !('caches' in window)) return;
+  return offlinePreparation ??= (async () => {
+    const activity = ui.beginActivity(tr('Downloading tools for offline use'));
+    try {
+      await cacheUsedCode();
+      const script = document.querySelector<HTMLScriptElement>('script[type="module"][src]');
+      if (!script) throw new Error('App entry not found');
+      const entry = new URL(script.src).pathname.slice(import.meta.env.BASE_URL.length);
+      await prepareOffline(import.meta.env.BASE_URL, value => activity.update(value), entry);
+      ui.toast(tr('All tools are ready to work offline'));
+    } catch {
+      ui.toast(tr('Offline download incomplete. Reconnect to continue.'), 'error', { label: tr('Try again'), run: () => { void prepareInstalledApp(); } });
+    } finally { activity.finish(); }
+  })().finally(() => { offlinePreparation = null; });
+}
 const updateSW = registerSW({
   onNeedRefresh: () => ui.toast(tr('A new version is available'), 'info', { label: tr('Update'), run: () => updateSW(true) }),
-  onOfflineReady: () => ui.toast(tr('Ready to work offline')),
+  onOfflineReady: () => { void cacheUsedCode().then(() => {
+    if (installedThisSession || installedDisplay()) void prepareInstalledApp();
+    else ui.toast(tr('Basic editor is ready to work offline'));
+  }).catch(() => {}); },
 });
+if (import.meta.env.PROD) void prepareInstalledApp();
+window.addEventListener('online', () => { if (import.meta.env.PROD) void prepareInstalledApp(); });
 
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   ui.setInstallPrompt(e as unknown as { prompt: () => Promise<unknown> });
 });
-window.addEventListener('appinstalled', () => ui.setInstallPrompt(null));
+window.addEventListener('appinstalled', () => {
+  ui.setInstallPrompt(null);
+  installedThisSession = true;
+  if (import.meta.env.PROD) void prepareInstalledApp();
+});
 
 // Files shared into the installed app from another app (Android: Share → babalon JS)
 takeSharedFiles().then((files) => ui.openFiles(files));

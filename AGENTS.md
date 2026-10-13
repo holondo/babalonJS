@@ -12,7 +12,8 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 ```
 
 - There is no test runner. Verify every change with `npm run build` and in a browser (see [Verifying changes](#verifying-changes)).
-- Project ZIP compatibility and worker checks: `node scripts/check-project-archive.mjs`.
+- Startup/cache regression: `node scripts/check-lazy-cache.mjs` after a build. Project ZIP compatibility and worker checks: `node scripts/check-project-archive.mjs`.
+- Installed PWA downloads/resume and version checks: `node scripts/check-offline-install.mjs` after a build. The ordinary site caches features on use; installed apps additionally cache all tool code, workers, WASM and model decoders without evaluating them. Models and libraries stay opt-in.
 - Rigging has focused checks (Node, no browser): `node scripts/check-leg-junction.mjs`, `check-skin-treatments.mjs`, `check-helper-bones.mjs`, `check-skin-visibility.mjs`. Optimization: `node scripts/check-simplify.mjs`. `node scripts/check-rig-deformation.mjs <model.glb> <envelope|heat> [comparison]` audits final deformation on a model you provide (meshopt-compressed GLB); no model is bundled for it.
 - GitHub Pages deploys on every push to `main` (`.github/workflows/deploy.yml`). The build runs with `BASE_PATH=/<repo>/`.
 
@@ -89,7 +90,7 @@ Expensive features are opt-in (AR shadows, room lighting, camera access, FPS cou
 ### Performance
 - The scene renders on demand. Anything that changes what's on screen must go through editor methods that emit `changed`, or call `editor.invalidate()`. Camera motion, animations, loading and AR are detected automatically.
 - Worker progress emits `activity`, not persistent scene changes: update the bubbles and progress elements without rendering the scene or scheduling autosave. Emit the domain change when a result is applied.
-- Rig, Mesh, Modify and Optimize panels load through the UI feature loader. Keep lightweight shared data out of panel modules so shell imports do not pull those panels into startup.
+- Rig, Mesh, Modify and Optimize panels load through the UI feature loader. Keep lightweight shared data out of panel modules so shell imports do not pull those panels into startup. The PWA precaches the static entry graph and caches feature code on first use.
 - No per-frame allocation-heavy work, no GPU readbacks in the render loop (the theme-color sampler is throttled and paused in AR).
 - `scene.skipPointerMovePicking` is on: pick explicitly when you need what's under the pointer.
 - Rebuild geometry (e.g. lines) only when its data changed.

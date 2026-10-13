@@ -520,6 +520,10 @@ const PT: Record<string, string> = {
   'A new version is available': 'Há uma versão nova disponível',
   Update: 'Atualizar',
   'Ready to work offline': 'Pronto para usar offline',
+  'Basic editor is ready to work offline': 'Editor básico pronto para usar offline',
+  'Downloading tools for offline use': 'Baixando ferramentas para uso offline',
+  'All tools are ready to work offline': 'Todas as ferramentas estão prontas para usar offline',
+  'Offline download incomplete. Reconnect to continue.': 'Download offline incompleto. Reconecte para continuar.',
   // Animation, posing and rigging
   'Animate': 'Animar',
   'Clips': 'Animações',
