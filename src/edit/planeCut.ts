@@ -7,6 +7,7 @@ import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { GizmoManager } from '@babylonjs/core/Gizmos/gizmoManager.js';
 import { applyTransformGizmoStyle, TRANSFORM_GIZMO_THICKNESS } from '../core/gizmoStyle';
+import { TransformGizmoVisuals } from '../core/transformGizmoVisuals';
 import type { Editor, Entity } from '../core/editor';
 import type { FaceLookup, MeshPart } from './parts';
 import { capturePart, compactFaces, mergeLocal } from './parts';
@@ -158,6 +159,7 @@ function capSide(part: MeshPart, plane: { origin: Vector3; normal: Vector3; tole
 export class PlaneCut {
   readonly plane: Mesh;
   readonly gizmos: GizmoManager;
+  private readonly visuals: TransformGizmoVisuals;
   exact = false;
   cap = false;
   capMaterial = 0;
@@ -180,6 +182,7 @@ export class PlaneCut {
     for (const color of ['#bb98df', '#e6b94a', '#44216b']) { const m = new StandardMaterial('Cut preview', editor.scene); m.diffuseColor = m.emissiveColor = Color3.FromHexString(color); m.alpha = 0.34; m.disableLighting = true; m.backFaceCulling = false; m.zOffset = -3; this.materials.push(m); }
     this.plane.material = this.materials[0]; this.plane.position.copyFrom(bounds.min.add(bounds.max).scale(0.5)); this.snap('horizontal');
     this.gizmos = new GizmoManager(editor.scene, TRANSFORM_GIZMO_THICKNESS); this.gizmos.usePointerToAttachGizmos = false; this.gizmos.positionGizmoEnabled = true; this.gizmos.rotationGizmoEnabled = true; applyTransformGizmoStyle(this.gizmos); this.gizmos.attachToMesh(this.plane);
+    this.visuals = new TransformGizmoVisuals(this.gizmos); this.visuals.ensure();
     this.observer = editor.scene.onBeforeRenderObservable.add(() => { const key = this.plane.position.asArray().join() + this.plane.rotationQuaternion?.asArray().join() + this.exact + this.limited + this.cap; if (key !== this.signature) { this.signature = key; clearTimeout(this.timer); this.timer = window.setTimeout(() => this.preview(), 150); } });
     this.preview();
   }
@@ -227,5 +230,5 @@ export class PlaneCut {
     this.editor.invalidate();
   }
   private clearPreview() { for (const m of this.previews) if (m) { this.editor.overlays.delete(m); disposeShared(m); } this.previews = []; }
-  dispose() { clearTimeout(this.timer); this.editor.scene.onBeforeRenderObservable.remove(this.observer); this.gizmos.dispose(); this.clearPreview(); this.editor.overlays.delete(this.plane); this.plane.dispose(); this.materials.forEach(m => m.dispose()); this.editor.invalidate(); }
+  dispose() { clearTimeout(this.timer); this.editor.scene.onBeforeRenderObservable.remove(this.observer); this.visuals.dispose(); this.gizmos.dispose(); this.clearPreview(); this.editor.overlays.delete(this.plane); this.plane.dispose(); this.materials.forEach(m => m.dispose()); this.editor.invalidate(); }
 }

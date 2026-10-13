@@ -30,6 +30,7 @@ import { Engine } from '@babylonjs/core/Engines/engine.js';
 import { FilesInputStore } from '@babylonjs/core/Misc/filesInputStore.js';
 import { Frustum } from '@babylonjs/core/Maths/math.frustum.js';
 import type { GizmoManager } from '@babylonjs/core/Gizmos/gizmoManager.js';
+import type { TransformGizmoVisuals } from './transformGizmoVisuals';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js';
 import { ImageProcessingConfiguration } from '@babylonjs/core/Materials/imageProcessingConfiguration.js';
 import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader.js';
@@ -330,6 +331,7 @@ export class Editor {
   photo: PhotoSettings = { ...DEFAULT_PHOTO };
 
   private gizmos: GizmoManager | null = null;
+  private gizmoVisuals: TransformGizmoVisuals | null = null;
   private gizmoLoad: Promise<void> | null = null;
   gizmoLoading = false;
   gizmoError: string | null = null;
@@ -1524,10 +1526,11 @@ export class Editor {
   private loadGizmos() {
     this.gizmoLoading = true;
     this.gizmoError = null;
-    this.gizmoLoad = import('@babylonjs/core/Gizmos/gizmoManager.js').then(({ GizmoManager }) => {
+    this.gizmoLoad = Promise.all([import('@babylonjs/core/Gizmos/gizmoManager.js'), import('./transformGizmoVisuals')]).then(([{ GizmoManager }, { TransformGizmoVisuals }]) => {
       const manager = this.gizmos = new GizmoManager(this.scene, TRANSFORM_GIZMO_THICKNESS);
       manager.usePointerToAttachGizmos = false;
       manager.clearGizmoOnEmptyPointerEvent = false;
+      this.gizmoVisuals = new TransformGizmoVisuals(manager);
       this.applyTool();
       this.invalidate();
     }).catch(error => {
@@ -1548,6 +1551,7 @@ export class Editor {
     this.gizmos.scaleGizmoEnabled = scale;
     // The manager only propagates this setting to controls that already exist.
     applyTransformGizmoStyle(this.gizmos);
+    this.gizmoVisuals?.ensure();
     const g = this.gizmos.gizmos;
     for (const gz of [g.positionGizmo, g.rotationGizmo, g.scaleGizmo]) {
       if (!gz || this.configuredGizmos.has(gz)) continue;
@@ -1600,6 +1604,7 @@ export class Editor {
         [pg.yPlaneGizmo, { x: true, y: false, z: true }],
         [pg.zPlaneGizmo, { x: true, y: true, z: false }],
       ];
+      if (this.gizmoVisuals?.moveCenter) axisGizmos.push([this.gizmoVisuals.moveCenter, { x: true, y: true, z: true }]);
       for (const [gizmo, axes] of axisGizmos) {
         gizmo.dragBehavior.onDragObservable.add((ev) => {
           // Posing: the gizmo drags the IK target, the arm/leg follows
