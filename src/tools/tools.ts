@@ -79,6 +79,16 @@ interface AnchorJSON {
 export class Tools {
   readonly changed = new Observable<void>();
   measureMode = false;
+  private measurePaused = false;
+  /** A measurement can stay open while another context receives scene input. */
+  get measuring() { return this.measureMode && !this.measurePaused; }
+
+  setMeasurePaused(paused: boolean) {
+    if (this.measurePaused === paused) return;
+    this.measurePaused = paused;
+    this.editor.refreshTool();
+    this.editor.invalidate();
+  }
   measurements: Measurement[] = [];
   /** Ephemeral XR geometry: never enters editor history or project serialization. */
   readonly sessionMeasurements: Measurement[] = [];
@@ -179,7 +189,9 @@ export class Tools {
   setMeasureMode(on: boolean) {
     this.measureMode = on;
     if (!on) this.cancelPending();
-    if (on) this.editor.select(null);
+    this.measurePaused = false;
+    this.editor.refreshTool();
+    this.editor.invalidate();
     this.changed.notifyObservers();
   }
 
@@ -227,13 +239,13 @@ export class Tools {
       case PointerEventTypes.POINTERTAP:
       case PointerEventTypes.POINTERDOUBLETAP: {
         // Two quick taps arrive as TAP + DOUBLETAP: in measure mode both must place points
-        if (info.type === PointerEventTypes.POINTERDOUBLETAP && !this.measureMode) return false;
+        if (info.type === PointerEventTypes.POINTERDOUBLETAP && !this.measuring) return false;
         const hit = scene.pick(x, y, (m) => m.metadata?.measureId !== undefined && m.isEnabled());
         if (hit?.pickedMesh) {
           this.setActive(this.measurements.find((mm) => mm.id === hit.pickedMesh!.metadata.measureId) ?? null);
           return true;
         }
-        if (!this.measureMode) {
+        if (!this.measuring) {
           // Tapping elsewhere collapses expanded labels/chips (and still selects normally)
           if (this.active || this.activeGuide) {
             this.active = null;

@@ -3,6 +3,9 @@ import type { LibraryPanel } from './panels/library';
 import { ProjectGallery } from './projectGallery';
 import {
   Box,
+  Bone,
+  SquaresUnite,
+  Video,
   Camera,
   Triangle,
   ChevronDown,
@@ -52,7 +55,7 @@ import type { GyroControl } from '../device/gyro';
 import { saveAndOfferShare, timestampedName } from '../core/files';
 import { LANGS, getLang, setLang, tr } from '../core/i18n';
 import type { Lang } from '../core/i18n';
-import { button, chips, h, hint, icon, iconButton, menuItem, row, section, segmented } from './dom';
+import { button, chips, h, hint, icon, iconButton, menuItem, row, section, segmented, scrollableSegmented } from './dom';
 import { AddPanel } from './panels/add';
 import { ObjectsPanel } from './panels/objects';
 import { MaterialPanel } from './panels/material';
@@ -63,6 +66,8 @@ import { ToolsPanel } from './panels/tools';
 import { OptimizePanel } from './panels/optimize';
 import { SeparatePanel } from './panels/separate';
 import { TransformBar } from './transformBar';
+import { ContextBar } from './contextBar';
+import type { UIContext } from './contextBar';
 import { ModalTransform } from './modalTransform';
 import { ModifyPanel, QUICK_SHAPES, shapeLabel } from './panels/modify';
 import { analyzeScene, deviceBudget, formatBytes, overBudget } from '../optimize/analysis';
@@ -97,6 +102,8 @@ export class UI {
   readonly optimizeUI = new OptimizePanel(this);
   readonly separateUI = new SeparatePanel(this);
   readonly transformBar = new TransformBar(this);
+  /** Context bubbles; created once the selection bar exists. */
+  private contextBar!: ContextBar;
   readonly modifyUI = new ModifyPanel(this);
   /** G / R / S from the keyboard (created with the keys, once the canvas exists). */
   private modal!: ModalTransform;
@@ -121,15 +128,17 @@ export class UI {
   /** Secondary actions of the selection ("⋯" in the selection bar). */
   private readonly selMenu = h('div', { class: 'menu selmenu' });
   private selMenuOpen = false;
+  private contextPart = 'tools';
+  private readonly contextParts = new Map<string, { el: HTMLDivElement; trigger: HTMLButtonElement; controls: HTMLDivElement }>();
   /** Floating viewport controls: frame all, gyro, fullscreen, hide interface. */
-  private readonly viewStack = h('div', { class: 'viewstack' });
+  readonly viewStack = h('div', { class: 'viewstack' });
   /** Everything hidden except this button (any screen). */
   private uiHidden = false;
   private readonly uiRestore = h('button', { class: 'ibtn round ui-restore' });
   private readonly projectInput = h('input', { type: 'file', accept: `${PROJECT_EXT},.zip`, hidden: true });
 
-  private readonly topbar = h('header', { class: 'topbar' });
-  private readonly dock = h('nav', { class: 'dock' });
+  readonly topbar = h('header', { class: 'topbar' });
+  readonly dock = h('nav', { class: 'dock' });
   readonly panel = h('aside', { class: 'panel' });
   readonly selbar = h('div', { class: 'selbar' });
   readonly photoHud = h('div', { class: 'photo-hud' });
@@ -178,7 +187,8 @@ export class UI {
     this.setupAutosave();
     document.addEventListener('fullscreenchange', () => this.renderViewStack());
     root.append(this.clipInput);
-    root.append(this.labels, this.jointOverlay.el, this.frame, this.topbar, this.selbar, this.transformBar.el, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
+    this.contextBar = new ContextBar(this);
+    root.append(this.labels, this.jointOverlay.el, this.frame, this.topbar, this.contextBar.el, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
     this.fileInput.addEventListener('change', () => {
       const files = [...(this.fileInput.files ?? [])];
       this.fileInput.value = '';
@@ -499,6 +509,7 @@ export class UI {
 
   private renderTopbar() {
     const ed = this.editor;
+    const scroll = this.topbar.querySelector('.top-actions')?.scrollLeft ?? 0;
     const base = import.meta.env.BASE_URL;
     this.topbar.replaceChildren(
       // The logo opens the project menu (new, open, save, export, language, install)
@@ -527,6 +538,9 @@ export class UI {
         ),
       ),
     );
+    this.topbar.style.setProperty('--brand-width', `${this.topbar.querySelector<HTMLElement>('.brand')!.offsetWidth}px`);
+    this.topbar.querySelector('.top-actions')!.scrollLeft = scroll;
+    requestAnimationFrame(() => this.contextBar?.layout());
   }
 
   // ---------- Project ----------
@@ -542,7 +556,7 @@ export class UI {
     if (!open) return;
     const name = h('input', { type: 'text', class: 'name', value: this.projectName, 'aria-label': tr('Project name') });
     name.addEventListener('change', () => { this.projectName = name.value.trim() || tr('my-scene'); this.scheduleAutosave(); });
-    const item = (node: IconNode, label: string, kbd: string, fn: () => void) => menuItem(node, label, () => (this.toggleMenu(false), fn()), { kbd: kbd || undefined });
+    const item = (node: IconNode, label: string, kbd: string, fn: () => void, description?: string) => menuItem(node, label, () => (this.toggleMenu(false), fn()), { kbd: kbd || undefined, description });
     this.menu.replaceChildren(
       h('label', { class: 'menu-name' }, h('span', {}, tr('Project name')), name),
       h('div', { class: 'menu-name' }, h('span', {}, getLang() === 'en' ? 'Language' : `${tr('Language')} · Language`), chips(LANGS, getLang(), (v) => this.setLanguage(v))),
@@ -550,8 +564,9 @@ export class UI {
       item(FilePlus, tr('New project'), '', () => this.run(() => this.newProject())),
       item(FolderOpen, tr('Open project…'), 'Ctrl+O', () => this.projectInput.click()),
       item(Save, tr('Save project'), 'Ctrl+S', () => this.saveProject()),
-      item(Download, tr('Export scene .glb'), '', () => this.exportGLB(false)),
-      item(Download, tr('Export compact .glb'), '', () => this.exportGLB(true)),
+      item(Download, tr('Export scene .glb'), '', () => this.exportGLB(false), tr('Original geometry and textures, before optimization. Best for compatibility.')),
+      item(Download, tr('Export compact .glb'), '', () => this.exportGLB(true), tr('Uses applied optimizations and compresses geometry. Smaller file; requires a compatible viewer.')),
+      h('p', { class: 'hint' }, tr('Compact does not automatically reduce triangles or texture resolution. Apply Optimize first if you want those reductions.')),
       ...(this.installPrompt
         ? [
             item(MonitorDown, tr('Install app'), '', () => {
@@ -657,7 +672,22 @@ export class UI {
   showShapeMenu() {
     this.selMenuOpen = true;
     this.selMenu.classList.add('show');
+    this.placeMenu();
     this.selMenu.replaceChildren(...QUICK_SHAPES.map((t) => menuItem(Plus, shapeLabel(t), () => { this.toggleSelMenu(false); this.addShape(t); })));
+  }
+
+  /** The bubble's menu opens beside the context bar: above it when the bar is low, below when high. */
+  private placeMenu() {
+    const r = this.contextBar.el.getBoundingClientRect(), m = this.selMenu, vw = window.innerWidth, vh = window.innerHeight;
+    m.style.transform = 'none';
+    m.style.left = `${Math.min(Math.max(10, r.left + r.width / 2 - 140), vw - 290)}px`;
+    if (r.top > vh / 2) {
+      m.style.top = 'auto'; m.style.bottom = `${vh - r.top + 8}px`;
+      m.style.maxHeight = `${Math.max(48, r.top - this.topbar.getBoundingClientRect().bottom - 16)}px`;
+    } else {
+      m.style.bottom = 'auto'; m.style.top = `${r.bottom + 8}px`;
+      m.style.maxHeight = `${Math.max(48, vh - r.bottom - 18)}px`;
+    }
   }
 
   /** A section that needs two or more selected objects: how to select them. */
@@ -769,9 +799,103 @@ export class UI {
     );
   }
 
+  /** Renders the context bubbles (the focused one shows its controls in `selbar`). */
+  get focusedContext() { return this.contextBar.focusedId; }
+
   renderSelbar() {
-    this.renderSelbarContent();
+    const previous = this.focusedContext;
+    this.contextBar.render(this.contexts());
+    if (previous !== this.focusedContext) this.toggleSelMenu(false);
     this.transformBar.render();
+    this.contextBar.layout();
+  }
+
+  refreshContextMenu() { if (this.selMenuOpen) this.placeMenu(); }
+
+  /** One expanded group with finger-sized controls; the other groups remain reachable circles. */
+  renderContextParts(parts: { id: string; icon: IconNode; label: string; content: Node[] }[]) {
+    if (!parts.some((p) => p.id === this.contextPart)) this.contextPart = 'tools';
+    this.selbar.classList.add('ctx-sections');
+    this.selbar.dataset.part = this.contextPart;
+    const nodes = parts.map((p) => {
+      let b = this.contextParts.get(p.id);
+      if (!b) {
+        const controls = h('div', { class: 'ctx-sub-controls' });
+        const trigger = h('button', { class: 'ctx-sub-trigger', onClick: () => { this.contextPart = p.id; this.toggleSelMenu(false); this.renderSelbar(); } });
+        const el = h('div', { class: 'ctx-sub', 'data-part': p.id }, trigger, controls);
+        b = { el, trigger, controls };
+        this.contextParts.set(p.id, b);
+      }
+      const expanded = this.contextPart === p.id;
+      b.el.classList.toggle('expanded', expanded);
+      b.trigger.hidden = expanded;
+      b.controls.hidden = !expanded;
+      b.trigger.title = p.label;
+      b.trigger.setAttribute('aria-label', p.label);
+      b.trigger.setAttribute('aria-expanded', String(expanded));
+      b.trigger.replaceChildren(icon(p.icon));
+      b.controls.replaceChildren(...p.content);
+      return b.el;
+    });
+    this.selbar.replaceChildren(...nodes);
+  }
+
+  contextCameraControls() {
+    const ed = this.editor;
+    return [
+      iconButton(Focus, tr('Focus camera'), () => ed.focus(), { label: tr('Focus camera'), cls: 'tool' }),
+      iconButton(Orbit, tr('Orbit around this object'), () => ed.orbitAround(), { label: tr('Orbit'), cls: 'tool', active: ed.orbitEntity === ed.selected }),
+      iconButton(Ellipsis, tr('More'), () => this.toggleSelMenu(), { label: tr('More'), cls: 'tool more-btn', active: this.selMenuOpen }),
+    ];
+  }
+
+  /** Opens a part of a dock panel (a context's full settings). */
+  private openPart(tab: Tab, part?: string) {
+    if (part) this.segment[tab] = part;
+    if (this.tab !== tab) this.openTab(tab); else this.renderPanel();
+  }
+
+  /**
+   * Everything going on that has controls, most specific first: a recording, rigging, posing,
+   * Mesh mode, measuring, the selection, then running operations (they keep going while the tool
+   * object is shaped).
+   */
+  private contexts(): UIContext[] {
+    const ed = this.editor, out: UIContext[] = [];
+    if (ed.recording) out.push({ id: 'recording', icon: Video, label: tr('Recording…'), busy: true, render: () => this.selbar.replaceChildren(
+      h('div', { class: 'sel-name always' }, icon(Video, 16), h('span', {}, tr('Recording…'))),
+      h('div', { class: 'sel-tools' }, button(tr('Cancel'), () => this.photoUI.cancelRecording(), { cls: 'small' })),
+    ) });
+    if (ed.photoMode) return out;
+    if (ed.rigger.active) out.push({ id: 'rig', icon: Bone, label: tr('Rig'), render: () => this.rigUI.renderRigBar(), expand: () => this.openPart('objects', 'rig') });
+    if (ed.pose.active) out.push({ id: 'pose', icon: PersonStanding, label: tr('Pose'), render: () => this.poseUI.renderPoseBar(), expand: () => this.openPart('objects', 'pose') });
+    if (ed.separator.active) {
+      const n = ed.separator.selection?.count ?? 0;
+      out.push({ id: 'mesh', icon: Triangle, label: n ? tr('{n} faces', { n: n.toLocaleString() }) : tr('Mesh'), render: () => this.separateUI.bar(), expand: () => this.openPart('objects', 'separate') });
+    }
+    if (ed.tools.measureMode) out.push({ id: 'measure', icon: Ruler, label: tr('Measure'), render: () => this.selbar.replaceChildren(
+      h('div', { class: 'sel-name measure always' }, icon(Ruler, 16), h('span', {}, ed.tools.pending ? tr('Tap the second point') : tr('Tap the first point'))),
+      h('div', { class: 'sel-tools' }, button(tr('Done'), () => ed.tools.setMeasureMode(false), { cls: 'small primary' })),
+    ), expand: () => this.openPart('tools', 'measure') });
+    if ((ed.selected || ed.multiSelect) && !ed.separator.active && !ed.rigger.active && !ed.pose.active) {
+      const e = ed.selected, n = ed.selection.length;
+      out.push({ id: 'selection', icon: e ? KIND_ICON[e.kind] : Group, label: !e ? tr('Select') : n > 1 ? tr('{n} selected', { n }) : e.name, render: () => this.renderSelectionBar(), expand: e ? () => this.openPart('objects', 'object') : undefined });
+    }
+    const fusion = ed.fusion;
+    if (fusion.busy || fusion.preview) out.push({ id: 'boolean', icon: SquaresUnite, label: tr('Boolean'), busy: fusion.busy, render: () => this.selbar.replaceChildren(
+      h('div', { class: 'sel-name always' }, icon(SquaresUnite, 16), h('span', {}, fusion.busy ? tr('Building the new surface…') : tr('Boolean'))),
+      h('div', { class: 'sel-tools' },
+        fusion.preview ? button(tr('Apply'), () => { fusion.apply(); this.renderAll(); }, { cls: 'small primary' }) : null,
+        button(tr('Cancel'), () => { fusion.cancel(); this.renderAll(); }, { cls: 'small' })),
+    ), expand: () => this.openPart('objects', 'modify') });
+    const wrap = ed.wrap;
+    if (wrap.active) out.push({ id: 'wrap', icon: Magnet, label: tr('Shrinkwrap'), render: () => this.selbar.replaceChildren(
+      h('div', { class: 'sel-name always' }, icon(Magnet, 16), h('span', {}, tr('{target} onto {tool}', { target: wrap.target!.name, tool: wrap.tools.map((t) => t.name).join(', ') }))),
+      h('div', { class: 'sel-tools' },
+        button(tr('Apply'), () => { const n = wrap.apply(); this.toast(n ? tr('Surface wrapped onto the tool.') : tr('Nothing changed: move the tool over the surface.')); this.renderAll(); }, { cls: 'small primary' }),
+        button(tr('Cancel'), () => { wrap.cancel(); this.renderAll(); }, { cls: 'small' })),
+    ), expand: () => this.openPart('objects', 'modify') });
+    return out;
   }
 
   /**
@@ -782,51 +906,30 @@ export class UI {
     const ed = this.editor, e = ed.selected;
     const mesh = ed.separator.active;
     if (!mesh && (!e || e.kind === 'light' || e.groupMembers || ed.selection.length > 1)) return null;
-    // Either button switches (on phones only the current mode shows, as one switch)
-    const toggle = () => (mesh ? this.separateUI.cancel() : e && this.separateUI.start(e));
     return h('span', { class: 'objmode' },
-      iconButton(Box, tr('Object mode (Tab)'), toggle, { active: !mesh, label: tr('Object'), cls: 'tool' }),
-      iconButton(Triangle, tr('Mesh mode (Tab)'), toggle, { active: mesh, label: tr('Mesh'), cls: 'tool' }),
+      iconButton(Box, tr('Object mode (Tab)'), () => { if (mesh) this.separateUI.cancel(); }, { active: !mesh, label: tr('Object'), cls: 'tool' }),
+      iconButton(Triangle, tr('Mesh mode (Tab)'), () => { if (!mesh && e) this.separateUI.start(e); }, { active: mesh, label: tr('Mesh'), cls: 'tool' }),
     );
   }
 
-  private renderSelbarContent() {
+  /** The selection's bubble: mode, Move / Rotate / Scale, Delete, More, Deselect. */
+  private renderSelectionBar() {
     const ed = this.editor;
     const e = ed.selected;
-    if (ed.tools.measureMode && !ed.photoMode) {
-      this.selbar.classList.add('show');
-      return this.selbar.replaceChildren(
-        h('div', { class: 'sel-name measure' }, icon(Ruler, 16), h('span', {}, ed.tools.pending ? tr('Tap the second point') : tr('Tap the first point'))),
-        h('div', { class: 'sel-tools' }, button(tr('Done'), () => ed.tools.setMeasureMode(false), { cls: 'small primary' })),
-      );
-    }
-    if (ed.separator.active && !ed.photoMode) return this.separateUI.bar();
-    if (ed.rigger.active && !ed.photoMode) return this.rigUI.renderRigBar();
-    if (ed.pose.active && !ed.photoMode) return this.poseUI.renderPoseBar();
     const multi = iconButton(Group, tr('Multi-select (or Shift+click)'), () => ed.setMultiSelect(!ed.multiSelect), { active: ed.multiSelect });
-    this.selbar.classList.toggle('show', (!!e || ed.multiSelect) && !ed.photoMode);
     if (!e) return this.selbar.replaceChildren(h('div', { class: 'sel-name wide' }, h('span', {}, tr('Tap objects to select'))), h('div', { class: 'sel-tools' }, multi));
     // Tapping the active Scale or Rotate again opens or closes its slider bar
     const toolBtn = (t: Tool, node: IconNode, label: string) =>
       iconButton(node, t === 'move' ? label : tr('{tool} (tap again for a slider)', { tool: label }), () => (ed.tool === t && t !== 'move' ? this.transformBar.toggle() : ed.setTool(t)), { active: ed.tool === t, label, cls: 'tool' });
-    const count = ed.selection.length;
-    // Only the most used actions stay visible; the rest live in the "⋯" menu
-    this.selbar.replaceChildren(
-      h('div', { class: 'sel-name' }, icon(KIND_ICON[e.kind], 16), h('span', {}, count > 1 ? tr('{n} selected', { n: count }) : e.name)),
-      h(
-        'div',
-        { class: 'sel-tools' },
-        this.modeSwitch(),
-        toolBtn('move', Move3d, tr('Move')),
-        toolBtn('rotate', Rotate3d, tr('Rotate')),
-        e.kind !== 'light' ? toolBtn('scale', Scale3d, tr('Scale')) : null,
-        this.transformBar.button(),
-        h('span', { class: 'sep' }),
-        iconButton(Trash2, tr('Delete (Del)'), () => ed.remove(), { cls: 'danger' }),
-        iconButton(Ellipsis, tr('More'), () => this.toggleSelMenu(), { cls: 'more-btn', active: this.selMenuOpen }),
-        iconButton(X, tr('Deselect (Esc)'), () => ed.select(null)),
-      ),
-    );
+    const mode = this.modeSwitch();
+    this.renderContextParts([
+      ...(mode ? [{ id: 'mode', icon: Box, label: tr('Object / Mesh'), content: [mode] }] : []),
+      { id: 'tools', icon: Move3d, label: tr('Transform'), content: [
+        toolBtn('move', Move3d, tr('Move')), toolBtn('rotate', Rotate3d, tr('Rotate')),
+        ...(e.kind !== 'light' ? [toolBtn('scale', Scale3d, tr('Scale'))] : []),
+      ] },
+      { id: 'view', icon: Focus, label: tr('Camera and actions'), content: this.contextCameraControls() },
+    ]);
     if (this.selMenuOpen) this.toggleSelMenu(true);
   }
 
@@ -836,15 +939,28 @@ export class UI {
     const e = ed.selected;
     this.selMenuOpen = open && !!e;
     this.selMenu.classList.toggle('show', this.selMenuOpen);
+    this.placeMenu();
     this.selbar.querySelector('.more-btn')?.classList.toggle('active', this.selMenuOpen);
     if (!this.selMenuOpen || !e) return;
     const item = (node: IconNode, label: string, run: () => void, opts: { on?: boolean; keep?: boolean; kbd?: string } = {}) =>
       menuItem(node, label, () => (opts.keep ? null : this.toggleSelMenu(false), run()), opts);
+    if (ed.separator.active) {
+      const s = ed.separator;
+      this.selMenu.replaceChildren(
+        item(Focus, tr('Focus camera'), () => ed.focus(), { kbd: 'F' }),
+        item(Orbit, tr('Orbit around this object'), () => ed.orbitAround(), { on: ed.orbitEntity === e, kbd: 'O' }),
+        item(Undo2, s.mode === 'select' ? tr('Undo selection') : tr('Undo'), () => s.mode === 'select' ? s.edit((sel) => sel.undo()) : ed.undo()),
+        item(X, tr('Done (Tab)'), () => this.separateUI.cancel()),
+      );
+      return;
+    }
     this.selMenu.replaceChildren(
       ...(e.groupMembers ? [item(Group, tr('Ungroup'), () => ed.ungroup(e))] : []),
       item(Plus, tr('Add shape here'), () => this.showShapeMenu(), { kbd: 'Shift+A', keep: true }),
       ...(ed.selection.length > 1 ? [item(Group, tr('Boolean, shrinkwrap, combine…'), () => this.openModify())] : []),
       item(Copy, tr('Duplicate'), () => ed.duplicate(), { kbd: 'Ctrl+D' }),
+      item(Trash2, tr('Delete (Del)'), () => ed.remove()),
+      item(X, tr('Deselect (Esc)'), () => ed.select(null)),
       item(Focus, tr('Focus camera'), () => ed.focus(), { kbd: 'F' }),
       item(Orbit, tr('Orbit around this object'), () => {
         ed.orbitAround();
@@ -879,6 +995,7 @@ export class UI {
   setUiHidden(on: boolean) {
     this.uiHidden = on;
     document.body.classList.toggle('ui-hidden', on);
+    this.contextBar.setHidden(on);
     if (on) {
       this.toggleMenu(false);
       this.toggleSelMenu(false);
@@ -890,6 +1007,9 @@ export class UI {
     const tab: Tab | null = ed.photoMode ? (this.photoPanel ? 'photo' : null) : this.tab;
     this.panel.classList.toggle('show', !!tab);
     document.body.classList.toggle('panel-open', !!tab);
+    // The bubbles sit above an open panel on phones (again once its slide-in ends)
+    requestAnimationFrame(() => this.contextBar.layout());
+    setTimeout(() => this.contextBar.layout(), 250);
     if (!tab) {
       this.panel.replaceChildren();
       if (ed.rigger.active) this.renderSelbar();
@@ -910,7 +1030,7 @@ export class UI {
       ),
       ...(parts
         ? [
-            segmented(parts, current, (id) => {
+            scrollableSegmented(parts, current, (id) => {
               this.segment[tab] = id;
               this.panel.querySelector('.panel-body')!.scrollTop = 0;
               this.renderPanel();
@@ -937,13 +1057,13 @@ export class UI {
         if (e.groupMembers) return [{ id: 'object', label: tr('Object') }, { id: 'material', label: tr('Material') }, { id: 'modify', label: tr('Modify') }];
         return [
           { id: 'object', label: tr('Object') },
-          { id: 'modify', label: tr('Modify') },
           ...(this.editor.materialsOf(e).length ? [{ id: 'material', label: tr('Material') }] : []),
           { id: 'animate', label: tr('Animate') },
           ...(this.editor.rigger.active && this.editor.rigger.entity === e
             ? [{ id: 'rig', label: tr('Rig') }]
             : skeletonsOf(e).length ? [{ id: 'pose', label: tr('Pose') }] : this.editor.rigger.canRig(e) ? [{ id: 'rig', label: tr('Rig') }] : []),
           ...(e.kind === 'model' ? [{ id: 'optimize', label: tr('Optimize') }] : []),
+          { id: 'modify', label: tr('Modify') },
         ];
       }
       case 'light':

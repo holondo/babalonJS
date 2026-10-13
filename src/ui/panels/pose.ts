@@ -26,7 +26,7 @@ export class PosePanel {
   /** Show the manual bone mapping even when nothing is missing. */
   mapBones = false;
 
-  /** Selection bar while posing: the joint, how to move it, and Done. */
+  /** The posing bubble: the joint, how to move it, and Done. */
   renderPoseBar() {
     const p = this.ui.editor.pose;
     const j = p.joint;

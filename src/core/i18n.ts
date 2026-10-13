@@ -259,6 +259,9 @@ const PT: Record<string, string> = {
   'Open project…': 'Abrir projeto…',
   'Save project': 'Salvar projeto',
   'Export scene .glb': 'Exportar cena .glb',
+  'Original geometry and textures, before optimization. Best for compatibility.': 'Geometria e texturas originais, anteriores à otimização. Maior compatibilidade.',
+  'Uses applied optimizations and compresses geometry. Smaller file; requires a compatible viewer.': 'Usa as otimizações aplicadas e comprime a geometria. Arquivo menor; exige um visualizador compatível.',
+  'Compact does not automatically reduce triangles or texture resolution. Apply Optimize first if you want those reductions.': 'Compact não reduz automaticamente os triângulos nem a resolução das texturas. Use Optimize antes se quiser essas reduções.',
   Language: 'Idioma',
   'The project ({ext}) stores models, materials, lights, environment, effects and camera. The scene is also saved automatically in this browser.':
     'O projeto ({ext}) guarda modelos, materiais, luzes, ambiente, efeitos e câmera. A cena também é salva automaticamente neste navegador.',
@@ -813,6 +816,7 @@ const PT: Record<string, string> = {
   'Remove': 'Remover',
   'Tolerance': 'Tolerância',
   'Brush size': 'Tamanho do pincel',
+  'Radius {r} px · Diameter {d} px': 'Raio {r} px · Diâmetro {d} px',
   'Also hidden faces behind': 'Incluir faces escondidas atrás',
   'All': 'Tudo',
   'Invert': 'Inverter',
@@ -884,6 +888,8 @@ const PT: Record<string, string> = {
   'Join': 'Juntar',
   'Modify': 'Modificar',
   // Modes and transform
+  'Drag to the top or the bottom': 'Arraste para cima ou para baixo',
+  'Open its settings': 'Abrir as configurações',
   'Object mode (Tab)': 'Modo objeto (Tab)',
   'Mesh mode (Tab)': 'Modo malha (Tab)',
   'Mesh': 'Malha',
@@ -924,6 +930,11 @@ const PT: Record<string, string> = {
   'On surface': 'Na superfície',
   'Falloff': 'Alcance',
   'Union': 'União',
+  'Object / Mesh': 'Objeto / Malha',
+  'Previous tabs': 'Abas anteriores',
+  'More tabs': 'Mais abas',
+  'Camera and actions': 'Câmera e ações',
+  'Orbit': 'Orbitar',
 };
 
 const DICTS: Partial<Record<Lang, Record<string, string>>> = { pt: PT };

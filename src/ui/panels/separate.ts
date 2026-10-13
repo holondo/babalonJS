@@ -1,4 +1,4 @@
-import { Brush, Lasso, MousePointer2, MousePointerClick, Move3d, Rotate3d, Scale3d, Scissors, Triangle, Undo2, Wand, X } from 'lucide';
+import { Brush, Focus, Lasso, MousePointer2, MousePointerClick, Move3d, Rotate3d, Scale3d, Scissors, Triangle, Wand } from 'lucide';
 import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import type { Entity, PrimitiveType } from '../../core/editor';
@@ -6,7 +6,7 @@ import { QUICK_SHAPES, shapeLabel } from './modify';
 import { tr } from '../../core/i18n';
 import type { SelectTool } from '../../edit/separate';
 import type { ScreenPoint } from '../../edit/lasso';
-import { button, chips, h, hint, icon, iconButton, row, section, segmented, slider, toggle, select } from '../dom';
+import { button, chips, h, hint, iconButton, row, section, segmented, slider, toggle, select } from '../dom';
 import type { UI } from '../ui';
 
 /**
@@ -20,13 +20,21 @@ export class SeparatePanel {
   private readonly layer = h('div', { class: 'stroke-layer' });
   private readonly svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   private readonly path = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+  private readonly cursor = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  private brushPoint: ScreenPoint | null = null;
   private listening = false;
   /** Part of the panel: selecting faces, sculpting, or changing the mesh. */
   private part: 'select' | 'sculpt' | 'modify' = 'select';
 
   constructor(ui: UI) {
     this.ui = ui;
-    this.svg.append(this.path);
+    for (const cls of ['brush-outline-back', 'brush-outline']) {
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('class', cls);
+      this.cursor.append(circle);
+    }
+    this.cursor.style.display = 'none';
+    this.svg.append(this.path, this.cursor);
     this.layer.append(this.svg);
     document.body.append(this.layer);
   }
@@ -68,6 +76,7 @@ export class SeparatePanel {
     document.body.classList.toggle('drawing', on);
     this.cameraButtons(on);
     this.layer.classList.toggle('brush', s.tool === 'brush' || s.mode === 'surface');
+    if (!this.brushing()) this.cursor.style.display = 'none';
   }
 
   bar() {
@@ -82,22 +91,15 @@ export class SeparatePanel {
       ed.setTool(t); render();
     }), { active: s.mode === 'transform' && ed.tool === t, label, cls: 'tool' });
     this.ui.selbar.classList.add('show');
-    this.ui.selbar.replaceChildren(
-      h('div', { class: s.cut ? 'sel-name always' : 'sel-name' }, icon(Triangle, 16), h('span', {}, s.cut ? tr('Place the plane') : count ? tr('{n} faces', { n: count.toLocaleString() }) : tr('Choose faces'))),
-      h(
-        'div',
-        { class: 'sel-tools' },
-        this.ui.modeSwitch(),
+    const mode = this.ui.modeSwitch();
+    this.ui.renderContextParts([
+      { id: 'mode', icon: Triangle, label: tr('Object / Mesh'), content: mode ? [mode] : [] },
+      { id: 'tools', icon: MousePointer2, label: count ? tr('{n} faces', { n: count.toLocaleString() }) : tr('Choose faces'), content: [
         iconButton(MousePointer2, tr('Select faces'), () => this.ui.run(() => { s.setMode('select'); if (this.part === 'sculpt') this.part = 'select'; render(); }), { active: s.mode === 'select', label: tr('Select'), cls: 'tool' }),
-        tool('move', Move3d, tr('Move')),
-        tool('rotate', Rotate3d, tr('Rotate')),
-        tool('scale', Scale3d, tr('Scale')),
-        this.ui.transformBar.button(),
-        h('span', { class: 'sep' }),
-        iconButton(Undo2, s.mode === 'select' ? tr('Undo selection') : tr('Undo'), () => s.mode === 'select' ? s.edit((sel) => sel.undo()) : ed.undo()),
-        iconButton(X, tr('Done (Tab)'), () => this.cancel()),
-      ),
-    );
+        tool('move', Move3d, tr('Move')), tool('rotate', Rotate3d, tr('Rotate')), tool('scale', Scale3d, tr('Scale')),
+      ] },
+      { id: 'view', icon: Focus, label: tr('Camera and actions'), content: this.ui.contextCameraControls() },
+    ]);
   }
 
   panel(): (Node | null)[] {
@@ -129,7 +131,7 @@ export class SeparatePanel {
         hint(hints[s.tool]),
         chips([{ value: 'add', label: tr('Add') }, { value: 'remove', label: tr('Remove') }], s.add ? 'add' : 'remove', (v) => s.set({ add: v === 'add' })),
         s.tool === 'smart' ? slider(tr('Tolerance'), s.tolerance * 100, { min: 0, max: 100, step: 1, format: (v) => `${Math.round(v)}%` }, (v) => s.set({ tolerance: v / 100 })) : null,
-        s.tool === 'brush' ? slider(tr('Brush size'), s.radius, { min: 8, max: 120, step: 1, format: (v) => `${Math.round(v)} px` }, (v) => s.set({ radius: v })) : null,
+        s.tool === 'brush' ? this.brushSizeControl() : null,
         s.tool === 'lasso' || s.tool === 'brush' ? toggle(tr('Also hidden faces behind'), s.through, (v) => s.set({ through: v })) : null,
         row(
           button(tr('All'), () => s.edit((x) => x.all())),
@@ -166,7 +168,7 @@ export class SeparatePanel {
     if (part === 'select') return [tabs, ...selectContent, done];
     if (part === 'sculpt') return [tabs, section(tr('Surface brushes'),
       chips([{ value: 'off', label: tr('Off') }, { value: 'pull', label: tr('Pull') }, { value: 'inflate', label: tr('Inflate') }, { value: 'smooth', label: tr('Smooth') }, { value: 'flatten', label: tr('Flatten') }], s.surfaceBrush ?? 'off', v => { s.surfaceBrush = v === 'off' ? null : v as NonNullable<typeof s.surfaceBrush>; this.sync(); }),
-      slider(tr('Brush size'), s.radius, { min: 8, max: 120, step: 1 }, v => { s.radius = v; }),
+      this.brushSizeControl(),
       slider(tr('Strength'), s.brushStrength, { min: .01, max: 1, step: .01 }, v => { s.brushStrength = v; }),
       toggle(tr('Only selected region'), s.brushSelected, v => { s.brushSelected = v; }),
       hint(tr('One finger edits; two fingers move the view. Brushes change existing faces.'))), done];
@@ -245,6 +247,40 @@ export class SeparatePanel {
     return s.active && !s.cut && (s.mode === 'surface' ? !!s.surfaceBrush : s.mode === 'select' && (s.tool === 'lasso' || s.tool === 'brush'));
   }
 
+  private brushing() {
+    const s = this.ui.editor.separator;
+    return this.drawing() && (s.mode === 'surface' || s.tool === 'brush');
+  }
+
+  /** Both brushes use a radius in CSS pixels; the panel swatch is scaled to fit. */
+  private brushSizeControl() {
+    const s = this.ui.editor.separator;
+    const dot = h('span', { class: 'brush-size-dot' });
+    const dimensions = h('span', { class: 'brush-size-dimensions' });
+    const update = (radius: number) => {
+      dot.style.width = dot.style.height = `${radius * 2 / 5}px`;
+      dimensions.textContent = tr('Radius {r} px · Diameter {d} px', { r: Math.round(radius), d: Math.round(radius * 2) });
+    };
+    update(s.radius);
+    return h('div', { class: 'brush-size-control' },
+      slider(tr('Brush size'), s.radius, { min: 8, max: 120, step: 1, format: v => `${Math.round(v)} px` }, v => {
+        s.radius = v;
+        update(v);
+        const rect = this.ui.editor.engine.getRenderingCanvas()!.getBoundingClientRect();
+        this.previewBrush(this.brushPoint ?? { x: rect.width / 2, y: rect.height / 2 });
+      }),
+      h('div', { class: 'brush-size-preview' }, h('span', { class: 'brush-size-swatch', 'aria-hidden': 'true' }, dot), dimensions));
+  }
+
+  private previewBrush(point: ScreenPoint) {
+    this.brushPoint = point;
+    if (!this.brushing()) return;
+    const rect = this.ui.editor.engine.getRenderingCanvas()!.getBoundingClientRect();
+    this.cursor.setAttribute('transform', `translate(${point.x + rect.left} ${point.y + rect.top})`);
+    for (const circle of this.cursor.children) circle.setAttribute('r', String(this.ui.editor.separator.radius));
+    this.cursor.style.display = '';
+  }
+
   /**
    * Strokes are read on the 3D view itself (buttons and panels above it keep working):
    * - touch: one finger draws; a second finger cancels the stroke and the gesture goes to the camera;
@@ -278,11 +314,12 @@ export class SeparatePanel {
       if (replayed.has(ev)) return;
       if (!this.drawing()) return;
       // Mouse: only the left button draws (others turn or pan the view)
-      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      if (ev.pointerType === 'mouse' && ev.button !== 0) { this.cursor.style.display = 'none'; return; }
       if (stroke) {
         // Second finger: this is a camera gesture, not a stroke (a brush keeps what it did so far)
         if (sculpting()) this.ui.run(() => this.ui.editor.separator.brushUp());
         const first = stroke.first;
+        this.cursor.style.display = 'none';
         passed.add(stroke.id);
         stroke = null;
         draw();
@@ -297,6 +334,7 @@ export class SeparatePanel {
         return;
       }
       const start = local(ev);
+      this.previewBrush(start);
       // A brush only starts on the model; elsewhere one finger turns the view as usual
       if (sculpting()) {
         let onModel = false;
@@ -308,7 +346,9 @@ export class SeparatePanel {
       canvas.setPointerCapture?.(ev.pointerId);
       draw();
     }, true);
+    canvas.addEventListener('pointerleave', () => { this.cursor.style.display = 'none'; });
     canvas.addEventListener('pointermove', (ev) => {
+      if (!passed.size && (stroke?.id === ev.pointerId || (ev.pointerType === 'mouse' && ev.buttons === 0))) this.previewBrush(local(ev));
       if (!stroke || ev.pointerId !== stroke.id) return;
       swallow(ev);
       const p = local(ev), last = stroke.points[stroke.points.length - 1];
@@ -319,6 +359,7 @@ export class SeparatePanel {
     }, true);
     const end = (ev: PointerEvent) => {
       passed.delete(ev.pointerId);
+      if (ev.pointerType !== 'mouse' || ev.type === 'pointercancel') this.cursor.style.display = 'none';
       if (!stroke || ev.pointerId !== stroke.id) return;
       swallow(ev);
       const points = stroke.points;

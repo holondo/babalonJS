@@ -539,7 +539,7 @@ export class Editor {
         return;
       }
       if (info.type === PointerEventTypes.POINTERTAP) {
-        if (this.tools.measureMode) return;
+        if (this.tools.measuring) return;
         const ev = info.event as PointerEvent;
         // "Hovered" only means something for a mouse: after a touch drag on a gizmo it stays
         // stuck and would swallow every later tap. The geometric pick below covers touch.
@@ -1613,7 +1613,7 @@ export class Editor {
       return;
     }
     const tool = e?.kind === 'light' && this.tool === 'scale' ? 'move' : this.tool;
-    const show = !!e && !this.cleanView && !this.tools?.measureMode && !this.separator?.active;
+    const show = !!e && !this.cleanView && !this.tools?.measuring && !this.separator?.active;
     this.gizmos.positionGizmoEnabled = show && tool === 'move';
     this.gizmos.rotationGizmoEnabled = show && tool === 'rotate';
     this.gizmos.scaleGizmoEnabled = show && tool === 'scale';

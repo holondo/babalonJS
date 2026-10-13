@@ -1,4 +1,4 @@
-import { createElement } from 'lucide';
+import { ChevronLeft, ChevronRight, createElement } from 'lucide';
 import type { IconNode } from 'lucide';
 import { tr } from '../core/i18n';
 
@@ -50,11 +50,21 @@ export function button(label: string, onClick: () => void, opts: { icon?: IconNo
 }
 
 export function chips<T extends string>(options: { value: T; label: string }[], value: T, onPick: (v: T) => void) {
-  return h(
-    'div',
-    { class: 'chips' },
-    ...options.map((o) => h('button', { class: `chip ${o.value === value ? 'active' : ''}`, onClick: () => onPick(o.value) }, o.label)),
-  );
+  const el = h('div', { class: 'chips' });
+  el.append(...options.map((o) => h('button', {
+    class: `chip ${o.value === value ? 'active' : ''}`,
+    'aria-pressed': String(o.value === value),
+    onClick: (event: Event) => {
+      // Some controls change only transient tool state, so they don't rebuild their panel.
+      for (const button of el.querySelectorAll('button')) {
+        const active = button === event.currentTarget;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+      }
+      onPick(o.value);
+    },
+  }, o.label)));
+  return el;
 }
 
 export interface SliderOpts {
@@ -161,13 +171,49 @@ export function segmented(options: { id: string; label: string; icon?: IconNode 
   );
 }
 
+/** Panel tabs keep explicit scroll controls whenever some tabs are outside the visible row. */
+export function scrollableSegmented(options: { id: string; label: string; icon?: IconNode }[], value: string, onPick: (id: string) => void) {
+  const track = segmented(options, value, onPick);
+  const move = (direction: number) => track.scrollBy({
+    left: direction * Math.max(96, track.clientWidth * .75),
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  });
+  const previous = iconButton(ChevronLeft, tr('Previous tabs'), () => move(-1), { cls: 'tab-scroll-button' });
+  const next = iconButton(ChevronRight, tr('More tabs'), () => move(1), { cls: 'tab-scroll-button' });
+  previous.hidden = next.hidden = true;
+  const el = h('div', { class: 'tab-scroll' }, previous, track, next);
+  const update = () => {
+    const overflow = track.scrollWidth > el.clientWidth + 1;
+    previous.hidden = next.hidden = !overflow;
+    previous.disabled = track.scrollLeft <= 1;
+    next.disabled = track.scrollLeft + track.clientWidth >= track.scrollWidth - 1;
+  };
+  track.addEventListener('scroll', update, { passive: true });
+  const observer = new ResizeObserver(() => {
+    if (!el.isConnected) observer.disconnect(); else update();
+  });
+  observer.observe(el);
+  requestAnimationFrame(() => {
+    if (!el.isConnected) { observer.disconnect(); return; }
+    update();
+    const selected = track.querySelector('[aria-selected="true"]')?.getBoundingClientRect();
+    const bounds = track.getBoundingClientRect();
+    if (selected) {
+      if (selected.right > bounds.right - 3) track.scrollLeft += Math.ceil(selected.right - bounds.right + 3);
+      else if (selected.left < bounds.left + 3) track.scrollLeft -= Math.ceil(bounds.left + 3 - selected.left);
+    }
+    update();
+  });
+  return el;
+}
+
 /** Row of a dropdown menu (project menu, selection "more" menu). */
-export function menuItem(node: IconNode, label: string, run: () => void, opts: { kbd?: string; on?: boolean } = {}) {
+export function menuItem(node: IconNode, label: string, run: () => void, opts: { kbd?: string; on?: boolean; description?: string } = {}) {
   return h(
     'button',
-    { class: `menu-item ${opts.on ? 'on' : ''}`, onClick: run },
+    { class: `menu-item ${opts.on ? 'on' : ''} ${opts.description ? 'described' : ''}`, onClick: run },
     icon(node, 18),
-    h('span', {}, label),
+    h('span', {}, label, opts.description ? h('small', {}, opts.description) : null),
     opts.kbd ? h('kbd', {}, opts.kbd) : opts.on !== undefined ? h('i', { class: 'menu-check' }) : null,
   );
 }

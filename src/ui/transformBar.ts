@@ -8,7 +8,7 @@ type Axis = 'all' | 'x' | 'y' | 'z';
 const AXES: Record<Exclude<Axis, 'all'>, Vector3> = { x: Vector3.Right(), y: Vector3.Up(), z: Vector3.Forward() };
 
 /**
- * Optional bar under the selection bar while Scale or Rotate is the tool: a slider that scales
+ * Optional row in the context bubble while Scale or Rotate is the tool: a slider that scales
  * (keeping proportions, or along one axis) or turns the selected objects or faces. Each drag is
  * relative to where it starts and is one undo step; the slider goes back to the middle after.
  */
@@ -39,11 +39,10 @@ export class TransformBar {
 
   render() {
     const ed = this.ui.editor, tool = ed.tool;
-    const show = this.open && (tool === 'scale' || tool === 'rotate') && this.available();
+    const context = this.ui.focusedContext;
+    const show = this.open && (context === 'selection' || context === 'mesh') && (tool === 'scale' || tool === 'rotate') && this.available();
     this.el.classList.toggle('show', show);
     if (!show) { this.el.replaceChildren(); return; }
-    // Right under the selection bar, whatever its height on this screen
-    this.el.style.top = `${this.ui.selbar.getBoundingClientRect().bottom + 8}px`;
     const commit = () => { ed.endLive(); this.render(); };
     if (tool === 'scale') {
       // Logarithmic: the middle is 100%, the ends ×0.1 and ×10 (repeat for more)

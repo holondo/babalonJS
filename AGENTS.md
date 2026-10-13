@@ -28,6 +28,7 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | | `i18n.ts` | Translations |
 | `ui/` | `ui.ts` | The shell: top bar, dock, selection bar, menus, view controls, panel frame, project actions, autosave, keys |
 | | `panels/*.ts` | One class per panel: `add`, `library`, `objects`, `modify`, `material`, `animate`, `pose`, `rig`, `optimize`, `separate` (Mesh mode), `tools`, `light` |
+| | `contextBar.ts` | Context bubbles: pills for every active context, the focused one's controls, placement next to or above the dock, dragging |
 | | `transformBar.ts`, `modalTransform.ts` | Slider bar for Scale / Rotate; Blender's G / R / S keyboard transform. Both drive the editor's live transform (`beginLive` / `setLive` / `endLive`), for objects or faces |
 | | `photo.ts` | Photo mode: its panel, on-screen controls, aspect frame and capture |
 | | `measureLabels.ts` | Measurement and guide labels over the 3D view |
@@ -103,7 +104,8 @@ Expensive features are opt-in (AR shadows, room lighting, camera access, FPS cou
 Keep it uncluttered and at most one level deep:
 - Top bar: logo (project menu), undo/redo, Edit / Photo / AR mode switch.
 - Dock: Add, Objects, Light, Tools. Long panels split into parts with `segmented` (no nested menus).
-- Selection bar: Object | Mesh (Tab) / Move / Rotate / Scale / Delete / More (⋯) / Deselect. The same Move / Rotate / Scale act on objects or, in Mesh mode, on the selected faces; tapping the active Scale or Rotate opens its slider bar. Secondary actions go in the More menu.
+- Context bubbles (`ui/contextBar.ts`, like the iPhone's Dynamic Island): everything going on at once (selection, Mesh mode, rigging, posing, measuring, a running Boolean or Shrinkwrap, a recording) is a pill; the focused one is a bubble with its controls, and its panel button opens the full settings in the dock's panel. By default it sits beside the dock as a taskbar (both centered), or above the dock (and above an open panel on phones) when they don't fit; its grip moves it (double-tap resets). A new context is a `UIContext` in `UI.contexts()`, not a new floating bar.
+- Selection bubble: Object | Mesh (Tab) / Move / Rotate / Scale / Delete / More (⋯) / Deselect. The same Move / Rotate / Scale act on objects or, in Mesh mode, on the selected faces; tapping the active Scale or Rotate opens its slider bar. Secondary actions go in the More menu.
 - Geometry operations live in one place: Objects → Modify (quick shapes, Boolean, Shrinkwrap, Combine, Group) and, in Mesh mode, the panel's Select / Sculpt / Modify parts. Tools keeps only aids that don't change geometry (measure, guides, align).
 - Keys follow Blender: Tab (mode), G / R / S (transform with the mouse, X / Y / Z, typed values), Shift+A (quick shapes), A / Alt+A (select all / none), Ctrl+I, Ctrl +/− (faces). Shift keeps proportions while dragging the scale gizmo.
 - Floating view controls (bottom right): frame all, gyro, fullscreen, hide interface.
