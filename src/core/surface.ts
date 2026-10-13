@@ -2,11 +2,18 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 
-/** Update native picking and bounds to match the surface rendered by the skeleton. */
+let prepared = new WeakMap<Mesh, number>();
+/** Scene edits invalidate the opt-in picking cache; activity/progress does not. */
+export function invalidateSurfaces() { prepared = new WeakMap(); }
+
+/** Update native picking and bounds to match skinning and shape keys on screen. */
 export function prepareSurface(mesh: AbstractMesh) {
-  if (mesh instanceof Mesh && mesh.skeleton) {
-    mesh.skeleton.prepare(true);
-    mesh.refreshBoundingInfo(true);
+  if (mesh instanceof Mesh && (mesh.skeleton || mesh.morphTargetManager)) {
+    const frame = mesh.getScene().getRenderId();
+    if (prepared.get(mesh) === frame) return;
+    mesh.skeleton?.prepare(true);
+    mesh.refreshBoundingInfo(true, true);
+    prepared.set(mesh, frame);
   }
 }
 

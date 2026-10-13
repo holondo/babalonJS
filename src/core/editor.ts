@@ -36,7 +36,7 @@ import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader.js'
 import { Material } from '@babylonjs/core/Materials/material.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
-import { prepareSurface, surfaceNormal } from './surface';
+import { invalidateSurfaces, prepareSurface, surfaceNormal } from './surface';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
 import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder.js';
@@ -486,14 +486,14 @@ export class Editor {
         if (ev.pointerType === 'mouse' && this.gizmos?.isHovered) return;
         const util = this.gizmos?.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY);
         if (util?.hit) return;
-        const pick = scene.pick(scene.pointerX, scene.pointerY, this.pickable);
+        const pick = this.pickScene(scene.pointerX, scene.pointerY);
         const entity = pick?.pickedMesh ? this.entityOf(pick.pickedMesh) : null;
         // Tapping empty space always deselects (also with multi-select on)
         if (!entity) return this.select(null);
         const additive = this.multiSelect || ev.shiftKey || ev.ctrlKey || ev.metaKey;
         this.select(entity, additive);
       } else if (info.type === PointerEventTypes.POINTERDOUBLETAP) {
-        const pick = scene.pick(scene.pointerX, scene.pointerY, this.pickable);
+        const pick = this.pickScene(scene.pointerX, scene.pointerY);
         const entity = pick?.pickedMesh ? this.entityOf(pick.pickedMesh) : null;
         if (entity) {
           this.focus(entity);
@@ -600,6 +600,7 @@ export class Editor {
   }
 
   private emit(kind: ChangeKind) {
+    if (kind !== 'activity') invalidateSurfaces();
     if (kind === 'pose' || kind === 'animation' || kind === 'transform' || kind === 'entities' || kind === 'history') this.rigger.difference.clear();
     this.changed.notifyObservers(kind);
   }
@@ -1819,16 +1820,20 @@ export class Editor {
 
   /** Surface point of a model/shape under the screen position, with its world normal. */
   pickSurface(x: number, y: number) {
-    // Surface tools are opt-in: refresh posed picking only when a surface is requested.
-    for (const entity of this.entities) if (entity.visible) for (const mesh of entity.meshes) {
-      if (this.pickable(mesh)) prepareSurface(mesh);
-    }
-    const pick = this.scene.pick(x, y, (m) => this.pickable(m) && !this.helpers.has(m));
+    const pick = this.pickScene(x, y, true);
     if (!pick?.hit || !pick.pickedMesh || !pick.pickedPoint) return null;
     const entity = this.entityOf(pick.pickedMesh);
     if (!entity || entity.kind === 'light') return null;
     const normal = surfaceNormal(pick.pickedMesh, pick.faceId) ?? pick.getNormal(true, true) ?? Vector3.Up();
     return { entity, mesh: pick.pickedMesh, faceId: pick.faceId, point: pick.pickedPoint, normal };
+  }
+
+  private pickScene(x: number, y: number, surface = false) {
+    // Prepare deformed geometry only for an explicit pick, never in the render loop.
+    for (const entity of this.entities) if (entity.visible) for (const mesh of entity.meshes) {
+      if (this.pickable(mesh)) prepareSurface(mesh);
+    }
+    return this.scene.pick(x, y, (m) => this.pickable(m) && (!surface || !this.helpers.has(m)));
   }
 
   /** World position → CSS pixels relative to the canvas. */
@@ -1850,7 +1855,7 @@ export class Editor {
 
   boundsOf(entity: Entity) {
     entity.root.computeWorldMatrix(true);
-    for (const m of entity.meshes) m.computeWorldMatrix(true);
+    for (const m of entity.meshes) { prepareSurface(m); m.computeWorldMatrix(true); }
     const { min, max } = entity.root.getHierarchyBoundingVectors(true);
     return { min, max, center: min.add(max).scale(0.5), size: max.subtract(min) };
   }
@@ -2104,7 +2109,7 @@ export class Editor {
 
   /** Tap on the scene with depth of field on: focuses on the tapped point. */
   focusAt(x: number, y: number) {
-    const pick = this.scene.pick(x, y, (m) => this.pickable(m) && !this.helpers.has(m));
+    const pick = this.pickScene(x, y, true);
     if (!pick?.hit || !pick.pickedPoint) return;
     this.beginEdit('focus', () => ({ ...this.photo }), (s) => this.setPhoto(s));
     this.setPhoto({ focusDistance: Vector3.Distance(this.camera.position, pick.pickedPoint) });

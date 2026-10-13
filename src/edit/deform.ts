@@ -4,6 +4,7 @@ import type { Editor, Entity } from '../core/editor';
 import type { FaceTopology } from './faceTopology';
 import { capturePart } from './parts';
 import { forgetFaceData } from './smartSelect';
+import { invalidateSurfaces } from '../core/surface';
 
 /** Positions and normals of a mesh at one moment (for undo of a deformation). */
 export interface DeformState { positions: Float32Array; normals: Float32Array | null }
@@ -46,7 +47,7 @@ export class Deform {
     this.baseNormals = this.normals?.slice() ?? null;
     mesh.setVerticesData('position', this.positions, true);
     if (this.normals) mesh.setVerticesData('normal', this.normals, true);
-    mesh.refreshBoundingInfo(!!mesh.skeleton);
+    mesh.refreshBoundingInfo(!!mesh.skeleton, true);
     this.winding = this.findWinding();
   }
 
@@ -108,6 +109,7 @@ export class Deform {
   /** Sends the changed range of positions and normals to the GPU. */
   upload() {
     if (this.high < 0) return;
+    invalidateSurfaces();
     const from = this.low * 3, to = (this.high + 1) * 3;
     upload(this.mesh, 'position', this.positions, from, to);
     if (this.normals) upload(this.mesh, 'normal', this.normals, from, to);
@@ -122,12 +124,12 @@ export class Deform {
   static restore(mesh: Mesh, state: DeformState) {
     mesh.setVerticesData('position', state.positions.slice(), true);
     if (state.normals) mesh.setVerticesData('normal', state.normals.slice(), true);
-    mesh.refreshBoundingInfo(!!mesh.skeleton);
+    mesh.refreshBoundingInfo(!!mesh.skeleton, true);
   }
 
   finish() {
     this.upload();
-    this.mesh.refreshBoundingInfo(!!this.mesh.skeleton);
+    this.mesh.refreshBoundingInfo(!!this.mesh.skeleton, true);
   }
 
   private findWinding() {

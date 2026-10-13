@@ -9,6 +9,7 @@ import { Deform, recordDeform } from './deform';
 import { buildTopology, disposeShared, sharedMesh } from './selection';
 import { editBlocker } from './combine';
 import { tr } from '../core/i18n';
+import { prepareSurface } from '../core/surface';
 
 /**
  * Blender's Shrinkwrap wrap modes. Outside: what's inside the tool moves out to its surface (fills
@@ -149,6 +150,8 @@ export class Shrinkwrap {
     // Where the tools are, and how far the falloff reaches
     const min = new Vector3(Infinity, Infinity, Infinity), max = new Vector3(-Infinity, -Infinity, -Infinity);
     for (const t of this.tools) for (const m of t.meshes) {
+      prepareSurface(m);
+      m.computeWorldMatrix(true);
       const box = m.getBoundingInfo().boundingBox;
       min.minimizeInPlace(box.minimumWorld); max.maximizeInPlace(box.maximumWorld);
     }
@@ -312,7 +315,7 @@ class TriangleGrid {
     for (let f = 0; f < faces; f++) each(f, (c) => { list[fill[c]++] = f; });
     this.stamp = new Uint32Array(faces);
     // Which way the triangles face, so inside/outside comes from their winding
-    const normals = mesh.getVerticesData('normal');
+    const normals = mesh.getNormalsData(true, true);
     let winding = 1;
     if (normals) for (let f = 0; f < faces; f++) {
       const a = idx[f * 3] * 3, b = idx[f * 3 + 1] * 3, c = idx[f * 3 + 2] * 3;

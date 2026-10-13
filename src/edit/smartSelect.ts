@@ -1,5 +1,6 @@
 import type { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import type { FaceSelection } from './selection';
+import { surfacePositions } from '../core/surface';
 
 /** One ring of faces more (grow) or less (shrink), on the compact face connectivity. */
 export function selectionRing(selection: FaceSelection, grow: boolean) {
@@ -26,11 +27,12 @@ export function selectionRing(selection: FaceSelection, grow: boolean) {
 const faceData = new WeakMap<object, { normals: Float32Array; areas: Float32Array; material: Int32Array }>();
 /** After vertices moved, cached face normals of these meshes are stale. */
 export function forgetFaceData(meshes: Mesh[]) { for (const m of meshes) { faceData.delete(m.geometry ?? m); faceData.delete(m); } }
-function facesOf(mesh: Mesh) {
+function facesOf(mesh: Mesh, p: ArrayLike<number>) {
   const key = mesh.geometry ?? mesh;
   let data = faceData.get(key);
-  if (data) return data;
-  const indices = mesh.getIndices()!, p = mesh.getVerticesData('position')!;
+  const deformed = !!(mesh.skeleton || mesh.morphTargetManager);
+  if (data && !deformed) return data;
+  const indices = mesh.getIndices()!;
   const count = indices.length / 3, normals = new Float32Array(count * 3), areas = new Float32Array(count), material = new Int32Array(count).fill(-1);
   for (let f = 0; f < count; f++) {
     const a = indices[f * 3] * 3, b = indices[f * 3 + 1] * 3, c = indices[f * 3 + 2] * 3;
@@ -41,7 +43,7 @@ function facesOf(mesh: Mesh) {
   }
   for (const s of mesh.subMeshes ?? []) material.fill(s.materialIndex, s.indexStart / 3, (s.indexStart + s.indexCount) / 3);
   data = { normals, areas, material };
-  faceData.set(key, data);
+  if (!deformed) faceData.set(key, data);
   return data;
 }
 
@@ -49,9 +51,9 @@ function facesOf(mesh: Mesh) {
 export function smartSelect(selection: FaceSelection, mesh: Mesh, seed: number, tolerance: number, add: boolean) {
   const set = selection.faces.get(mesh); if (!set) return;
   selection.checkpoint();
-  const indices = mesh.getIndices()!, p = mesh.getVerticesData('position')!, uv = mesh.getVerticesData('uv');
+  const indices = mesh.getIndices()!, p = surfacePositions(mesh)!, uv = mesh.getVerticesData('uv');
   const { offsets, list, weld } = selection.neighbors(mesh);
-  const { normals, areas, material } = facesOf(mesh);
+  const { normals, areas, material } = facesOf(mesh, p);
   const cosine = Math.cos((5 + tolerance * 100) * Math.PI / 180);
   const seen = new Uint8Array(offsets.length - 1), queue = new Uint32Array(offsets.length - 1);
   let head = 0, tail = 0;
