@@ -1561,6 +1561,15 @@ body.photo .viewstack {
 .ctx-sub-trigger:hover { color: var(--gold); }
 .ctxbar .btn,
 .ctxbar .ibtn { height: var(--ctx-row-height); min-height: 36px; border-radius: var(--radius); flex: none; }
+.ctxbar .ibtn.tool { max-inline-size: 160px; }
+.ctxbar .ibtn.tool svg { flex-shrink: 0; }
+.ctxbar .ibtn.tool span {
+  min-width: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .ctxbar.at-header .ctx-sub-controls .ibtn.tool { height: var(--ctx-row-height); }
 .ctx-trigger:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 .ctx-trigger[hidden], .ctx-controls[hidden] { display: none; }
@@ -1637,17 +1646,17 @@ body.photo .viewstack {
   .ctx-sections .ctx-sub .ibtn.tool {
     flex-direction: column;
     gap: 2px;
-    width: 42px;
+    width: max-content;
     min-width: 42px;
     height: 44px;
-    padding: 0;
+    padding: 0 8px;
   }
   .ctx-sections .ctx-sub .ibtn.tool span,
   .ctx-sections .ctx-sub .ibtn.tool:not(.active) span { display: block; font-size: 10.5px; }
   .ctx-sections .objmode .ibtn:not(.active) { display: inline-flex; }
   .ctx-sections .objmode { margin: 0; }
-  .ctx-sections [data-part='mode'] .ibtn.tool { width: 64px; }
-  .ctx-sections [data-part='view'] .ibtn.tool:first-child { width: 72px; }
+  .ctx-sections [data-part='mode'] .ibtn.tool { min-width: 64px; }
+  .ctx-sections [data-part='view'] .ibtn.tool:first-child { min-width: 72px; }
   .ctxbar .sel-tools .ibtn { height: 36px; }
   .ctxbar .sel-name { max-width: 150px; }
   .ctx-expand { display: none; }
