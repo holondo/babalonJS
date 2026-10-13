@@ -67,6 +67,7 @@ import type { OptimizePanel } from './panels/optimize';
 import type { SeparatePanel } from './panels/separate';
 import { TransformBar } from './transformBar';
 import { ContextBar } from './contextBar';
+import { PanelSheet } from './panelSheet';
 import type { UIContext } from './contextBar';
 import { ModalTransform } from './modalTransform';
 import type { ModifyPanel } from './panels/modify';
@@ -105,6 +106,7 @@ export class UI {
   readonly transformBar = new TransformBar(this);
   /** Context bubbles; created once the selection bar exists. */
   private contextBar!: ContextBar;
+  private panelSheet!: PanelSheet;
   modifyUI: ModifyPanel | null = null;
   private readonly featureLoads = new Map<string, Promise<void>>();
   private readonly featureErrors = new Map<string, string>();
@@ -195,6 +197,7 @@ export class UI {
     document.addEventListener('fullscreenchange', () => this.renderViewStack());
     root.append(this.clipInput);
     this.contextBar = new ContextBar(this);
+    this.panelSheet = new PanelSheet(this.panel, () => this.contextBar.layout(false));
     root.append(this.labels, this.jointOverlay.el, this.frame, this.topbar, this.contextBar.el, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
     this.fileInput.addEventListener('change', () => {
       const files = [...(this.fileInput.files ?? [])];
@@ -1159,6 +1162,7 @@ export class UI {
     const body = h('div', { class: 'panel-body' }, ...this.panelContent(tab, current));
     const rigging = tab === 'objects' && current === 'rig' && ed.rigger.active && ed.rigger.entity === ed.selected;
     this.panel.replaceChildren(
+      this.panelSheet.handle,
       h(
         'div',
         { class: 'panel-head' },
@@ -1180,6 +1184,7 @@ export class UI {
       ...(rigging && this.rigUI ? [this.rigUI.rigFooter()] : []),
     );
     body.scrollTop = scroll;
+    this.panelSheet.update();
     if (ed.rigger.active) this.renderSelbar();
   }
 

@@ -11,11 +11,11 @@ import { Plane } from '@babylonjs/core/Maths/math.plane.js';
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
-import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
 import type { GreasedLineBaseMesh } from '@babylonjs/core/Meshes/GreasedLine/greasedLineBaseMesh.js';
 import type { PointerInfo } from '@babylonjs/core/Events/pointerEvents.js';
 import type { Editor, Entity } from '../core/editor';
+import { surfacePositions } from '../core/surface';
 
 export type Unit = 'm' | 'cm' | 'mm' | 'in' | 'ft';
 export type Axis = 'x' | 'y' | 'z';
@@ -293,7 +293,7 @@ export class Tools {
 
   private snapToVertex(mesh: AbstractMesh, faceId: number, x: number, y: number) {
     const indices = mesh.getIndices();
-    const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
+    const positions = surfacePositions(mesh);
     if (!indices || !positions || faceId < 0) return null;
     const world = mesh.getWorldMatrix();
     let best: Vector3 | null = null;
@@ -917,7 +917,7 @@ export function surfacePath(meshes: AbstractMesh[], a: Vector3, na: Vector3, b: 
   const p2 = new Vector3();
   for (const mesh of meshes) {
     meshId++;
-    const pos = mesh.getVerticesData(VertexBuffer.PositionKind);
+    const pos = surfacePositions(mesh);
     const idx = mesh.getIndices();
     if (!pos || !idx) continue;
     const world = mesh.computeWorldMatrix(true);

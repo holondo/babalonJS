@@ -36,6 +36,7 @@ import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader.js'
 import { Material } from '@babylonjs/core/Materials/material.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
+import { prepareSurface, surfaceNormal } from './surface';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
 import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder.js';
@@ -1818,11 +1819,15 @@ export class Editor {
 
   /** Surface point of a model/shape under the screen position, with its world normal. */
   pickSurface(x: number, y: number) {
+    // Surface tools are opt-in: refresh posed picking only when a surface is requested.
+    for (const entity of this.entities) if (entity.visible) for (const mesh of entity.meshes) {
+      if (this.pickable(mesh)) prepareSurface(mesh);
+    }
     const pick = this.scene.pick(x, y, (m) => this.pickable(m) && !this.helpers.has(m));
     if (!pick?.hit || !pick.pickedMesh || !pick.pickedPoint) return null;
     const entity = this.entityOf(pick.pickedMesh);
     if (!entity || entity.kind === 'light') return null;
-    const normal = pick.getNormal(true, true) ?? Vector3.Up();
+    const normal = surfaceNormal(pick.pickedMesh, pick.faceId) ?? pick.getNormal(true, true) ?? Vector3.Up();
     return { entity, mesh: pick.pickedMesh, faceId: pick.faceId, point: pick.pickedPoint, normal };
   }
 

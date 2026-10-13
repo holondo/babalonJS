@@ -48,6 +48,8 @@ export function tr(key: string, vars?: Record<string, string | number>) {
 }
 
 const PT: Record<string, string> = {
+  'Resize panel': 'Redimensionar painel',
+  'Drag to resize, tap to change height': 'Arraste para redimensionar, toque para mudar a altura',
 
   'Surface brushes': 'Pincéis de superfície',
   'Pull': 'Puxar',

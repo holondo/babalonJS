@@ -7,6 +7,7 @@ import { computeTopology } from './faceTopology';
 import type { FaceTopology } from './faceTopology';
 export type { FaceTopology } from './faceTopology';
 import type { Entity, Editor } from '../core/editor';
+import { prepareSurface, surfacePositions } from '../core/surface';
 
 /**
  * Selected faces of one mesh: a byte per face instead of a Set (a 2M-triangle model would need a
@@ -60,7 +61,7 @@ export class FaceSelection {
     this.material.zOffset = -2;
     this.reset();
     // Babylon updates both the visible bounds and its CPU picking points here.
-    for (const mesh of this.faces.keys()) if (mesh.skeleton) { mesh.skeleton.prepare(true); mesh.refreshBoundingInfo(true); }
+    for (const mesh of this.faces.keys()) prepareSurface(mesh);
   }
   /** Sizes the selection to the current geometry, keeping it where the face count didn't change. */
   reset() {
@@ -77,7 +78,7 @@ export class FaceSelection {
     const min = new Vector3(Infinity, Infinity, Infinity), max = new Vector3(-Infinity, -Infinity, -Infinity), v = new Vector3();
     for (const [mesh, faces] of this.faces) {
       if (!faces.size) continue;
-      const p = mesh.getPositionData(true, true) ?? mesh.getVerticesData('position')!, world = mesh.computeWorldMatrix(true), idx = mesh.getIndices()!, m = faces.mask;
+      const p = surfacePositions(mesh)!, world = mesh.computeWorldMatrix(true), idx = mesh.getIndices()!, m = faces.mask;
       for (let f = 0; f < m.length; f++) if (m[f]) for (let j = 0; j < 3; j++) {
         const i = idx[f * 3 + j] * 3;
         Vector3.TransformCoordinatesFromFloatsToRef(p[i], p[i + 1], p[i + 2], world, v);

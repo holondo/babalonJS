@@ -339,6 +339,8 @@ button:disabled {
   justify-content: space-between;
   padding: 8px 8px 4px 18px;
 }
+.panel-grip { display: none; }
+@media (prefers-reduced-motion: reduce) { .panel { transition: none !important; } }
 .panel-head h2 {
   margin: 0;
   font-size: 16px;
@@ -906,14 +908,33 @@ body.photo .panel {
     width: auto;
     top: auto;
     bottom: calc(var(--dock-h) + 16px + var(--safe-b));
-    max-height: min(48vh, var(--ctx-panel-max, 48vh));
+    height: var(--sheet-height, 48vh);
+    max-height: var(--ctx-panel-max, calc(100dvh - var(--top) - var(--dock-h) - 32px - var(--safe-b)));
+    transition: opacity .2s, transform .2s, height .24s cubic-bezier(.2, .8, .2, 1);
     transform: translateY(20px);
   }
   body.photo .panel {
     top: auto;
     bottom: calc(160px + var(--safe-b));
-    max-height: 45vh;
+    max-height: calc(100dvh - 230px - var(--safe-b));
   }
+  .panel-grip {
+    display: grid;
+    place-items: center;
+    flex: 0 0 36px;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 32px 32px 0 0;
+    background: transparent;
+    color: var(--lilac);
+    cursor: ns-resize;
+    touch-action: none;
+  }
+  .panel-grip::after { content: ''; width: 40px; height: 4px; border-radius: 4px; background: currentColor; }
+  .panel-grip:focus-visible { outline: 2px solid var(--gold); outline-offset: -4px; }
+  .panel.sheet-dragging { transition: none; }
+  .panel > .panel-head, .panel > .segmented, .panel > .panel-foot { flex-shrink: 0; }
   .selbar {
     top: calc(64px + var(--safe-t));
     padding: 4px;
