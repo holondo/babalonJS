@@ -117,12 +117,12 @@ export class ModelOptimizer {
     this.progress = 0;
     this.entity = e;
     this.phase = 'geometry';
-    this.editor.notify('optimize');
+    this.editor.notify('activity');
     const simplify = simplifyMeshes(
       { meshes: sources.map((g, i) => simplifyInput(g ?? meshes[i].geometry!)), ratios, lockBorder: settings.lockBorder },
       (p) => {
         this.progress = p;
-        this.editor.notify('optimize');
+        this.editor.notify('activity');
       },
     );
     this.task = simplify;
@@ -140,7 +140,7 @@ export class ModelOptimizer {
       this.task = null;
       this.progress = null;
       this.entity = null;
-      this.editor.notify('optimize');
+      this.editor.notify('activity');
     }
   }
 
@@ -174,7 +174,7 @@ export class ModelOptimizer {
   private async bake(o: Optimization, size: number) {
     this.phase = 'bake';
     this.progress = 0;
-    this.editor.notify('optimize');
+    this.editor.notify('activity');
     const targets = o.meshes.filter((v) => normalMapOf(v.mesh.material) && (v.original ?? v.mesh.geometry)?.getVerticesData('uv'));
     if (!targets.length) throw new Error(tr('Baking needs a material and UVs.'));
     for (const [k, v] of targets.entries()) {
@@ -200,7 +200,7 @@ export class ModelOptimizer {
         },
         (p) => {
           this.progress = (k + p) / targets.length;
-          this.editor.notify('optimize');
+          this.editor.notify('activity');
         },
       );
       this.task = job;

@@ -4,11 +4,7 @@ import type { PrimitiveType } from '../../core/editor';
 import { button, chips, h, hint, progressBar, row, section, slider, toggle } from '../dom';
 import type { UI } from '../ui';
 
-/** Shapes offered for quick adding (Shift+A, Modify). */
-export const QUICK_SHAPES: PrimitiveType[] = ['sphere', 'box', 'cylinder', 'cone', 'torus', 'plane'];
-export function shapeLabel(t: PrimitiveType) {
-  return { box: tr('Cube'), sphere: tr('Sphere'), cylinder: tr('Cylinder'), cone: tr('Cone'), torus: tr('Torus'), plane: tr('Plane') }[t];
-}
+import { QUICK_SHAPES, shapeLabel } from '../quickShapes';
 
 /** Objects → Modify: quick shapes and operations between the selected objects. */
 export class ModifyPanel {

@@ -3,7 +3,7 @@ import { fillHoles } from './holes';
 import { Vector3, Quaternion } from '@babylonjs/core/Maths/math.vector.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
-import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
+import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { GizmoManager } from '@babylonjs/core/Gizmos/gizmoManager.js';
 import type { Editor, Entity } from '../core/editor';
@@ -174,7 +174,7 @@ export class PlaneCut {
   constructor(editor: Editor, selection: FaceSelection) {
     this.editor = editor; this.entity = selection.entity; this.selection = selection;
     const bounds = editor.boundsOf(this.entity);
-    this.plane = MeshBuilder.CreatePlane('Cut plane', { size: Math.max(bounds.size.length(), 0.1), sideOrientation: Mesh.DOUBLESIDE }, editor.scene);
+    this.plane = CreatePlane('Cut plane', { size: Math.max(bounds.size.length(), 0.1), sideOrientation: Mesh.DOUBLESIDE }, editor.scene);
     this.plane.isPickable = false; editor.overlays.add(this.plane);
     for (const color of ['#bb98df', '#e6b94a', '#44216b']) { const m = new StandardMaterial('Cut preview', editor.scene); m.diffuseColor = m.emissiveColor = Color3.FromHexString(color); m.alpha = 0.34; m.disableLighting = true; m.backFaceCulling = false; m.zOffset = -3; this.materials.push(m); }
     this.plane.material = this.materials[0]; this.plane.position.copyFrom(bounds.min.add(bounds.max).scale(0.5)); this.snap('horizontal');

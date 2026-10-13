@@ -12,6 +12,7 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 ```
 
 - There is no test runner. Verify every change with `npm run build` and in a browser (see [Verifying changes](#verifying-changes)).
+- Project ZIP compatibility and worker checks: `node scripts/check-project-archive.mjs`.
 - Rigging has focused checks (Node, no browser): `node scripts/check-leg-junction.mjs`, `check-skin-treatments.mjs`, `check-helper-bones.mjs`, `check-skin-visibility.mjs`. Optimization: `node scripts/check-simplify.mjs`. `node scripts/check-rig-deformation.mjs <model.glb> <envelope|heat> [comparison]` audits final deformation on a model you provide (meshopt-compressed GLB); no model is bundled for it.
 - GitHub Pages deploys on every push to `main` (`.github/workflows/deploy.yml`). The build runs with `BASE_PATH=/<repo>/`.
 
@@ -23,6 +24,7 @@ npm run preview    # serves dist/ (the only way to test the PWA / service worker
 | --- | --- | --- |
 | `core/` | `editor.ts` | Core with no UI: scene, camera, loading, entities, selection, gizmos, lights, shadows, environment, post-processing, capture, export, undo history, render-on-demand, AR scene state |
 | | `project.ts` | `.babalon` save/open and browser autosave (IndexedDB) |
+| | `projectArchive.ts`, `projectArchive.worker.ts` | On-demand ZIP encoding and decoding in one disposable worker, preserving the existing project format |
 | | `presets.ts` | Shared data: lighting presets, photo filters, pose presets, animation library |
 | | `files.ts` | Saving, sharing and receiving files (share target) |
 | | `i18n.ts` | Translations |
@@ -86,6 +88,8 @@ Expensive features are opt-in (AR shadows, room lighting, camera access, FPS cou
 
 ### Performance
 - The scene renders on demand. Anything that changes what's on screen must go through editor methods that emit `changed`, or call `editor.invalidate()`. Camera motion, animations, loading and AR are detected automatically.
+- Worker progress emits `activity`, not persistent scene changes: update the bubbles and progress elements without rendering the scene or scheduling autosave. Emit the domain change when a result is applied.
+- Rig, Mesh, Modify and Optimize panels load through the UI feature loader. Keep lightweight shared data out of panel modules so shell imports do not pull those panels into startup.
 - No per-frame allocation-heavy work, no GPU readbacks in the render loop (the theme-color sampler is throttled and paused in AR).
 - `scene.skipPointerMovePicking` is on: pick explicitly when you need what's under the pointer.
 - Rebuild geometry (e.g. lines) only when its data changed.

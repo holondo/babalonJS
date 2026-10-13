@@ -45,7 +45,7 @@ import {
 } from 'lucide';
 import type { IconNode } from 'lucide';
 import { MODEL_EXTENSIONS } from '../core/editor';
-import type { Editor, PrimitiveType, Tool } from '../core/editor';
+import type { Editor, Entity, PrimitiveType, Tool } from '../core/editor';
 import { PROJECT_EXT, fromZip, loadProject, restore, saveProject, snapshot, toZip } from '../core/project';
 import type { ProjectSnapshot } from '../core/project';
 import { JointOverlay } from './jointOverlay';
@@ -61,16 +61,17 @@ import { ObjectsPanel } from './panels/objects';
 import { MaterialPanel } from './panels/material';
 import { AnimatePanel } from './panels/animate';
 import { PosePanel } from './panels/pose';
-import { RigPanel } from './panels/rig';
+import type { RigPanel } from './panels/rig';
 import { ToolsPanel } from './panels/tools';
-import { OptimizePanel } from './panels/optimize';
-import { SeparatePanel } from './panels/separate';
+import type { OptimizePanel } from './panels/optimize';
+import type { SeparatePanel } from './panels/separate';
 import { TransformBar } from './transformBar';
 import { ContextBar } from './contextBar';
 import type { UIContext } from './contextBar';
 import { ModalTransform } from './modalTransform';
-import { ModifyPanel, QUICK_SHAPES, shapeLabel } from './panels/modify';
-import { analyzeScene, deviceBudget, formatBytes, overBudget } from '../optimize/analysis';
+import type { ModifyPanel } from './panels/modify';
+import { QUICK_SHAPES, shapeLabel } from './quickShapes';
+import { analyzeEntity, analyzeScene, deviceBudget, formatBytes, overBudget } from '../optimize/analysis';
 import { DEFAULT_OPTIMIZE } from '../optimize/optimizer';
 import type { Observer } from '@babylonjs/core/Misc/observable.js';
 import { LightPanel } from './panels/light';
@@ -96,15 +97,17 @@ export class UI {
   readonly materialUI = new MaterialPanel(this);
   readonly animateUI = new AnimatePanel(this);
   readonly poseUI = new PosePanel(this);
-  readonly rigUI = new RigPanel(this);
+  rigUI: RigPanel | null = null;
   readonly toolsUI = new ToolsPanel(this);
   readonly lightUI = new LightPanel(this);
-  readonly optimizeUI = new OptimizePanel(this);
-  readonly separateUI = new SeparatePanel(this);
+  optimizeUI: OptimizePanel | null = null;
+  separateUI: SeparatePanel | null = null;
   readonly transformBar = new TransformBar(this);
   /** Context bubbles; created once the selection bar exists. */
   private contextBar!: ContextBar;
-  readonly modifyUI = new ModifyPanel(this);
+  modifyUI: ModifyPanel | null = null;
+  private readonly featureLoads = new Map<string, Promise<void>>();
+  private readonly featureErrors = new Map<string, string>();
   /** G / R / S from the keyboard (created with the keys, once the canvas exists). */
   private modal!: ModalTransform;
   readonly photoUI = new PhotoMode(this);
@@ -113,6 +116,7 @@ export class UI {
   tab: Tab | null = null;
   private busy = false;
   private activityId = 0;
+  private activityState = '';
   private readonly activities = new Map<string, { label: string; icon: IconNode; progress: number | null; cancel?: () => void }>();
   private loadingActivity: ReturnType<UI['beginActivity']> | null = null;
   photoPanel = false;
@@ -201,9 +205,19 @@ export class UI {
     this.setupKeys();
 
     editor.changed.add((kind) => {
+      if (kind === 'activity') {
+        if (editor.gizmoError) { this.toast(editor.gizmoError, 'error'); editor.gizmoError = null; }
+        const state = `${editor.optimizer.busy}:${editor.textureOptimizer.busy}:${editor.rigger.progress !== null}:${editor.rigger.comparing}`;
+        const changed = state !== this.activityState;
+        this.activityState = state;
+        this.renderSelbar();
+        if (changed && this.tab === 'objects') this.renderPanel();
+        else this.updateOperationProgress();
+        return;
+      }
       // Separate mode belongs to one model: leave it if that model is no longer the selection
       const separating = editor.separator.selection?.entity;
-      if (separating && (kind === 'selection' || kind === 'entities' || kind === 'photo') && (editor.selected !== separating || !editor.entities.includes(separating) || editor.photoMode)) this.separateUI.cancel();
+      if (separating && (kind === 'selection' || kind === 'entities' || kind === 'photo') && (editor.selected !== separating || !editor.entities.includes(separating) || editor.photoMode)) this.leaveMesh();
       if (kind === 'history') return this.renderTopbar();
       if (kind === 'photo') {
         this.labelsUI.buildLabels();
@@ -313,6 +327,26 @@ export class UI {
           h('span', { class: 'ctx-percent' }, progress === null ? tr('Working…') : `${Math.round(progress * 100)}%`)), meter));
   }
 
+  operationProgress(kind: 'geometry' | 'textures' | 'rig', progress: number) {
+    const label = tr(kind === 'rig' ? 'Computing weights… {pct}%' : 'Optimizing… {pct}%', { pct: Math.round(progress * 100) });
+    const element = progressBar(progress, label);
+    element.dataset.operationProgress = kind;
+    return element;
+  }
+
+  private updateOperationProgress() {
+    for (const element of this.panel.querySelectorAll<HTMLElement>('[data-operation-progress]')) {
+      const kind = element.dataset.operationProgress;
+      const progress = (kind === 'geometry' ? this.editor.optimizer.progress : kind === 'textures' ? this.editor.textureOptimizer.progress : this.editor.rigger.progress) ?? 0;
+      const percent = Math.round(progress * 100);
+      const label = tr(kind === 'rig' ? 'Computing weights… {pct}%' : 'Optimizing… {pct}%', { pct: percent });
+      element.setAttribute('aria-valuenow', String(percent));
+      element.setAttribute('aria-label', label);
+      element.querySelector('i')!.style.width = `${percent}%`;
+      element.querySelector('span')!.textContent = label;
+    }
+  }
+
   toast(text: string, kind: 'info' | 'error' = 'info', action?: { label: string; run: () => void }, timeout?: number) {
     const t = h(
       'div',
@@ -367,6 +401,13 @@ export class UI {
 
   private ar: ARMode | null = null;
   private arOverlay: HTMLElement | null = null;
+  private arLoader: (() => Promise<void>) | null = null;
+  private arLoading: Promise<void> | null = null;
+
+  setARLoader(loader: () => Promise<void>) {
+    this.arLoader = loader;
+    this.renderTopbar();
+  }
 
   /** Augmented reality: shows the AR button when the device supports it. */
   setAR(ar: ARMode, overlay: HTMLElement) {
@@ -377,8 +418,23 @@ export class UI {
   }
 
   private async enterAR() {
+    if (!this.ar && this.arLoader) {
+      const activity = this.beginActivity(tr('Preparing AR…'), View);
+      try {
+        await (this.arLoading ??= this.arLoader());
+      } catch (error) {
+        this.arLoading = null;
+        this.toast(errorMessage(error), 'error');
+        return;
+      } finally { activity.finish(); }
+      // A slow first download can outlive transient user activation needed by WebXR.
+      if (navigator.userActivation && !navigator.userActivation.isActive) {
+        this.toast(tr('AR is ready. Tap AR to start.'));
+        return;
+      }
+    }
     if (!this.ar || !this.arOverlay) return;
-    if (this.editor.separator.active) this.separateUI.cancel();
+    if (this.editor.separator.active) this.leaveMesh();
     if (!this.arRestore && (await this.lightenForAR())) return;
     try {
       await this.ar.enter(this.arOverlay);
@@ -440,7 +496,10 @@ export class UI {
     if (project) return this.openProjectFile(project);
     try {
       await this.editor.addFiles(files, attribution);
-      this.optimizeUI.checkHeavy(this.editor.selected);
+      const entity = this.editor.selected, budget = deviceBudget();
+      if (entity?.kind === 'model' && overBudget(analyzeEntity(this.editor, entity), budget)) this.toast(
+        tr(budget.phone ? 'This model is heavy for this phone and may run slowly. You can optimize it.' : 'This model is very heavy. You can optimize it.'),
+        'info', { label: tr('Optimize'), run: () => this.openPart('objects', 'optimize') }, 9000);
     } catch (e) {
       this.toast(errorMessage(e), 'error');
     }
@@ -484,8 +543,8 @@ export class UI {
       const faces = ed.separator.active && ed.separator.mode !== 'surface' ? ed.separator : null;
       if (e.key === 'Tab' && !ctrl && !e.altKey) {
         e.preventDefault();
-        if (ed.separator.active) this.separateUI.cancel();
-        else if (ed.selected) this.separateUI.start(ed.selected);
+        if (ed.separator.active) this.leaveMesh();
+        else if (ed.selected) this.startMesh(ed.selected);
         return;
       }
       if (e.shiftKey && !ctrl && key === 'a') { e.preventDefault(); this.showShapeMenu(); return; }
@@ -579,7 +638,7 @@ export class UI {
           [
             { id: 'edit', label: tr('Edit'), icon: Move3d },
             { id: 'photo', label: tr('Photo'), icon: Camera },
-            ...(this.ar?.supported ? [{ id: 'ar', label: 'AR', icon: View }] : []),
+            ...(this.ar?.supported || this.arLoader ? [{ id: 'ar', label: 'AR', icon: View }] : []),
           ],
           this.ar?.active ? 'ar' : ed.photoMode ? 'photo' : 'edit',
           (id) => (id === 'ar' ? this.enterAR() : ed.setPhotoMode(id === 'photo')),
@@ -648,12 +707,15 @@ export class UI {
 
   private async openProjectFile(file: File) {
     if (this.hasContent() && !confirm(tr('Opening the project will replace the current scene. Continue?'))) return;
+    const activity = this.beginActivity(tr('Opening project: {name}', { name: file.name }), Upload);
     try {
       const snap = await fromZip(file);
       if (!snap.json.name) snap.json.name = file.name.replace(/\.[^.]+$/, '');
       await this.loadSnapshot(snap);
     } catch (e) {
       this.toast(errorMessage(e), 'error');
+    } finally {
+      activity.finish();
     }
   }
 
@@ -712,7 +774,7 @@ export class UI {
       const shape = ed.addShapeOnSelection(type);
       if (mesh) {
         // From selected faces: wrap them onto the shape at once (Blender's Shrinkwrap on a vertex group)
-        this.separateUI.refresh();
+        this.separateUI?.refresh();
         const target = ed.separator.lastFaces?.entity;
         if (target && target !== shape) ed.wrap.start([target, shape], ed.separator.lastFaces!.masks);
       }
@@ -919,6 +981,8 @@ export class UI {
    */
   private contexts(): UIContext[] {
     const ed = this.editor, out: UIContext[] = [];
+    if (ed.gizmoLoading) out.push(this.activityContext('transform-loading', Move3d, tr('Loading transform controls…'), null));
+    if (ed.separator.cutLoading) out.push(this.activityContext('cut-loading', Triangle, tr('Loading cutting plane…'), null, () => { void this.run(() => ed.separator.setCut(false)); }));
     for (const [id, activity] of this.activities) out.push(this.activityContext(id, activity.icon, activity.label, activity.progress, activity.cancel));
     if (ed.optimizer.busy) out.push(this.activityContext('optimize-model', Triangle,
       tr(ed.optimizer.phase === 'bake' ? 'Baking surface detail: {name}' : 'Optimizing model: {name}', { name: ed.optimizer.entity?.name ?? tr('Scene') }), ed.optimizer.progress, () => ed.optimizer.cancel()));
@@ -934,12 +998,12 @@ export class UI {
     if (ed.rigger.active && (!ed.photoMode || ed.rigger.progress !== null || ed.rigger.comparing)) out.push({ id: 'rig', icon: Bone,
       label: ed.rigger.progress !== null ? tr('Rigging {name}: {pct}%', { name: ed.rigger.entity!.name, pct: Math.round(ed.rigger.progress * 100) }) : tr('Rig'),
       busy: ed.rigger.progress !== null || ed.rigger.comparing, progress: ed.rigger.progress,
-      render: () => this.rigUI.renderRigBar(), expand: () => this.openPart('objects', 'rig') });
+      render: () => this.renderFeatureContext('rig', () => this.rigUI!.renderRigBar()), expand: () => this.openPart('objects', 'rig') });
     if (ed.photoMode) return out;
     if (ed.pose.active) out.push({ id: 'pose', icon: PersonStanding, label: tr('Pose'), render: () => this.poseUI.renderPoseBar(), expand: () => this.openPart('objects', 'pose') });
     if (ed.separator.active) {
       const n = ed.separator.selection?.count ?? 0;
-      out.push({ id: 'mesh', icon: Triangle, label: n ? tr('{n} faces', { n: n.toLocaleString() }) : tr('Mesh'), render: () => this.separateUI.bar(), expand: () => this.openPart('objects', 'separate') });
+      out.push({ id: 'mesh', icon: Triangle, label: n ? tr('{n} faces', { n: n.toLocaleString() }) : tr('Mesh'), render: () => this.renderFeatureContext('separate', () => this.separateUI!.bar()), expand: () => this.openPart('objects', 'separate') });
     }
     if (ed.tools.measureMode) out.push({ id: 'measure', icon: Ruler, label: tr('Measure'), render: () => this.selbar.replaceChildren(
       h('div', { class: 'sel-name measure always' }, icon(Ruler, 16), h('span', {}, ed.tools.pending ? tr('Tap the second point') : tr('Tap the first point'))),
@@ -975,8 +1039,8 @@ export class UI {
     const mesh = ed.separator.active;
     if (!mesh && (!e || e.kind === 'light' || e.groupMembers || ed.selection.length > 1)) return null;
     return h('span', { class: 'objmode' },
-      iconButton(Box, tr('Object mode (Tab)'), () => { if (mesh) this.separateUI.cancel(); }, { active: !mesh, label: tr('Object'), cls: 'tool' }),
-      iconButton(Triangle, tr('Mesh mode (Tab)'), () => { if (!mesh && e) this.separateUI.start(e); }, { active: mesh, label: tr('Mesh'), cls: 'tool' }),
+      iconButton(Box, tr('Object mode (Tab)'), () => { if (mesh) this.leaveMesh(); }, { active: !mesh, label: tr('Object'), cls: 'tool' }),
+      iconButton(Triangle, tr('Mesh mode (Tab)'), () => { if (!mesh && e) this.startMesh(e); }, { active: mesh, label: tr('Mesh'), cls: 'tool' }),
     );
   }
 
@@ -1018,7 +1082,7 @@ export class UI {
         item(Focus, tr('Focus camera'), () => ed.focus(), { kbd: 'F' }),
         item(Orbit, tr('Orbit around this object'), () => ed.orbitAround(), { on: ed.orbitEntity === e, kbd: 'O' }),
         item(Undo2, s.mode === 'select' ? tr('Undo selection') : tr('Undo'), () => s.mode === 'select' ? s.edit((sel) => sel.undo()) : ed.undo()),
-        item(X, tr('Done (Tab)'), () => this.separateUI.cancel()),
+        item(X, tr('Done (Tab)'), () => this.leaveMesh()),
       );
       return;
     }
@@ -1106,9 +1170,9 @@ export class UI {
             }),
           ]
         : []),
-      ...(rigging ? [this.rigUI.rigStepper()] : []),
+      ...(rigging && this.rigUI ? [this.rigUI.rigStepper()] : []),
       body,
-      ...(rigging ? [this.rigUI.rigFooter()] : []),
+      ...(rigging && this.rigUI ? [this.rigUI.rigFooter()] : []),
     );
     body.scrollTop = scroll;
     if (ed.rigger.active) this.renderSelbar();
@@ -1156,6 +1220,59 @@ export class UI {
   }
 
   private library: LibraryPanel | null = null;
+  loadRigUI() { return this.ensureFeature('rig'); }
+
+  private ensureFeature(name: 'rig' | 'optimize' | 'separate' | 'modify'): Promise<void> {
+    const ready = { rig: this.rigUI, optimize: this.optimizeUI, separate: this.separateUI, modify: this.modifyUI }[name];
+    if (ready) return Promise.resolve();
+    const pending = this.featureLoads.get(name);
+    if (pending) return pending;
+    // Register the promise before rendering its activity, to avoid reentrant duplicate loads.
+    const load = Promise.resolve().then(async () => {
+      const activity = this.beginActivity(tr('Loading {name}', { name: tr({ rig: 'Rig', optimize: 'Optimize', separate: 'Mesh', modify: 'Modify' }[name]) }), Layers);
+      try {
+        if (name === 'rig') this.rigUI = new (await import('./panels/rig')).RigPanel(this);
+        if (name === 'optimize') this.optimizeUI = new (await import('./panels/optimize')).OptimizePanel(this);
+        if (name === 'separate') this.separateUI = new (await import('./panels/separate')).SeparatePanel(this);
+        if (name === 'modify') this.modifyUI = new (await import('./panels/modify')).ModifyPanel(this);
+        this.featureErrors.delete(name);
+      } catch (error) {
+        this.featureErrors.set(name, errorMessage(error));
+        throw error;
+      } finally {
+        this.featureLoads.delete(name);
+        activity.finish();
+        this.renderAll();
+      }
+    });
+    this.featureLoads.set(name, load);
+    return load;
+  }
+
+  private featureContent(name: 'rig' | 'optimize' | 'separate' | 'modify', render: () => (Node | null)[]): (Node | null)[] {
+    if ({ rig: this.rigUI, optimize: this.optimizeUI, separate: this.separateUI, modify: this.modifyUI }[name]) return render();
+    const error = this.featureErrors.get(name);
+    if (error) return [hint(error), button(tr('Try again'), () => { this.featureErrors.delete(name); void this.run(() => this.ensureFeature(name)); this.renderPanel(); })];
+    void this.ensureFeature(name).catch(() => {});
+    return [hint(tr('Loading…'))];
+  }
+
+  private renderFeatureContext(name: 'rig' | 'separate', render: () => void) {
+    if (name === 'rig' ? this.rigUI : this.separateUI) { render(); return; }
+    this.selbar.replaceChildren(...this.featureContent(name, () => []).filter((node): node is Node => node !== null));
+  }
+
+  private startMesh(entity: Entity) {
+    void this.run(async () => {
+      await this.ensureFeature('separate');
+      if (this.editor.selected === entity && this.editor.entities.includes(entity)) this.separateUI!.start(entity);
+    });
+  }
+
+  private leaveMesh() {
+    if (this.separateUI) this.separateUI.cancel();
+    else { this.editor.separator.cancel(); this.renderAll(); }
+  }
   private libraryLoading: Promise<void> | null = null;
   private libraryContent(kind: LibraryKind): Node[] {
     if (this.library) return [this.library.content(kind)];
@@ -1172,7 +1289,7 @@ export class UI {
         return part === 'library' ? this.libraryContent('model') : this.addUI.addPanel();
       case 'objects': {
         // An operation in progress stays on top of every part until Apply or Cancel
-        const operation = part === 'modify' ? null : this.modifyUI.operation();
+        const operation = part === 'modify' ? null : this.modifyUI?.operation();
         const content = this.objectsPart(part);
         return operation ? [operation, ...content] : content;
       }
@@ -1194,10 +1311,10 @@ export class UI {
     if (part === 'material') return this.materialUI.materialPanel();
     if (part === 'animate') return this.animateUI.animatePanel();
     if (part === 'pose') return this.poseUI.posePanel();
-    if (part === 'rig') return this.rigUI.rigPanel();
-    if (part === 'optimize') return this.optimizeUI.optimizePanel();
-    if (part === 'separate') return this.separateUI.panel();
-    if (part === 'modify') return this.modifyUI.panel();
+    if (part === 'rig') return this.featureContent('rig', () => this.rigUI!.rigPanel());
+    if (part === 'optimize') return this.featureContent('optimize', () => this.optimizeUI!.optimizePanel());
+    if (part === 'separate') return this.featureContent('separate', () => this.separateUI!.panel());
+    if (part === 'modify') return this.featureContent('modify', () => this.modifyUI!.panel());
     return this.objectsUI.scenePanel();
   }
 

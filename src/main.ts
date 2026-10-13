@@ -19,11 +19,13 @@ setupSystemBars(editor);
 // Augmented reality (WebXR): only offered where the browser supports it (Android Chrome + ARCore)
 if (navigator.xr) navigator.xr.isSessionSupported('immersive-ar').then(async (supported) => {
   if (!supported) return;
-  const [{ ARMode }, { ARHud }] = await Promise.all([import('./ar/ar'), import('./ar/arHud')]);
-  const ar = new ARMode(editor);
-  const arHud = new ARHud(ar);
-  await ar.checkSupport();
-  ui.setAR(ar, arHud.el);
+  ui.setARLoader(async () => {
+    const [{ ARMode }, { ARHud }] = await Promise.all([import('./ar/ar'), import('./ar/arHud')]);
+    const ar = new ARMode(editor);
+    const arHud = new ARHud(ar);
+    await ar.checkSupport();
+    ui.setAR(ar, arHud.el);
+  });
 }).catch(() => {});
 
 // Gyro mode: the phone's orientation turns the camera (any phone, no camera needed)

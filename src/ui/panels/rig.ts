@@ -7,7 +7,7 @@ import type { WeightMethod } from '../../rigging/rigging';
 import { SKIN_TREATMENTS } from '../../rigging/skinTreatments';
 import type { SkinTreatment } from '../../rigging/skinTreatments';
 import { tr } from '../../core/i18n';
-import { button, progressBar, stepper, h, hint, iconButton, row, section, select, slider, toggle } from '../dom';
+import { button, stepper, h, hint, iconButton, row, section, select, slider, toggle } from '../dom';
 import type { UI } from '../ui';
 
 /** Objects → Rig: the three rigging steps, their actions (panel footer or floating bar) and the joint handles. */
@@ -186,7 +186,7 @@ export class RigPanel {
             this.ui.renderSelbar();
           }),
           hint(tr(description)),
-          busy ? progressBar(r.progress ?? 0, tr('Computing weights… {pct}%', { pct: Math.round((r.progress ?? 0) * 100) })) : null,
+          busy ? this.ui.operationProgress('rig', r.progress ?? 0) : null,
         ),
       ];
     }

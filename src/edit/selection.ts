@@ -44,7 +44,7 @@ export class FaceSelection {
   cancelPrefetch() {
     for (const worker of this.topologyWorkers) worker.terminate();
     this.topologyWorkers.clear();
-    this.editor.notify('tool');
+    this.editor.notify('activity');
   }
   readonly editor: Editor;
   readonly entity: Entity;
@@ -131,7 +131,7 @@ export class FaceSelection {
       const finish = () => {
         worker.terminate();
         this.topologyWorkers.delete(worker);
-        this.editor.notify('tool');
+        this.editor.notify('activity');
       };
       const positions = Float32Array.from(mesh.getVerticesData('position')!), indices = Uint32Array.from(mesh.getIndices()!);
       worker.onmessage = (ev: MessageEvent<FaceTopology>) => {
@@ -143,7 +143,7 @@ export class FaceSelection {
       try { worker.postMessage({ positions, indices }, [positions.buffer, indices.buffer]); }
       catch { finish(); }
     }
-    if (this.topologyWorkers.size) this.editor.notify('tool');
+    if (this.topologyWorkers.size) this.editor.notify('activity');
   }
   island(mesh: Mesh, face: number, add = true) {
     const set = this.faces.get(mesh); if (!set) return;

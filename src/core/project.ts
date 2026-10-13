@@ -6,7 +6,6 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { userTextureFiles, loadUserTexture } from './materialTextures';
 import { materialToJSON, applyMaterial, lightToJSON, applyLight } from './state';
 import type { MaterialJSON, LightJSON } from './state';
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { Zippable } from 'fflate';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { AssetContainer } from '@babylonjs/core/assetContainer.js';
@@ -224,13 +223,18 @@ function entityToJSON(editor: Editor, e: Entity, files: Record<string, Blob>, in
 }
 
 export async function toZip(snap: ProjectSnapshot): Promise<Blob> {
-  const entries: Zippable = { 'project.json': [strToU8(JSON.stringify(snap.json, null, 2)), { level: 6 }] };
+  const json = new TextEncoder().encode(JSON.stringify(snap.json, null, 2));
+  const entries: Zippable = { 'project.json': [json, { level: 6 }] };
+  const buffers: ArrayBuffer[] = [json.buffer];
   for (const [path, blob] of Object.entries(snap.files)) {
     // Models and textures are usually compressed already: storing without recompressing is much faster
     // Data the app writes (rig weights, optimized triangles) compresses well; models and textures don't
-    entries[path] = [new Uint8Array(await blob.arrayBuffer()), { level: /^(rigs|optimized|separated)\/.*\.bin$/.test(path) ? 6 : 0 }];
+    const buffer = await blob.arrayBuffer();
+    buffers.push(buffer);
+    entries[path] = [new Uint8Array(buffer), { level: /^(rigs|optimized|separated)\/.*\.bin$/.test(path) ? 6 : 0 }];
   }
-  const data = zipSync(entries);
+  const { zipProject } = await import('./projectArchive');
+  const data = await zipProject(entries, buffers);
   return new Blob([data], { type: 'application/zip' });
 }
 
@@ -239,13 +243,14 @@ export async function toZip(snap: ProjectSnapshot): Promise<Blob> {
 export async function fromZip(file: Blob): Promise<ProjectSnapshot> {
   let entries: Record<string, Uint8Array>;
   try {
-    entries = unzipSync(new Uint8Array(await file.arrayBuffer()));
+    const { unzipProject } = await import('./projectArchive');
+    entries = await unzipProject(new Uint8Array(await file.arrayBuffer()));
   } catch {
     throw new Error(tr('Invalid or corrupted project file.'));
   }
   const raw = entries['project.json'];
   if (!raw) throw new Error(tr('This file is not a babalon JS project.'));
-  const json = JSON.parse(strFromU8(raw)) as ProjectJSON;
+  const json = JSON.parse(new TextDecoder().decode(raw)) as ProjectJSON;
   if (json.app !== APP) throw new Error(tr('This file is not a babalon JS project.'));
   if (json.version > VERSION) throw new Error(tr('Project created by a newer version of babalon JS.'));
   const files: Record<string, Blob> = {};

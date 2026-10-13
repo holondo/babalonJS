@@ -2,7 +2,7 @@ import { Brush, Focus, Lasso, MousePointer2, MousePointerClick, Move3d, Rotate3d
 import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import type { Entity, PrimitiveType } from '../../core/editor';
-import { QUICK_SHAPES, shapeLabel } from './modify';
+import { QUICK_SHAPES, shapeLabel } from '../quickShapes';
 import { tr } from '../../core/i18n';
 import type { SelectTool } from '../../edit/separate';
 import type { ScreenPoint } from '../../edit/lasso';
@@ -176,7 +176,7 @@ export class SeparatePanel {
       section(
         tr('Cut with a plane'),
         hint(tr('For pieces that touch: place the plane between them. The gold side becomes the new object.')),
-        toggle(tr('Cutting plane'), !!cut, (v) => (s.setCut(v), this.sync())),
+        toggle(tr('Cutting plane'), !!cut || s.cutLoading, v => { void this.ui.run(async () => { await s.setCut(v); this.sync(); }); }),
         cut
           ? chips(
               [

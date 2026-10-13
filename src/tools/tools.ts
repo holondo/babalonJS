@@ -3,7 +3,9 @@ import { CreateGreasedLine } from '@babylonjs/core/Meshes/Builders/greasedLineBu
 import { GreasedLineMeshMaterialType } from '@babylonjs/core/Materials/GreasedLine/greasedLineMaterialInterfaces.js';
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
-import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
+import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder.js';
+import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
+import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder.js';
 import { Observable } from '@babylonjs/core/Misc/observable.js';
 import { Plane } from '@babylonjs/core/Maths/math.plane.js';
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
@@ -362,7 +364,7 @@ export class Tools {
   }
 
   private createMarker() {
-    const marker = MeshBuilder.CreateSphere('measurePoint', { diameter: 1, segments: 12 }, this.scene);
+    const marker = CreateSphere('measurePoint', { diameter: 1, segments: 12 }, this.scene);
     marker.material = this.markerMat;
     marker.renderingGroupId = ON_TOP;
     this.editor.overlays.add(marker);
@@ -547,14 +549,14 @@ export class Tools {
     let plane: Mesh;
     let lines: Vector3[][];
     if (axis === 'y') {
-      plane = MeshBuilder.CreateGround('guidePlane', { width: 1, height: 1 }, scene);
+      plane = CreateGround('guidePlane', { width: 1, height: 1 }, scene);
       lines = [
         [v(-0.5, 0, -0.5), v(0.5, 0, -0.5), v(0.5, 0, 0.5), v(-0.5, 0, 0.5), v(-0.5, 0, -0.5)],
         [v(-0.5, 0, 0), v(0.5, 0, 0)],
         [v(0, 0, -0.5), v(0, 0, 0.5)],
       ];
     } else {
-      plane = MeshBuilder.CreatePlane('guidePlane', { width: 1, height: 1, sideOrientation: Mesh.DOUBLESIDE }, scene);
+      plane = CreatePlane('guidePlane', { width: 1, height: 1, sideOrientation: Mesh.DOUBLESIDE }, scene);
       plane.position.y = 0.5;
       if (axis === 'x') plane.rotation.y = Math.PI / 2;
       lines =

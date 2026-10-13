@@ -3,7 +3,7 @@ import { CreateScreenshotUsingRenderTargetAsync } from '@babylonjs/core/Misc/scr
 import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTargetTexture.js';
 import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
-import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
+import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder.js';
 import { Observable } from '@babylonjs/core/Misc/observable.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
@@ -287,7 +287,7 @@ export class ARMode {
       window.addEventListener('unhandledrejection', (e) => this.reportError(String(e.reason?.message ?? e.reason)));
       this.editor.engine.onContextLostObservable.add(() => this.reportError('WebGL context lost'));
 
-      this.reticle = MeshBuilder.CreateTorus('arReticle', { diameter: 0.3, thickness: 0.012, tessellation: 64 }, scene);
+      this.reticle = CreateTorus('arReticle', { diameter: 0.3, thickness: 0.012, tessellation: 64 }, scene);
       const mat = new StandardMaterial('arReticle', scene);
       mat.disableLighting = true;
       mat.emissiveColor = Color3.FromHexString('#e9a83b');

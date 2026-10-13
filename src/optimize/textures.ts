@@ -121,7 +121,7 @@ export class TextureOptimizer {
     this.progress = 0;
     this.entity = e;
     this.cancelled = false;
-    this.editor.notify('optimize');
+    this.editor.notify('activity');
     const encoded: EncodedTexture[] = [];
     try {
       for (const [i, texture] of unique.entries()) {
@@ -131,7 +131,7 @@ export class TextureOptimizer {
         this.checkCancelled();
         const result = await this.encode(job, (p) => {
           this.progress = (i + p) / unique.length;
-          this.editor.notify('optimize');
+          this.editor.notify('activity');
         });
         encoded.push({ original: texture, ...result, replacement: makeTexture(this.editor.scene, texture, result.data, result.format) });
       }
@@ -143,7 +143,7 @@ export class TextureOptimizer {
     } finally {
       this.progress = null;
       this.entity = null;
-      this.editor.notify('optimize');
+      this.editor.notify('activity');
     }
     if (this.cancelled) throw new DOMException('Cancelled', 'AbortError');
     const before = e.textureOptimization;

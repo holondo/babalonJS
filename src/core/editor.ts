@@ -29,7 +29,7 @@ import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight.js';
 import { Engine } from '@babylonjs/core/Engines/engine.js';
 import { FilesInputStore } from '@babylonjs/core/Misc/filesInputStore.js';
 import { Frustum } from '@babylonjs/core/Maths/math.frustum.js';
-import { GizmoManager } from '@babylonjs/core/Gizmos/gizmoManager.js';
+import type { GizmoManager } from '@babylonjs/core/Gizmos/gizmoManager.js';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js';
 import { ImageProcessingConfiguration } from '@babylonjs/core/Materials/imageProcessingConfiguration.js';
 import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader.js';
@@ -37,7 +37,12 @@ import { Material } from '@babylonjs/core/Materials/material.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture.js';
-import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
+import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
+import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder.js';
+import { CreateDisc } from '@babylonjs/core/Meshes/Builders/discBuilder.js';
+import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder.js';
+import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder.js';
+import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder.js';
 import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js';
 import { Observable } from '@babylonjs/core/Misc/observable.js';
 import { Plane } from '@babylonjs/core/Maths/math.plane.js';
@@ -86,7 +91,7 @@ export type Tool = 'move' | 'rotate' | 'scale';
 export type LightType = 'point' | 'spot' | 'directional';
 export type PrimitiveType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | 'plane';
 export type GroundMode = 'shadow' | 'solid' | 'none';
-export type ChangeKind = 'selection' | 'entities' | 'transform' | 'history' | 'env' | 'photo' | 'tool' | 'animation' | 'pose' | 'rig' | 'optimize';
+export type ChangeKind = 'selection' | 'entities' | 'transform' | 'history' | 'env' | 'photo' | 'tool' | 'animation' | 'pose' | 'rig' | 'optimize' | 'activity';
 
 export interface Entity {
   id: number;
@@ -322,7 +327,10 @@ export class Editor {
   env: EnvSettings = { ...DEFAULT_ENV };
   photo: PhotoSettings = { ...DEFAULT_PHOTO };
 
-  private readonly gizmos: GizmoManager;
+  private gizmos: GizmoManager | null = null;
+  private gizmoLoad: Promise<void> | null = null;
+  gizmoLoading = false;
+  gizmoError: string | null = null;
   private readonly outline: SelectionOutlineLayer;
   private readonly drag: PointerDragBehavior;
   private readonly hemi: HemisphericLight;
@@ -397,12 +405,12 @@ export class Editor {
     this.hemi.intensity = this.env.ambient;
     this.hemi.groundColor = new Color3(0.15, 0.15, 0.18);
 
-    this.ground = MeshBuilder.CreateDisc('ground', { radius: 60, tessellation: 96 }, scene);
+    this.ground = CreateDisc('ground', { radius: 60, tessellation: 96 }, scene);
     this.ground.rotation.x = Math.PI / 2;
     this.ground.isPickable = false;
     this.ground.receiveShadows = true;
 
-    this.grid = MeshBuilder.CreateGround('grid', { width: 60, height: 60 }, scene);
+    this.grid = CreateGround('grid', { width: 60, height: 60 }, scene);
     const gridMat = new GridMaterial('gridMat', scene);
     gridMat.mainColor = new Color3(0, 0, 0);
     gridMat.lineColor = new Color3(0.55, 0.58, 0.65);
@@ -426,75 +434,6 @@ export class Editor {
     this.pipeline.imageProcessing.toneMappingEnabled = true;
     this.pipeline.imageProcessing.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
     this.applyPhoto();
-
-    this.gizmos = new GizmoManager(scene, isTouch ? 2 : 1.5);
-    this.gizmos.usePointerToAttachGizmos = false;
-    this.gizmos.clearGizmoOnEmptyPointerEvent = false;
-    this.gizmos.scaleRatio = isTouch ? 1.5 : 1.1;
-    this.gizmos.positionGizmoEnabled = true;
-    this.gizmos.rotationGizmoEnabled = true;
-    this.gizmos.scaleGizmoEnabled = true;
-    const g = this.gizmos.gizmos;
-    g.positionGizmo!.planarGizmoEnabled = true;
-    for (const gz of [g.positionGizmo!, g.rotationGizmo!, g.scaleGizmo!]) {
-      gz.onDragStartObservable.add(() => (this.separator.transform ? this.separator.transform.begin() : this.rigger.active ? this.rigger.remember() : this.pose.active ? this.pose.begin() : this.beginTransform()));
-      gz.onDragEndObservable.add(() => {
-        if (this.separator.transform) return this.separator.transform.end();
-        if (this.rigger.active) return this.rigger.endHandleDrag();
-        if (this.pose.active) return this.pose.end();
-        this.tools.clearSmartLines();
-        this.endTransform();
-      });
-    }
-    // Scale gizmo: with Shift (or the option) one axis handle scales all three, keeping proportions
-    const sg = g.scaleGizmo!;
-    let scaleStart: Vector3 | null = null;
-    sg.onDragStartObservable.add(() => { scaleStart = (sg.attachedNode as TransformNode | null)?.scaling.clone() ?? null; });
-    for (const axis of [sg.xGizmo, sg.yGizmo, sg.zGizmo]) {
-      axis.dragBehavior.onDragObservable.add(() => {
-        const node = sg.attachedNode as TransformNode | null;
-        if (!this.proportional || !node || !scaleStart) return;
-        // The axis that changed most sets the factor for all
-        let ratio = 1;
-        for (const k of ['x', 'y', 'z'] as Axis[]) {
-          const r = scaleStart[k] ? node.scaling[k] / scaleStart[k] : 1;
-          if (Math.abs(r - 1) > Math.abs(ratio - 1)) ratio = r;
-        }
-        node.scaling.copyFrom(scaleStart).scaleInPlace(ratio);
-      });
-    }
-    // Position gizmo: track the raw position ourselves so grid snapping and smart guides don't get "sticky"
-    const pg = g.positionGizmo!;
-    let raw: Vector3 | null = null;
-    pg.onDragStartObservable.add(() => {
-      if (this.pose.active || this.rigger.active || this.separator.active) return;
-      raw = this.selected?.root.position.clone() ?? null;
-      this.startFollow();
-    });
-    const axisGizmos: [{ dragBehavior: PointerDragBehavior }, Record<Axis, boolean>][] = [
-      [pg.xGizmo, { x: true, y: false, z: false }],
-      [pg.yGizmo, { x: false, y: true, z: false }],
-      [pg.zGizmo, { x: false, y: false, z: true }],
-      [pg.xPlaneGizmo, { x: false, y: true, z: true }],
-      [pg.yPlaneGizmo, { x: true, y: false, z: true }],
-      [pg.zPlaneGizmo, { x: true, y: true, z: false }],
-    ];
-    for (const [gizmo, axes] of axisGizmos) {
-      gizmo.dragBehavior.onDragObservable.add((ev) => {
-        // Posing: the gizmo drags the IK target, the arm/leg follows
-        if (this.fusion.busy || this.fusion.preview) return;
-      if (this.separator.active) { this.invalidate(); return; }
-        if (this.rigger.active) return this.rigger.dragHandle();
-        if (this.pose.active) return this.pose.dragIk();
-        const e = this.selected;
-        if (!e || !raw) return;
-        raw.addInPlace(ev.delta);
-        this.moveTo(e, raw.clone(), axes);
-      });
-    }
-    this.gizmos.positionGizmoEnabled = false;
-    this.gizmos.rotationGizmoEnabled = false;
-    this.gizmos.scaleGizmoEnabled = false;
 
     // Drag the selected object straight across the floor (touch friendly)
     this.drag = new PointerDragBehavior({ dragPlaneNormal: Vector3.Up() });
@@ -535,7 +474,7 @@ export class Editor {
       // Rigging: a missed tap must not drop the joints being placed
       if (this.rigger.active) {
         // Tapping away from the joints (and the gizmo) drops the joint selection
-        if (info.type === PointerEventTypes.POINTERTAP && this.rigger.selected && !this.gizmos.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY)?.hit) this.rigger.selectJoint(null);
+        if (info.type === PointerEventTypes.POINTERTAP && this.rigger.selected && !this.gizmos?.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY)?.hit) this.rigger.selectJoint(null);
         return;
       }
       if (info.type === PointerEventTypes.POINTERTAP) {
@@ -543,8 +482,8 @@ export class Editor {
         const ev = info.event as PointerEvent;
         // "Hovered" only means something for a mouse: after a touch drag on a gizmo it stays
         // stuck and would swallow every later tap. The geometric pick below covers touch.
-        if (ev.pointerType === 'mouse' && this.gizmos.isHovered) return;
-        const util = this.gizmos.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY);
+        if (ev.pointerType === 'mouse' && this.gizmos?.isHovered) return;
+        const util = this.gizmos?.utilityLayer.utilityLayerScene.pick(scene.pointerX, scene.pointerY);
         if (util?.hit) return;
         const pick = scene.pick(scene.pointerX, scene.pointerY, this.pickable);
         const entity = pick?.pickedMesh ? this.entityOf(pick.pickedMesh) : null;
@@ -586,7 +525,7 @@ export class Editor {
     this.pose = new Poser(this);
 
     // A flat ring facing the camera
-    this.pivotRing = MeshBuilder.CreateTorus('pivotRing', { diameter: 1, thickness: 0.06, tessellation: 48 }, scene);
+    this.pivotRing = CreateTorus('pivotRing', { diameter: 1, thickness: 0.06, tessellation: 48 }, scene);
     this.pivotRing.rotation.x = Math.PI / 2;
     this.pivotRing.bakeCurrentTransformIntoVertices();
     this.pivotRing.billboardMode = Mesh.BILLBOARDMODE_ALL;
@@ -606,10 +545,13 @@ export class Editor {
     scene.skipPointerMovePicking = true;
 
     // Draw on demand: only while something changes, so an idle editor doesn't heat the phone
-    this.changed.add(() => this.invalidate());
+    this.changed.add(kind => { if (kind !== 'activity') this.invalidate(); });
     scene.onAfterAnimationsObservable.add(() => this.rigger.updateHelpers());
-    this.loading.add(() => this.invalidate());
-    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'input', 'change']) {
+    canvas.addEventListener('pointermove', event => {
+      if (event.buttons) this.invalidate();
+      else if (this.selected && !this.cleanView) this.invalidate(33);
+    }, { passive: true });
+    for (const type of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'input', 'change']) {
       window.addEventListener(type, () => this.invalidate(), { capture: true, passive: true });
     }
     this.engine.runRenderLoop(() => {
@@ -1038,27 +980,27 @@ export class Editor {
     let mesh: Mesh;
     switch (type) {
       case 'box':
-        mesh = MeshBuilder.CreateBox('box', { size: 1 }, this.scene);
+        mesh = CreateBox('box', { size: 1 }, this.scene);
         mesh.position.y = 0.5;
         break;
       case 'sphere':
-        mesh = MeshBuilder.CreateSphere('sphere', { diameter: 1, segments: 48 }, this.scene);
+        mesh = CreateSphere('sphere', { diameter: 1, segments: 48 }, this.scene);
         mesh.position.y = 0.5;
         break;
       case 'cylinder':
-        mesh = MeshBuilder.CreateCylinder('cylinder', { height: 1, diameter: 1, tessellation: 64 }, this.scene);
+        mesh = CreateCylinder('cylinder', { height: 1, diameter: 1, tessellation: 64 }, this.scene);
         mesh.position.y = 0.5;
         break;
       case 'cone':
-        mesh = MeshBuilder.CreateCylinder('cone', { height: 1, diameterTop: 0, diameterBottom: 1, tessellation: 64 }, this.scene);
+        mesh = CreateCylinder('cone', { height: 1, diameterTop: 0, diameterBottom: 1, tessellation: 64 }, this.scene);
         mesh.position.y = 0.5;
         break;
       case 'torus':
-        mesh = MeshBuilder.CreateTorus('torus', { diameter: 1, thickness: 0.3, tessellation: 64 }, this.scene);
+        mesh = CreateTorus('torus', { diameter: 1, thickness: 0.3, tessellation: 64 }, this.scene);
         mesh.position.y = 0.15;
         break;
       case 'plane':
-        mesh = MeshBuilder.CreateGround('plane', { width: 2, height: 2 }, this.scene);
+        mesh = CreateGround('plane', { width: 2, height: 2 }, this.scene);
         mesh.position.y = 0.001;
         break;
     }
@@ -1130,12 +1072,12 @@ export class Editor {
     const proxyMat = new StandardMaterial('lightProxy', this.scene);
     proxyMat.disableLighting = true;
     proxyMat.emissiveColor = color;
-    const bulb = MeshBuilder.CreateSphere('bulb', { diameter: 0.22, segments: 12 }, this.scene);
+    const bulb = CreateSphere('bulb', { diameter: 0.22, segments: 12 }, this.scene);
     bulb.material = proxyMat;
     bulb.parent = root;
     const parts: AbstractMesh[] = [bulb];
     if (type !== 'point') {
-      const arrow = MeshBuilder.CreateCylinder('arrow', { height: 0.5, diameterTop: 0, diameterBottom: 0.12, tessellation: 12 }, this.scene);
+      const arrow = CreateCylinder('arrow', { height: 0.5, diameterTop: 0, diameterBottom: 0.12, tessellation: 12 }, this.scene);
       arrow.rotation.x = Math.PI / 2;
       arrow.position.z = 0.32;
       arrow.material = proxyMat;
@@ -1570,18 +1512,118 @@ export class Editor {
     this.applyTool();
   }
 
+  private readonly configuredGizmos = new WeakSet<object>();
+  private readonly configuredTools = new Set<Tool>();
+
+  private loadGizmos() {
+    this.gizmoLoading = true;
+    this.gizmoError = null;
+    this.gizmoLoad = import('@babylonjs/core/Gizmos/gizmoManager.js').then(({ GizmoManager }) => {
+      const manager = this.gizmos = new GizmoManager(this.scene, isTouch ? 2 : 1.5);
+      manager.usePointerToAttachGizmos = false;
+      manager.clearGizmoOnEmptyPointerEvent = false;
+      manager.scaleRatio = isTouch ? 1.5 : 1.1;
+      this.applyTool();
+      this.invalidate();
+    }).catch(error => {
+      this.gizmoError = error instanceof Error ? error.message : String(error);
+    }).finally(() => {
+      this.gizmoLoad = null;
+      this.gizmoLoading = false;
+      this.notify('activity');
+    });
+    this.notify('activity');
+  }
+
+  /** Allocate each tool on first use and bind its observers exactly once. */
+  private enableGizmos(move: boolean, rotate: boolean, scale: boolean) {
+    if (!this.gizmos) return;
+    this.gizmos.positionGizmoEnabled = move;
+    this.gizmos.rotationGizmoEnabled = rotate;
+    this.gizmos.scaleGizmoEnabled = scale;
+    const g = this.gizmos.gizmos;
+    for (const gz of [g.positionGizmo, g.rotationGizmo, g.scaleGizmo]) {
+      if (!gz || this.configuredGizmos.has(gz)) continue;
+      this.configuredGizmos.add(gz);
+      gz.onDragStartObservable.add(() => (this.separator.transform ? this.separator.transform.begin() : this.rigger.active ? this.rigger.remember() : this.pose.active ? this.pose.begin() : this.beginTransform()));
+      gz.onDragEndObservable.add(() => {
+        if (this.separator.transform) return this.separator.transform.end();
+        if (this.rigger.active) return this.rigger.endHandleDrag();
+        if (this.pose.active) return this.pose.end();
+        this.tools.clearSmartLines();
+        this.endTransform();
+      });
+    }
+    if (g.scaleGizmo && !this.configuredTools.has('scale')) {
+      this.configuredTools.add('scale');
+      // Scale gizmo: with Shift (or the option) one axis handle scales all three, keeping proportions
+      const sg = g.scaleGizmo!;
+      let scaleStart: Vector3 | null = null;
+      sg.onDragStartObservable.add(() => { scaleStart = (sg.attachedNode as TransformNode | null)?.scaling.clone() ?? null; });
+      for (const axis of [sg.xGizmo, sg.yGizmo, sg.zGizmo]) {
+        axis.dragBehavior.onDragObservable.add(() => {
+          const node = sg.attachedNode as TransformNode | null;
+          if (!this.proportional || !node || !scaleStart) return;
+          // The axis that changed most sets the factor for all
+          let ratio = 1;
+          for (const k of ['x', 'y', 'z'] as Axis[]) {
+            const r = scaleStart[k] ? node.scaling[k] / scaleStart[k] : 1;
+            if (Math.abs(r - 1) > Math.abs(ratio - 1)) ratio = r;
+          }
+          node.scaling.copyFrom(scaleStart).scaleInPlace(ratio);
+        });
+      }
+    }
+    if (g.positionGizmo && !this.configuredTools.has('move')) {
+      this.configuredTools.add('move');
+      g.positionGizmo.planarGizmoEnabled = true;
+      // Position gizmo: track the raw position ourselves so grid snapping and smart guides don't get "sticky"
+      const pg = g.positionGizmo!;
+      let raw: Vector3 | null = null;
+      pg.onDragStartObservable.add(() => {
+        if (this.pose.active || this.rigger.active || this.separator.active) return;
+        raw = this.selected?.root.position.clone() ?? null;
+        this.startFollow();
+      });
+      const axisGizmos: [{ dragBehavior: PointerDragBehavior }, Record<Axis, boolean>][] = [
+        [pg.xGizmo, { x: true, y: false, z: false }],
+        [pg.yGizmo, { x: false, y: true, z: false }],
+        [pg.zGizmo, { x: false, y: false, z: true }],
+        [pg.xPlaneGizmo, { x: false, y: true, z: true }],
+        [pg.yPlaneGizmo, { x: true, y: false, z: true }],
+        [pg.zPlaneGizmo, { x: true, y: true, z: false }],
+      ];
+      for (const [gizmo, axes] of axisGizmos) {
+        gizmo.dragBehavior.onDragObservable.add((ev) => {
+          // Posing: the gizmo drags the IK target, the arm/leg follows
+          if (this.fusion.busy || this.fusion.preview) return;
+          if (this.separator.active) { this.invalidate(); return; }
+          if (this.rigger.active) return this.rigger.dragHandle();
+          if (this.pose.active) return this.pose.dragIk();
+          const e = this.selected;
+          if (!e || !raw) return;
+          raw.addInPlace(ev.delta);
+          this.moveTo(e, raw.clone(), axes);
+        });
+      }
+    }
+  }
+
   private applyTool() {
     const e = this.selected;
+    if (!this.gizmos) {
+      if (e && !this.cleanView && !this.gizmoLoad) this.loadGizmos();
+      return;
+    }
     if (this.fusion.busy || this.fusion.preview) {
-      this.gizmos.positionGizmoEnabled = this.gizmos.rotationGizmoEnabled = this.gizmos.scaleGizmoEnabled = false;
+      this.enableGizmos(false, false, false);
       this.gizmos.attachToMesh(null); e?.root.removeBehavior(this.drag); return;
     }
     if (this.rigger?.active) {
       // Rigging: joints are dragged on screen; a selected joint also gets the move gizmo (one axis at a time)
       const handle = this.rigger.gizmoHandle();
-      this.gizmos.rotationGizmoEnabled = this.gizmos.scaleGizmoEnabled = false;
-      this.gizmos.positionGizmoEnabled = !!handle && !this.cleanView;
-      this.gizmos.gizmos.positionGizmo!.snapDistance = 0;
+      this.enableGizmos(!!handle && !this.cleanView, false, false);
+      if (this.gizmos.gizmos.positionGizmo) this.gizmos.gizmos.positionGizmo.snapDistance = 0;
       this.gizmos.attachToNode(handle && !this.cleanView ? handle : null);
       e?.root.removeBehavior(this.drag);
       return;
@@ -1590,9 +1632,7 @@ export class Editor {
       // The selected region's handle takes the gizmo
       const handle = this.separator.transform?.handle;
       const show = !!handle && !this.cleanView;
-      this.gizmos.positionGizmoEnabled = show && this.tool === 'move';
-      this.gizmos.rotationGizmoEnabled = show && this.tool === 'rotate';
-      this.gizmos.scaleGizmoEnabled = show && this.tool === 'scale';
+      this.enableGizmos(show && this.tool === 'move', show && this.tool === 'rotate', show && this.tool === 'scale');
       this.gizmos.attachToMesh(show ? handle! : null);
       e?.root.removeBehavior(this.drag);
       return;
@@ -1600,28 +1640,24 @@ export class Editor {
     const posing = this.pose?.active && this.pose.entity === e && !this.cleanView;
     if (posing || this.pose?.active) {
       const target = posing ? this.pose.gizmoTarget() : null;
-      this.gizmos.positionGizmoEnabled = target?.mode === 'move';
-      this.gizmos.rotationGizmoEnabled = target?.mode === 'rotate';
-      this.gizmos.scaleGizmoEnabled = false;
+      this.enableGizmos(target?.mode === 'move', target?.mode === 'rotate', false);
       const g = this.gizmos.gizmos;
-      g.rotationGizmo!.snapDistance = 0;
-      g.positionGizmo!.snapDistance = 0;
+      if (g.rotationGizmo) g.rotationGizmo.snapDistance = 0;
+      if (g.positionGizmo) g.positionGizmo.snapDistance = 0;
       // Joint axes are arbitrary: turn joints around the world axes
-      g.rotationGizmo!.updateGizmoRotationToMatchAttachedMesh = false;
+      if (g.rotationGizmo) g.rotationGizmo.updateGizmoRotationToMatchAttachedMesh = false;
       this.gizmos.attachToNode(target?.node ?? null);
       e?.root.removeBehavior(this.drag);
       return;
     }
     const tool = e?.kind === 'light' && this.tool === 'scale' ? 'move' : this.tool;
     const show = !!e && !this.cleanView && !this.tools?.measuring && !this.separator?.active;
-    this.gizmos.positionGizmoEnabled = show && tool === 'move';
-    this.gizmos.rotationGizmoEnabled = show && tool === 'rotate';
-    this.gizmos.scaleGizmoEnabled = show && tool === 'scale';
+    this.enableGizmos(show && tool === 'move', show && tool === 'rotate', show && tool === 'scale');
     const g = this.gizmos.gizmos;
-    g.positionGizmo!.snapDistance = 0; // grid snapping is done in moveTo()
-    g.rotationGizmo!.snapDistance = this.snap ? Math.PI / 12 : 0;
-    g.rotationGizmo!.updateGizmoRotationToMatchAttachedMesh = true;
-    g.scaleGizmo!.snapDistance = this.snap ? 0.1 : 0;
+    if (g.positionGizmo) g.positionGizmo.snapDistance = 0; // grid snapping is done in moveTo()
+    if (g.rotationGizmo) g.rotationGizmo.snapDistance = this.snap ? Math.PI / 12 : 0;
+    if (g.rotationGizmo) g.rotationGizmo.updateGizmoRotationToMatchAttachedMesh = true;
+    if (g.scaleGizmo) g.scaleGizmo.snapDistance = this.snap ? 0.1 : 0;
     this.gizmos.attachToMesh(show ? e!.root : null);
     if (e) {
       e.root.removeBehavior(this.drag);
@@ -2230,7 +2266,7 @@ export class Editor {
 
 /** The environment as a background (same as Babylon's default PBR skybox, without its ≈420 KB scene helpers). */
 function createSkybox(scene: Scene, environment: BaseTexture, blur: number) {
-  const box = MeshBuilder.CreateBox('hdrSkyBox', { size: 1000 }, scene);
+  const box = CreateBox('hdrSkyBox', { size: 1000 }, scene);
   const material = new PBRMaterial('skyBox', scene);
   material.backFaceCulling = false;
   material.reflectionTexture = environment.clone();

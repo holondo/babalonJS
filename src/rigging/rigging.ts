@@ -921,10 +921,10 @@ export class Rigger {
     const input = this.skinInput(st);
     input.comparison = comparison;
     this.progress = 0;
-    this.editor.notify('rig');
+    this.editor.notify('activity');
     const onProgress = (p: number) => {
       this.progress = p;
-      this.editor.notify('rig');
+      this.editor.notify('activity');
     };
     this.job = computeSkinWeights(input, st.data.method, onProgress);
     try {
@@ -940,7 +940,7 @@ export class Rigger {
     } finally {
       this.job = null;
       this.progress = null;
-      this.editor.notify('rig');
+      this.editor.notify('activity');
     }
   }
 

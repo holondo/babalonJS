@@ -18,7 +18,7 @@ export type { MeshPart } from './parts';
 import { selectScreen } from './lasso';
 import type { ScreenPoint } from './lasso';
 import { selectionRing, smartSelect } from './smartSelect';
-import { PlaneCut } from './planeCut';
+import type { PlaneCut } from './planeCut';
 
 export type { SeparationState } from './parts';
 import type { SeparationState } from './parts';
@@ -40,7 +40,7 @@ export class Separator {
    * objects, like Shrinkwrap, can be limited to them (Blender's vertex group).
    */
   lastFaces: { entity: Entity; masks: Map<Mesh, Uint8Array> } | null = null;
-  stop() { if (this.selection?.count) this.lastFaces = { entity: this.selection.entity, masks: this.selection.vertexMasks() }; this.sculptContexts.clear(); this.clearBridge(); this.transform?.dispose(); this.transform = null; this.mode = 'select'; this.selection?.dispose(); this.selection = null; this.editor.refreshTool(); }
+  stop() { this.cutGeneration++; this.cutLoading = false; if (this.selection?.count) this.lastFaces = { entity: this.selection.entity, masks: this.selection.vertexMasks() }; this.sculptContexts.clear(); this.clearBridge(); this.transform?.dispose(); this.transform = null; this.mode = 'select'; this.selection?.dispose(); this.selection = null; this.editor.refreshTool(); }
   copy(from: Entity, to: Entity) { if (from.separation) this.restore(to, structuredClone(from.separation!)); }
   restore(entity: Entity, state: SeparationState) {
     if (state.meshes.length !== entity.meshes.length) throw new Error(tr('The separated model does not match its source.'));
@@ -120,6 +120,8 @@ export class Separator {
   /** Lasso and brush also take faces hidden behind others. */
   through = false;
   cut: PlaneCut | null = null;
+  cutLoading = false;
+  private cutGeneration = 0;
 
   get active() { return !!this.selection; }
 
@@ -260,11 +262,26 @@ export class Separator {
     return report;
   }
 
-  setCut(on: boolean) {
-    if (!this.selection || on === !!this.cut) return;
-    if (on) this.cut = new PlaneCut(this.editor, this.selection);
-    else { this.cut!.dispose(); this.cut = null; }
-    this.editor.notify('tool');
+  async setCut(on: boolean) {
+    const selection = this.selection;
+    if (!selection || (on === !!this.cut && !this.cutLoading)) return;
+    const generation = ++this.cutGeneration;
+    if (!on) {
+      this.cutLoading = false;
+      this.cut?.dispose(); this.cut = null;
+      this.editor.notify('tool');
+      return;
+    }
+    this.cutLoading = true;
+    this.editor.notify('activity');
+    try {
+      const { PlaneCut } = await import('./planeCut');
+      if (generation !== this.cutGeneration || this.selection !== selection) return;
+      this.cut = new PlaneCut(this.editor, selection);
+      this.editor.notify('tool');
+    } finally {
+      if (generation === this.cutGeneration) { this.cutLoading = false; this.editor.notify('activity'); }
+    }
   }
 
   /** Makes the selection (or the plane's front side) a new object. */
