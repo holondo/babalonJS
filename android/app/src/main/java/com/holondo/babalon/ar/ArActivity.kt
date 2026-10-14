@@ -329,6 +329,7 @@ class ArActivity : AppCompatActivity() {
             bloomOptions = FilamentView.BloomOptions().apply {
                 enabled = false
             }
+            setScreenSpaceRefractionEnabled(true)
         }
 
         sceneView.planeRenderer.apply {
