@@ -2258,6 +2258,13 @@ export class Editor {
    * meshopt-compressed (loaded on demand); otherwise the original models, as they were loaded.
    */
   async exportGLB(compact = false, forAR = false): Promise<Blob> {
+    // Load dependencies before changing the scene: an offline chunk failure must
+    // leave previews, textures and transforms untouched.
+    const [{ affineExport }, { nativeAnimationName }, { GLTF2Export }] = await Promise.all([
+      import('../edit/affineExport'),
+      import('../ar/nativeScene'),
+      import('@babylonjs/serializers/glTF/2.0/index.js'),
+    ]);
     if (this.fusion.preview || this.fusion.busy) this.fusion.cancel();
     this.wrap.cancel();
     this.rigger.difference.clear();
@@ -2275,22 +2282,21 @@ export class Editor {
     exclude.add(this.pose.ikTarget);
     exclude.add(this.rigger.handle);
     const original = compact || forAR ? [] : this.entities.filter((e) => e.optimization);
-    for (const e of original) this.optimizer.preview(e, true);
-    const textures = this.textureOptimizer.forExport(compact || forAR);
+    let textures: ReturnType<TextureOptimizer['forExport']> | undefined;
+    let restoreAffineExport: (() => void) | undefined;
     let glb: Blob;
-    const { affineExport } = await import('../edit/affineExport');
-    const restoreAffineExport = affineExport(this.scene);
-    const { nativeAnimationName } = await import('../ar/nativeScene');
     const groups = this.scene.animationGroups;
     const active = this.entities.filter(e => e.visible && this.anim.isPlaying(e))
       .map(e => ({ group: this.anim.current(e)!, name: nativeAnimationName(e) }));
     const groupNames = active.map(({ group }) => group.name);
     const arAnimations = new Set(active.flatMap(({ group }) => group.targetedAnimations.map(a => a.animation)));
     try {
+      for (const e of original) this.optimizer.preview(e, true);
+      textures = this.textureOptimizer.forExport(compact || forAR);
+      restoreAffineExport = affineExport(this.scene);
       if (forAR) {
         this.scene.animationGroups = active.map(({ group, name }) => { group.name = name; return group; });
       }
-      const { GLTF2Export } = await import('@babylonjs/serializers/glTF/2.0/glTFSerializer.js');
       const data = await GLTF2Export.GLBAsync(this.scene, 'scene', {
         // Native AR shows the current composition, without baking every library clip
         // or quantizing skin weights for a different renderer.
@@ -2306,10 +2312,16 @@ export class Editor {
         this.scene.animationGroups = groups;
         active.forEach(({ group }, i) => { group.name = groupNames[i]; });
       }
-      restoreAffineExport();
-      textures.restore();
-      for (const e of original) this.optimizer.preview(e, false);
-      this.invalidate();
+      try {
+        restoreAffineExport?.();
+      } finally {
+        try {
+          textures?.restore();
+        } finally {
+          for (const e of original) this.optimizer.preview(e, false);
+          this.invalidate();
+        }
+      }
     }
     if (!compact) return glb;
     const { compactGLB } = await import('../optimize/export');

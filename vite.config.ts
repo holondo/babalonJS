@@ -21,6 +21,7 @@ export default defineConfig({
       '@babylonjs/core/Cameras/universalCamera.js',
       '@babylonjs/serializers/glTF/2.0/glTFExporter.js',
       '@babylonjs/serializers/glTF/2.0/glTFSerializer.js',
+      '@babylonjs/serializers/glTF/2.0/index.js',
     ],
   },
   plugins: [
