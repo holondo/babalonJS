@@ -45,5 +45,15 @@ export function nativeARStrings() {
     "Could not open native AR",
     "Could not prepare the AR scene",
     "Native AR bridge unavailable",
+    "AR options",
+    "Lighting",
+    "Real room",
+    "Studio",
+    "Daylight",
+    "Sunset",
+    "Dramatic",
+    "Neon",
+    "Light intensity",
+    "Show FPS",
   ].map(text => [text, tr(text)]));
 }

@@ -85,6 +85,18 @@
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_ar_layers" />
 
+                    <!-- AR Options Toggle (Lighting, Intensity, FPS) -->
+                    <ImageButton
+                        android:id="@+id/btnOptions"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_glass_round"
+                        android:contentDescription="AR Options"
+                        android:padding="10dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ar_options" />
+
                     <!-- Hide Interface Toggle -->
                     <ImageButton
                         android:id="@+id/btnHideUi"
@@ -147,6 +159,188 @@
                     android:textColor="#FF4D4D"
                     android:textSize="13sp"
                     android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Live FPS Badge -->
+            <LinearLayout
+                android:id="@+id/fpsContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_glass_pill"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="4dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvFps"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="— fps"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- AR Options Panel (Lighting, Intensity, FPS) -->
+        <LinearLayout
+            android:id="@+id/optionsPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="72dp"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/bg_glass_panel"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvLightingTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Lighting"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <!-- Horizontal Chips for Lighting Presets -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/lightingChipsContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/chipRoom"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_ar_chip_active"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:text="Real room"
+                        android:textAllCaps="false"
+                        android:textColor="#120D1B"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/chipStudio"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_ar_chip_inactive"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:text="Studio"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/chipDaylight"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_ar_chip_inactive"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:text="Daylight"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/chipSunset"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_ar_chip_inactive"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:text="Sunset"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/chipDramatic"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_ar_chip_inactive"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:text="Dramatic"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/chipNeon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:background="@drawable/bg_ar_chip_inactive"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:text="Neon"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </HorizontalScrollView>
+
+            <TextView
+                android:id="@+id/tvLightIntensity"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="Light intensity: 100%"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+
+            <SeekBar
+                android:id="@+id/sbLightIntensity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:max="250"
+                android:min="20"
+                android:progress="100"
+                android:progressTint="#F5C542"
+                android:thumbTint="#F5C542" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/btnToggleFps"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_ar_chip_inactive"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:text="Show FPS"
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp" />
             </LinearLayout>
         </LinearLayout>
 

@@ -459,6 +459,8 @@ export class UI {
             const clip = this.editor.anim.current(e)!;
             return { name: nativeAnimationName(e), speed: clip.speedRatio, loop: clip.loopAnimation };
           }),
+          lighting: 'room',
+          lightLevel: this.editor.env.intensity || 1.0,
         });
         const nativeBridge = (window as unknown as { AndroidNative?: { launchArWithData?: (data: string, title: string, placement: string) => void } }).AndroidNative;
         if (nativeBridge?.launchArWithData) {

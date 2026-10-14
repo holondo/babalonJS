@@ -4,26 +4,20 @@ import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.annotation.SuppressLint
-import android.view.GestureDetector
-import android.view.ScaleGestureDetector
-import android.view.WindowManager
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.CancellationException
-import org.json.JSONObject
-import io.github.sceneview.node.Node
-import dev.romainguy.kotlin.math.Quaternion
-import dev.romainguy.kotlin.math.degrees
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.WindowManager
+import android.widget.SeekBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -32,26 +26,40 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
+import com.google.android.filament.IndirectLight
+import com.google.android.filament.LightManager
+import com.google.android.filament.View as FilamentView
+import com.google.ar.core.Anchor
 import com.google.ar.core.Config
-import com.google.ar.core.HitResult
 import com.google.ar.core.DepthPoint
-import com.google.ar.core.TrackingFailureReason
+import com.google.ar.core.HitResult
 import com.google.ar.core.Plane
 import com.google.ar.core.Point
-import com.google.ar.core.Anchor
+import com.google.ar.core.TrackingFailureReason
 import com.google.ar.core.TrackingState
 import com.holondo.babalon.R
 import com.holondo.babalon.databinding.ActivityArBinding
 import com.holondo.babalon.databinding.ItemArMeasurementBinding
 import dev.romainguy.kotlin.math.Float3
+import dev.romainguy.kotlin.math.Float4
+import dev.romainguy.kotlin.math.Quaternion
+import dev.romainguy.kotlin.math.degrees
 import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.ar.scene.PlaneRenderer
 import io.github.sceneview.collision.Vector3
+import io.github.sceneview.environment.Environment
+import io.github.sceneview.node.LightNode
 import io.github.sceneview.node.ModelNode
+import io.github.sceneview.node.Node
 import java.io.File
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class ArActivity : AppCompatActivity() {
 
@@ -81,6 +89,100 @@ class ArActivity : AppCompatActivity() {
     private var frameWindowStart = 0L
     private var isVideoMode = false
     private var isMeasuring = false
+
+    // Options & Lighting
+    private var isOptionsOpen = false
+    private var showFps = false
+    private val fpsTimerHandler = Handler(Looper.getMainLooper())
+    private var lastFpsTime = 0L
+    private var lastFpsFrameCount = 0
+
+    private val fpsRunnable = object : Runnable {
+        override fun run() {
+            if (showFps) {
+                val now = SystemClock.elapsedRealtime()
+                val delta = (now - lastFpsTime).coerceAtLeast(1)
+                val frames = frameCount - lastFpsFrameCount
+                val currentFps = (frames * 1000f / delta).roundToInt()
+                binding.tvFps.text = "$currentFps fps"
+                lastFpsTime = now
+                lastFpsFrameCount = frameCount
+                fpsTimerHandler.postDelayed(this, 500)
+            }
+        }
+    }
+
+    private data class PresetLightDef(
+        val type: String, // "directional" or "point"
+        val pos: Float3,
+        val intensityLux: Float,
+        val color: Float4,
+        val shadows: Boolean = false
+    )
+
+    private data class LightingPreset(
+        val id: String,
+        val label: String,
+        val ambientColor: Float3,
+        val ambientLux: Float,
+        val lights: List<PresetLightDef>
+    )
+
+    private val lightingPresets = listOf(
+        LightingPreset(
+            id = "studio",
+            label = "Studio",
+            ambientColor = Float3(0.95f, 0.95f, 1.0f),
+            ambientLux = 28_000f,
+            lights = listOf(
+                PresetLightDef("directional", Float3(-3f, 5f, -3f), 70_000f, Float4(1.0f, 0.95f, 0.88f, 1.0f), shadows = true),
+                PresetLightDef("point", Float3(3f, 2f, -2f), 30_000f, Float4(0.86f, 0.91f, 1.0f, 1.0f))
+            )
+        ),
+        LightingPreset(
+            id = "daylight",
+            label = "Daylight",
+            ambientColor = Float3(0.8f, 0.9f, 1.0f),
+            ambientLux = 45_000f,
+            lights = listOf(
+                PresetLightDef("directional", Float3(4f, 8f, 3f), 95_000f, Float4(1.0f, 0.97f, 0.92f, 1.0f), shadows = true)
+            )
+        ),
+        LightingPreset(
+            id = "sunset",
+            label = "Sunset",
+            ambientColor = Float3(0.65f, 0.45f, 0.75f),
+            ambientLux = 20_000f,
+            lights = listOf(
+                PresetLightDef("directional", Float3(-6f, 1.6f, -3f), 80_000f, Float4(1.0f, 0.54f, 0.24f, 1.0f), shadows = true),
+                PresetLightDef("point", Float3(3f, 2.5f, 3f), 25_000f, Float4(0.36f, 0.48f, 1.0f, 1.0f))
+            )
+        ),
+        LightingPreset(
+            id = "dramatic",
+            label = "Dramatic",
+            ambientColor = Float3(0.2f, 0.2f, 0.25f),
+            ambientLux = 6_000f,
+            lights = listOf(
+                PresetLightDef("directional", Float3(0.5f, 5f, 1f), 110_000f, Float4(1.0f, 0.96f, 0.91f, 1.0f), shadows = true)
+            )
+        ),
+        LightingPreset(
+            id = "neon",
+            label = "Neon",
+            ambientColor = Float3(0.12f, 0.12f, 0.22f),
+            ambientLux = 8_000f,
+            lights = listOf(
+                PresetLightDef("point", Float3(-2f, 1.5f, -1f), 55_000f, Float4(1.0f, 0.18f, 0.84f, 1.0f)),
+                PresetLightDef("point", Float3(2f, 1.5f, 1f), 55_000f, Float4(0.12f, 0.89f, 1.0f, 1.0f))
+            )
+        )
+    )
+
+    private var currentLightingMode = "room" // "room", "studio", "daylight", "sunset", "dramatic", "neon"
+    private var lightIntensityLevel = 1.0f // 0.2f to 2.5f
+    private val rigLights = mutableListOf<LightNode>()
+    private var customIndirectLight: IndirectLight? = null
 
     // Measurement points
     private var pendingMeasurePoint: Anchor? = null
@@ -121,8 +223,14 @@ class ArActivity : AppCompatActivity() {
         translations = intent.getStringExtra("placement")?.let {
             runCatching { JSONObject(it).optJSONObject("strings") }.getOrNull()
         } ?: JSONObject()
+
+        val placementObj = intent.getStringExtra("placement")?.let { runCatching { JSONObject(it) }.getOrNull() }
+        currentLightingMode = placementObj?.optString("lighting", "room") ?: "room"
+        lightIntensityLevel = placementObj?.optDouble("lightLevel", 1.0)?.toFloat() ?: 1.0f
+
         binding.btnExit.contentDescription = tr("Exit AR")
         binding.btnOcclusion.contentDescription = tr("Depth occlusion")
+        binding.btnOptions.contentDescription = tr("AR options")
         binding.btnHideUi.contentDescription = tr("Hide interface")
         binding.btnPlaceInFront.text = tr("Place scene")
         binding.btnMove.contentDescription = tr("Move scene")
@@ -130,6 +238,17 @@ class ArActivity : AppCompatActivity() {
         binding.btnShutter.contentDescription = tr("Capture")
         binding.btnCaptureMode.contentDescription = tr("Toggle video mode")
         binding.btnShowUi.contentDescription = tr("Show interface")
+
+        binding.tvLightingTitle.text = tr("Lighting")
+        binding.chipRoom.text = tr("Real room")
+        binding.chipStudio.text = tr("Studio")
+        binding.chipDaylight.text = tr("Daylight")
+        binding.chipSunset.text = tr("Sunset")
+        binding.chipDramatic.text = tr("Dramatic")
+        binding.chipNeon.text = tr("Neon")
+        binding.tvLightIntensity.text = "${tr("Light intensity")}: ${(lightIntensityLevel * 100f).roundToInt()}%"
+        binding.btnToggleFps.text = tr("Show FPS")
+        binding.sbLightIntensity.progress = (lightIntensityLevel * 100f).roundToInt().coerceIn(20, 250)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setupFullscreenAndInsets()
@@ -186,23 +305,45 @@ class ArActivity : AppCompatActivity() {
         val sceneView = binding.sceneView
         val placement = intent.getStringExtra("placement")?.let { runCatching { JSONObject(it) }.getOrNull() }
         baseYaw = placement?.optDouble("baseYaw", 0.0)?.toFloat() ?: 0f
+
+        // Performance optimizations: Dynamic resolution and medium quality HDR color buffer
+        sceneView.view.apply {
+            dynamicResolutionOptions = FilamentView.DynamicResolutionOptions().apply {
+                enabled = true
+                homogeneousScaling = true
+                quality = FilamentView.QualityLevel.MEDIUM
+                minScale = 0.65f
+                maxScale = 1.0f
+                sharpness = 0.8f
+            }
+            renderQuality = FilamentView.RenderQuality().apply {
+                hdrColorBuffer = FilamentView.QualityLevel.MEDIUM
+            }
+            antiAliasing = FilamentView.AntiAliasing.FXAA
+        }
+
         sceneView.planeRenderer.apply {
             isEnabled = true
             isVisible = true
             isShadowReceiver = false
             planeRendererMode = PlaneRenderer.PlaneRendererMode.RENDER_CENTER
         }
-        // Configure before attaching the lifecycle. The config-changed callback is a
-        // notification, not a second chance to change ARCore's applied configuration.
+
+        // Configure session with Environmental HDR support
         sceneView.sessionConfiguration = { session, config ->
             config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
             config.instantPlacementMode = Config.InstantPlacementMode.DISABLED
-            config.lightEstimationMode = Config.LightEstimationMode.DISABLED
+            config.lightEstimationMode = if (currentLightingMode == "room") {
+                Config.LightEstimationMode.ENVIRONMENTAL_HDR
+            } else {
+                Config.LightEstimationMode.DISABLED
+            }
             config.depthMode = Config.DepthMode.DISABLED
             depthSupported = session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
             binding.btnOcclusion.isEnabled = depthSupported
             binding.btnOcclusion.alpha = if (depthSupported) 1f else 0.4f
         }
+
         sceneView.cameraStream?.isDepthOcclusionEnabled = false
         sceneView.onSessionFailed = { exception ->
             Log.e("ArActivity", "ARCore session failed", exception)
@@ -213,6 +354,7 @@ class ArActivity : AppCompatActivity() {
         binding.reticleView.visibility = View.GONE
         binding.tvHint.text = tr("Loading 3D scene…")
         sceneView.releaseContent = { releaseSceneContent() }
+
         modelLoad = lifecycleScope.launch {
             val started = SystemClock.elapsedRealtime()
             try {
@@ -256,6 +398,10 @@ class ArActivity : AppCompatActivity() {
                     isVisible = false
                     sceneView.addChildNode(this)
                 }
+                // Apply lighting mode once model is loaded
+                applyLightingMode(currentLightingMode)
+                applyLightIntensity(lightIntensityLevel)
+
                 Log.i("ArActivity", "Scene loaded in ${SystemClock.elapsedRealtime() - started} ms; size=${model.extents}; origin=${model.position}")
                 binding.tvHint.text = tr("Move phone slowly and point at a surface")
             } catch (cancelled: CancellationException) {
@@ -266,6 +412,7 @@ class ArActivity : AppCompatActivity() {
                 finish()
             }
         }
+
         sceneView.onSessionUpdated = { _, frame ->
             val tracking = frame.camera.trackingState
             if (tracking != lastTrackingState) {
@@ -317,12 +464,16 @@ class ArActivity : AppCompatActivity() {
             }
             updateMeasurementLabels()
         }
-        // Handle gestures on the composition. A ModelNode cannot drag on an AnchorNode's
-        // collision shape; that default gesture otherwise detaches/moves the wrong node.
+
+        // Handle gestures on the composition.
         val taps = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent) = true
             override fun onSingleTapUp(e: MotionEvent): Boolean {
                 if (multiTouch) return true
+                if (isOptionsOpen) {
+                    closeOptionsPanel()
+                    return true
+                }
                 if (isMeasuring) {
                     measurementHit(e.x, e.y)?.let { handleMeasurementTap(it) }
                 } else if (!isPlaced || isMoving) {
@@ -368,6 +519,134 @@ class ArActivity : AppCompatActivity() {
         sceneView.lifecycle = lifecycle
     }
 
+    private fun applyLightingMode(mode: String) {
+        currentLightingMode = mode
+        updateLightingChipsUI()
+        val sceneView = binding.sceneView
+
+        // Clean previous custom lights & indirect light
+        for (light in rigLights) {
+            sceneView.removeChildNode(light)
+            light.destroy()
+        }
+        rigLights.clear()
+        customIndirectLight?.let {
+            sceneView.engine.destroyIndirectLight(it)
+            customIndirectLight = null
+        }
+
+        val session = sceneView.session
+        if (mode == "room") {
+            try {
+                session?.let { s ->
+                    s.configure(s.config.apply {
+                        lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
+                    })
+                }
+            } catch (_: Exception) {
+                try {
+                    session?.let { s ->
+                        s.configure(s.config.apply {
+                            lightEstimationMode = Config.LightEstimationMode.AMBIENT_INTENSITY
+                        })
+                    }
+                } catch (_: Exception) {}
+            }
+            sceneView.lightEstimator?.isEnabled = true
+            sceneView.mainLightNode?.let { it.intensity = 100_000f * lightIntensityLevel }
+        } else {
+            try {
+                session?.let { s ->
+                    s.configure(s.config.apply {
+                        lightEstimationMode = Config.LightEstimationMode.DISABLED
+                    })
+                }
+            } catch (e: Exception) {
+                Log.w("ArActivity", "Failed to disable ARCore light estimation", e)
+            }
+            sceneView.lightEstimator?.isEnabled = false
+
+            val preset = lightingPresets.firstOrNull { it.id == mode } ?: lightingPresets[0]
+
+            // Diffuse spherical harmonics ambient light
+            val factor = 0.282095f
+            val sh = FloatArray(27)
+            sh[0] = preset.ambientColor.x * factor
+            sh[1] = preset.ambientColor.y * factor
+            sh[2] = preset.ambientColor.z * factor
+            val indirect = IndirectLight.Builder()
+                .irradiance(3, sh)
+                .intensity(preset.ambientLux * lightIntensityLevel)
+                .build(sceneView.engine)
+            customIndirectLight = indirect
+            sceneView.environment = Environment(indirectLight = indirect)
+
+            // Preset light nodes
+            for (def in preset.lights) {
+                val node = LightNode(
+                    engine = sceneView.engine,
+                    type = if (def.type == "directional") LightManager.Type.DIRECTIONAL else LightManager.Type.POINT
+                ) {
+                    color(def.color.x, def.color.y, def.color.z)
+                    intensity(def.intensityLux * lightIntensityLevel)
+                    if (def.type == "directional") {
+                        val dir = -def.pos
+                        val len = sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z).coerceAtLeast(1e-4f)
+                        direction(dir.x / len, dir.y / len, dir.z / len)
+                        castShadows(def.shadows)
+                    } else {
+                        position(def.pos.x, def.pos.y, def.pos.z)
+                        falloff(10f)
+                    }
+                }
+                rigLights.add(node)
+                sceneView.addChildNode(node)
+            }
+        }
+    }
+
+    private fun applyLightIntensity(level: Float) {
+        lightIntensityLevel = level
+        binding.tvLightIntensity.text = "${tr("Light intensity")}: ${(level * 100f).roundToInt()}%"
+        if (currentLightingMode == "room") {
+            binding.sceneView.mainLightNode?.let { it.intensity = 100_000f * level }
+            binding.sceneView.environment?.indirectLight?.setIntensity(30_000f * level)
+        } else {
+            customIndirectLight?.setIntensity(
+                (lightingPresets.firstOrNull { it.id == currentLightingMode }?.ambientLux ?: 28_000f) * level
+            )
+            val preset = lightingPresets.firstOrNull { it.id == currentLightingMode }
+            if (preset != null) {
+                for (i in 0 until minOf(rigLights.size, preset.lights.size)) {
+                    rigLights[i].intensity = preset.lights[i].intensityLux * level
+                }
+            }
+        }
+    }
+
+    private fun updateLightingChipsUI() {
+        val chips = mapOf(
+            "room" to binding.chipRoom,
+            "studio" to binding.chipStudio,
+            "daylight" to binding.chipDaylight,
+            "sunset" to binding.chipSunset,
+            "dramatic" to binding.chipDramatic,
+            "neon" to binding.chipNeon
+        )
+        for ((id, button) in chips) {
+            val isActive = id == currentLightingMode
+            button.setBackgroundResource(if (isActive) R.drawable.bg_ar_chip_active else R.drawable.bg_ar_chip_inactive)
+            button.setTextColor(if (isActive) Color.parseColor("#120D1B") else Color.WHITE)
+            button.typeface = if (isActive) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        }
+    }
+
+    private fun closeOptionsPanel() {
+        isOptionsOpen = false
+        binding.optionsPanel.visibility = View.GONE
+        binding.btnOptions.setColorFilter(Color.WHITE)
+    }
+
     private fun measurementHit(x: Float, y: Float): HitResult? {
         val frame = binding.sceneView.frame ?: return null
         if (frame.camera.trackingState != TrackingState.TRACKING) return null
@@ -403,7 +682,6 @@ class ArActivity : AppCompatActivity() {
         val content = sceneNode ?: return false
         val sceneView = binding.sceneView
         try {
-            // Create first: a failed anchor must not discard the current placement.
             val anchor = hitResult.createAnchor()
             sceneView.removeChildNode(content)
             content.parent?.removeChildNode(content)
@@ -416,14 +694,26 @@ class ArActivity : AppCompatActivity() {
             sceneView.addChildNode(placed)
             content.position = Float3(0f)
             content.isVisible = true
-            // Convert once into anchor space. ARCore world-map refinements must move
-            // and rotate the composition with its anchor, without counter-rotation.
+
             placementBasis = placed.getLocalQuaternion(Quaternion())
             updateSceneRotation()
             isPlaced = true
             isMoving = false
             placementHit = null
+
+            // Optimization: Stop plane visualizer and pause plane finding when placed
             sceneView.planeRenderer.isVisible = false
+            sceneView.planeRenderer.isEnabled = false
+            try {
+                sceneView.session?.let { session ->
+                    session.configure(session.config.apply {
+                        planeFindingMode = Config.PlaneFindingMode.DISABLED
+                    })
+                }
+            } catch (e: Exception) {
+                Log.w("ArActivity", "Could not pause plane finding", e)
+            }
+
             binding.reticleView.visibility = View.GONE
             binding.btnPlaceInFront.visibility = View.GONE
             binding.placedControls.visibility = View.VISIBLE
@@ -439,7 +729,6 @@ class ArActivity : AppCompatActivity() {
     }
 
     private fun placeInFrontOfMe() {
-        // Refresh the hit at tap time. Never use a stale reticle or a camera-relative anchor.
         placeSceneAt(binding.sceneView.width / 2f, binding.sceneView.height / 2f)
     }
 
@@ -491,7 +780,6 @@ class ArActivity : AppCompatActivity() {
             val p1 = m.p1.pose
             val p2 = m.p2.pose
             val mid = floatArrayOf((p1.tx() + p2.tx()) / 2f, (p1.ty() + p2.ty()) / 2f, (p1.tz() + p2.tz()) / 2f)
-            // SceneView 2.x worldToScreenPoint returns x/y only (z is always zero).
             val inFront = camera.pose.inverse().transformPoint(mid)[2] < -0.05f
             val tracking = camera.trackingState == TrackingState.TRACKING &&
                 m.p1.trackingState == TrackingState.TRACKING && m.p2.trackingState == TrackingState.TRACKING
@@ -529,16 +817,63 @@ class ArActivity : AppCompatActivity() {
 
         binding.btnPlaceInFront.setOnClickListener { placeInFrontOfMe() }
 
+        binding.btnOptions.setOnClickListener {
+            isOptionsOpen = !isOptionsOpen
+            binding.optionsPanel.visibility = if (isOptionsOpen) View.VISIBLE else View.GONE
+            binding.btnOptions.setColorFilter(if (isOptionsOpen) Color.parseColor("#F5C542") else Color.WHITE)
+        }
+
+        binding.chipRoom.setOnClickListener { applyLightingMode("room") }
+        binding.chipStudio.setOnClickListener { applyLightingMode("studio") }
+        binding.chipDaylight.setOnClickListener { applyLightingMode("daylight") }
+        binding.chipSunset.setOnClickListener { applyLightingMode("sunset") }
+        binding.chipDramatic.setOnClickListener { applyLightingMode("dramatic") }
+        binding.chipNeon.setOnClickListener { applyLightingMode("neon") }
+
+        binding.sbLightIntensity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    applyLightIntensity(progress / 100f)
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        binding.btnToggleFps.setOnClickListener {
+            showFps = !showFps
+            binding.fpsContainer.visibility = if (showFps) View.VISIBLE else View.GONE
+            binding.btnToggleFps.setBackgroundResource(if (showFps) R.drawable.bg_ar_chip_active else R.drawable.bg_ar_chip_inactive)
+            binding.btnToggleFps.setTextColor(if (showFps) Color.parseColor("#120D1B") else Color.WHITE)
+            fpsTimerHandler.removeCallbacks(fpsRunnable)
+            if (showFps) {
+                lastFpsTime = SystemClock.elapsedRealtime()
+                lastFpsFrameCount = frameCount
+                fpsTimerHandler.post(fpsRunnable)
+            }
+        }
+
         binding.btnMove.setOnClickListener {
             placementBasis = Quaternion()
             if (isMeasuring) { isMeasuring = false; clearPendingMeasurement(); binding.btnMeasure.setColorFilter(Color.WHITE) }
+            closeOptionsPanel()
             sceneNode?.let {
                 anchorNode?.removeChildNode(it)
                 it.isVisible = false
                 binding.sceneView.addChildNode(it)
             }
             isMoving = true
+            binding.sceneView.planeRenderer.isEnabled = true
             binding.sceneView.planeRenderer.isVisible = true
+            try {
+                binding.sceneView.session?.let { session ->
+                    session.configure(session.config.apply {
+                        planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
+                    })
+                }
+            } catch (e: Exception) {
+                Log.w("ArActivity", "Could not resume plane finding", e)
+            }
             binding.btnPlaceInFront.isEnabled = false
             binding.reticleView.visibility = View.VISIBLE
             binding.btnPlaceInFront.visibility = View.VISIBLE
@@ -572,10 +907,29 @@ class ArActivity : AppCompatActivity() {
         binding.btnMeasure.setOnClickListener {
             isMeasuring = !isMeasuring
             clearPendingMeasurement()
+            closeOptionsPanel()
             binding.btnMeasure.setColorFilter(if (isMeasuring) Color.parseColor("#F5C542") else Color.WHITE)
             if (isMeasuring) {
+                binding.sceneView.planeRenderer.isEnabled = true
+                try {
+                    binding.sceneView.session?.let { session ->
+                        session.configure(session.config.apply {
+                            planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
+                        })
+                    }
+                } catch (e: Exception) { }
                 binding.tvHint.text = tr("Measure: tap first surface point")
             } else {
+                if (isPlaced && !isMoving) {
+                    binding.sceneView.planeRenderer.isEnabled = false
+                    try {
+                        binding.sceneView.session?.let { session ->
+                            session.configure(session.config.apply {
+                                planeFindingMode = Config.PlaneFindingMode.DISABLED
+                            })
+                        }
+                    } catch (e: Exception) { }
+                }
                 binding.tvHint.text = tr("Drag to turn · pinch to resize")
             }
         }
@@ -604,6 +958,7 @@ class ArActivity : AppCompatActivity() {
         }
 
         binding.btnHideUi.setOnClickListener {
+            closeOptionsPanel()
             binding.uiContainer.visibility = View.GONE
             binding.reticleView.visibility = View.GONE
             binding.measurementsContainer.visibility = View.GONE
@@ -699,10 +1054,20 @@ class ArActivity : AppCompatActivity() {
     }
 
     private fun releaseSceneContent() {
+        fpsTimerHandler.removeCallbacks(fpsRunnable)
         modelLoad?.cancel()
         clearMeasurements()
-        // ModelLoader owns every glTF entity, including ModelNode's root. Destroying
-        // that root here would double-free it when the loader releases its asset.
+
+        for (light in rigLights) {
+            binding.sceneView.removeChildNode(light)
+            light.destroy()
+        }
+        rigLights.clear()
+        customIndirectLight?.let {
+            binding.sceneView.engine.destroyIndirectLight(it)
+            customIndirectLight = null
+        }
+
         sceneNode?.let { content ->
             content.parent?.removeChildNode(content)
             binding.sceneView.removeChildNode(content)
@@ -716,6 +1081,7 @@ class ArActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        fpsTimerHandler.removeCallbacks(fpsRunnable)
         timerHandler.removeCallbacks(timerRunnable)
         super.onDestroy()
     }
