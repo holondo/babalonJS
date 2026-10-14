@@ -140,15 +140,18 @@ if (Capacitor.isNativePlatform()) {
         const { Filesystem } = await import('@capacitor/filesystem');
         const content = await Filesystem.readFile({ path: data.url });
         const name = data.url.split('/').pop() || 'imported-model';
-        const base64Data = typeof content.data === 'string' ? content.data : '';
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        let file: File;
+        if (typeof content.data === 'string') {
+          const byteCharacters = atob(content.data);
+          const bytes = new Uint8Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            bytes[i] = byteCharacters.charCodeAt(i);
+          }
+          file = new File([bytes], name);
+        } else {
+          file = new File([content.data], name);
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        const file = new File([byteArray], name);
-        ui.openFiles([file]);
+        await ui.openFiles([file]);
       } catch (err) {
         console.warn('Could not read opened file intent:', err);
       }
