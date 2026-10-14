@@ -331,6 +331,19 @@
                 android:orientation="horizontal">
 
                 <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/btnToggleShadows"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_ar_chip_inactive"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:text="Shadows"
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp" />
+
+                <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/btnToggleFps"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"

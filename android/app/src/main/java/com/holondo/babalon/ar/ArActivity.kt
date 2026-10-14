@@ -93,6 +93,7 @@ class ArActivity : AppCompatActivity() {
     // Options & Lighting
     private var isOptionsOpen = false
     private var showFps = false
+    private var shadowsEnabled = false
     private val fpsTimerHandler = Handler(Looper.getMainLooper())
     private var lastFpsTime = 0L
     private var lastFpsFrameCount = 0
@@ -247,6 +248,7 @@ class ArActivity : AppCompatActivity() {
         binding.chipDramatic.text = tr("Dramatic")
         binding.chipNeon.text = tr("Neon")
         binding.tvLightIntensity.text = "${tr("Light intensity")}: ${(lightIntensityLevel * 100f).roundToInt()}%"
+        binding.btnToggleShadows.text = tr("Shadows")
         binding.btnToggleFps.text = tr("Show FPS")
         binding.sbLightIntensity.progress = (lightIntensityLevel * 100f).roundToInt().coerceIn(20, 250)
 
@@ -320,6 +322,12 @@ class ArActivity : AppCompatActivity() {
                 hdrColorBuffer = FilamentView.QualityLevel.MEDIUM
             }
             antiAliasing = FilamentView.AntiAliasing.FXAA
+            ambientOcclusionOptions = FilamentView.AmbientOcclusionOptions().apply {
+                enabled = false
+            }
+            bloomOptions = FilamentView.BloomOptions().apply {
+                enabled = false
+            }
         }
 
         sceneView.planeRenderer.apply {
@@ -329,8 +337,23 @@ class ArActivity : AppCompatActivity() {
             planeRendererMode = PlaneRenderer.PlaneRendererMode.RENDER_CENTER
         }
 
-        // Configure session with Environmental HDR support
+        // Configure session with Environmental HDR and target 60 FPS camera capture
         sceneView.sessionConfiguration = { session, config ->
+            runCatching {
+                val filter = com.google.ar.core.CameraConfigFilter(session).apply {
+                    targetFps = java.util.EnumSet.of(
+                        com.google.ar.core.CameraConfig.TargetFps.TARGET_FPS_60,
+                        com.google.ar.core.CameraConfig.TargetFps.TARGET_FPS_30
+                    )
+                }
+                val configs = session.getSupportedCameraConfigs(filter)
+                val config60 = configs.firstOrNull { it.fpsRange.upper >= 60 }
+                if (config60 != null) {
+                    session.cameraConfig = config60
+                    Log.i("ArActivity", "Selected 60 FPS camera config: ${config60.cameraId}, fps=${config60.fpsRange}")
+                }
+            }.onFailure { Log.w("ArActivity", "Could not configure 60 FPS camera", it) }
+
             config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
             config.instantPlacementMode = Config.InstantPlacementMode.DISABLED
             config.lightEstimationMode = if (currentLightingMode == "room") {
@@ -593,7 +616,7 @@ class ArActivity : AppCompatActivity() {
                         val dir = -def.pos
                         val len = sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z).coerceAtLeast(1e-4f)
                         direction(dir.x / len, dir.y / len, dir.z / len)
-                        castShadows(def.shadows)
+                        castShadows(def.shadows && shadowsEnabled)
                     } else {
                         position(def.pos.x, def.pos.y, def.pos.z)
                         falloff(10f)
@@ -839,6 +862,19 @@ class ArActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
+
+        binding.btnToggleShadows.setOnClickListener {
+            shadowsEnabled = !shadowsEnabled
+            binding.btnToggleShadows.setBackgroundResource(
+                if (shadowsEnabled) R.drawable.bg_ar_chip_active else R.drawable.bg_ar_chip_inactive
+            )
+            binding.btnToggleShadows.setTextColor(
+                if (shadowsEnabled) Color.parseColor("#120D1B") else Color.WHITE
+            )
+            binding.btnToggleShadows.typeface = if (shadowsEnabled) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            applyLightingMode(currentLightingMode)
+            applyLightIntensity(lightIntensityLevel)
+        }
 
         binding.btnToggleFps.setOnClickListener {
             showFps = !showFps

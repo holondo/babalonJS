@@ -54,6 +54,7 @@ export function nativeARStrings() {
     "Dramatic",
     "Neon",
     "Light intensity",
+    "Shadows",
     "Show FPS",
   ].map(text => [text, tr(text)]));
 }

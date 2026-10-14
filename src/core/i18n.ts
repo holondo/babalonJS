@@ -547,6 +547,7 @@ const PT: Record<string, string> = {
   'Light intensity': 'Intensidade da luz',
   'Photo filter': 'Filtro da foto',
   'Show FPS': 'Mostrar FPS',
+  Shadows: 'Sombras',
   'Gyro mode: move the phone to look around': 'Modo giroscópio: mova o celular para olhar em volta',
   'Gyro mode on: turn and tilt the phone': 'Modo giroscópio ligado: gire e incline o celular',
   'Orientation sensors are not available': 'Sensores de orientação não disponíveis',

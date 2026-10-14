@@ -467,14 +467,23 @@ export class UI {
           await new Promise<void>((resolve, reject) => {
             const stateChanged = (event: Event) => {
               const state = (event as CustomEvent<string>).detail;
-              if (state === 'started') { activity.finish(); return; }
+              if (state === 'started') {
+                this.editor.pauseRendering();
+                activity.finish();
+                return;
+              }
               window.removeEventListener('nativearstate', stateChanged);
+              this.editor.resumeRendering();
               if (state === 'closed') resolve();
               else reject(new Error(tr(state)));
             };
             window.addEventListener('nativearstate', stateChanged);
             try { nativeBridge.launchArWithData!(base64, this.projectName || 'Babalon AR', placement); }
-            catch (error) { window.removeEventListener('nativearstate', stateChanged); reject(error); }
+            catch (error) {
+              this.editor.resumeRendering();
+              window.removeEventListener('nativearstate', stateChanged);
+              reject(error);
+            }
           });
         } else {
           throw new Error(tr('Native AR bridge unavailable'));
@@ -482,6 +491,7 @@ export class UI {
       } catch (e) {
         this.toast(tr('Could not start AR: {error}', { error: errorMessage(e) }), 'error');
       } finally {
+        this.editor.resumeRendering();
         this.nativeAR = false;
         activity.finish();
         await restoreCamera().catch(e => this.toast(errorMessage(e), 'error'));

@@ -202,34 +202,47 @@ public class MainActivity extends BridgeActivity {
             }
 
             @JavascriptInterface
-            public void launchAr(String filePath, String title) {
-                runOnUiThread(() -> launchArActivity(filePath, title, null));
+            public void launchAr(String filePath, String title, String placement) {
+                runOnUiThread(() -> launchArActivity(filePath, title, placement));
             }
 
             @JavascriptInterface
             public void launchArWithData(String base64Data, String title, String placement) {
                 new Thread(() -> {
+                    java.io.File glbFile = null;
                     try {
                         byte[] bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
-                        java.io.File glbFile = java.io.File.createTempFile("native-ar-", ".glb", getCacheDir());
-                        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(glbFile)) {
+                        glbFile = java.io.File.createTempFile("native-ar-", ".glb", getCacheDir());
+                        try (java.io.BufferedOutputStream fos = new java.io.BufferedOutputStream(new java.io.FileOutputStream(glbFile), 65536)) {
                             fos.write(bytes);
                             fos.flush();
                         }
+                        final java.io.File finalFile = glbFile;
                         runOnUiThread(() -> {
-                            arTransferFile = glbFile;
-                            try { launchArActivity(glbFile.getAbsolutePath(), title, placement); }
+                            arTransferFile = finalFile;
+                            try { launchArActivity(finalFile.getAbsolutePath(), title, placement); }
                             catch (Exception e) {
-                                glbFile.delete(); arTransferFile = null;
+                                finalFile.delete(); arTransferFile = null;
                                 notifyArState("Could not open native AR");
                             }
                         });
                     } catch (Exception e) {
+                        if (glbFile != null && glbFile.exists()) glbFile.delete();
                         android.util.Log.e("MainActivity", "Failed to decode and launch AR", e);
                         runOnUiThread(() -> notifyArState("Could not prepare the AR scene"));
                     }
                 }).start();
             }
         }, "AndroidNative");
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            if (level >= TRIM_MEMORY_UI_HIDDEN) {
+                getBridge().getWebView().freeMemory();
+            }
+        }
     }
 }

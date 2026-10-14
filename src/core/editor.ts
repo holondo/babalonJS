@@ -567,10 +567,25 @@ export class Editor {
     });
   }
 
-  // ---------- Events / history ----------
-
   private activeUntil = 0;
   private lastCameraState = '';
+  private renderingPaused = false;
+
+  /** Completely stops the render loop (e.g. while native AR is covering the screen). */
+  pauseRendering() {
+    this.renderingPaused = true;
+    this.engine.stopRenderLoop();
+  }
+
+  /** Resumes the render loop and redraws the scene. */
+  resumeRendering() {
+    if (!this.renderingPaused) return;
+    this.renderingPaused = false;
+    this.engine.runRenderLoop(() => {
+      if (this.needsRender()) this.scene.render();
+    });
+    this.invalidate();
+  }
 
   /** Keeps the scene drawing for a while (call after any change that should show on screen). */
   invalidate(ms = 1500) {
@@ -579,6 +594,7 @@ export class Editor {
 
   /** True while something is moving or loading; otherwise the last frame stays on screen. */
   private needsRender() {
+    if (this.renderingPaused) return false;
     // An AR session shows the camera feed: every frame must be drawn
     if (this.arMode || this.recording || this.cameraBackground) return true;
     if (performance.now() < this.activeUntil) return true;
