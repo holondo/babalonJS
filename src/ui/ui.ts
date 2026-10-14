@@ -80,6 +80,7 @@ import { PhotoMode } from './photo';
 import { MeasureLabels } from './measureLabels';
 import { KIND_ICON, fileSafe, toggleFullscreen, isFullscreen, isFullscreenAvailable, errorMessage } from './shared';
 import type { Tab } from './shared';
+import { Capacitor } from '@capacitor/core';
 
 /** Dock tabs. Photo isn't a tab: it's a mode, with its own panel inside photo mode. */
 const TABS: { id: Exclude<Tab, 'photo'>; label: string; icon: IconNode }[] = [
@@ -117,6 +118,7 @@ export class UI {
 
   tab: Tab | null = null;
   private busy = false;
+  private nativeAR = false;
   private activityId = 0;
   private activityState = '';
   private readonly activities = new Map<string, { label: string; icon: IconNode; progress: number | null; cancel?: () => void }>();
@@ -422,6 +424,70 @@ export class UI {
   }
 
   private async enterAR() {
+    if (Capacitor.isNativePlatform()) {
+      if (this.nativeAR) return;
+      this.nativeAR = true;
+      const restoreCamera = this.photoUI.suspendCamera();
+      if (this.editor.separator.active) this.leaveMesh();
+      const activity = this.beginActivity(tr('Preparing AR…'), View);
+      try {
+        const blob = await this.editor.exportGLB(false, true);
+        if (!blob) throw new Error(tr('Failed to export 3D scene for AR'));
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const res = reader.result as string;
+            const b64 = res.includes(',') ? res.split(',')[1] : res;
+            resolve(b64);
+          };
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(blob);
+        const base64 = await base64Promise;
+
+        const bounds = this.editor.sceneBounds();
+        const view = this.editor.camera.position.subtract(this.editor.camera.target);
+        const { nativeARStrings } = await import('../ar/nativeStrings');
+        const { nativeAnimationName } = await import('../ar/nativeScene');
+        const placement = JSON.stringify({
+          strings: nativeARStrings(),
+          language: getLang(),
+          // Babylon is left-handed; glTF and ARCore are right-handed.
+          origin: bounds ? [bounds.center.x, bounds.min.y, -bounds.center.z] : [0, 0, 0],
+          baseYaw: Math.atan2(view.x, -view.z),
+          animations: this.editor.entities.filter(e => e.visible && this.editor.anim.isPlaying(e)).map(e => {
+            const clip = this.editor.anim.current(e)!;
+            return { name: nativeAnimationName(e), speed: clip.speedRatio, loop: clip.loopAnimation };
+          }),
+        });
+        const nativeBridge = (window as unknown as { AndroidNative?: { launchArWithData?: (data: string, title: string, placement: string) => void } }).AndroidNative;
+        if (nativeBridge?.launchArWithData) {
+          await new Promise<void>((resolve, reject) => {
+            const stateChanged = (event: Event) => {
+              const state = (event as CustomEvent<string>).detail;
+              if (state === 'started') { activity.finish(); return; }
+              window.removeEventListener('nativearstate', stateChanged);
+              if (state === 'closed') resolve();
+              else reject(new Error(tr(state)));
+            };
+            window.addEventListener('nativearstate', stateChanged);
+            try { nativeBridge.launchArWithData!(base64, this.projectName || 'Babalon AR', placement); }
+            catch (error) { window.removeEventListener('nativearstate', stateChanged); reject(error); }
+          });
+        } else {
+          throw new Error(tr('Native AR bridge unavailable'));
+        }
+      } catch (e) {
+        this.toast(tr('Could not start AR: {error}', { error: errorMessage(e) }), 'error');
+      } finally {
+        this.nativeAR = false;
+        activity.finish();
+        await restoreCamera().catch(e => this.toast(errorMessage(e), 'error'));
+        this.scheduleAutosave();
+      }
+      return;
+    }
+
     if (!this.ar && this.arLoader) {
       const activity = this.beginActivity(tr('Preparing AR…'), View);
       try {
@@ -857,7 +923,7 @@ export class UI {
 
   private scheduleAutosave() {
     // During AR the environment is temporarily changed: don't save that state
-    if (this.restoring || this.editor.arMode || this.editor.recording || this.editor.cameraBackground) return;
+    if (this.restoring || this.nativeAR || this.editor.arMode || this.editor.recording || this.editor.cameraBackground) return;
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = window.setTimeout(() => this.autosaveNow().catch((e) => {
       // The reason (quota, private window, blocked storage…) is what tells the user and us what to do
@@ -869,7 +935,7 @@ export class UI {
   private async autosaveNow() {
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = 0;
-    if (this.restoring || this.editor.arMode || this.editor.recording || this.editor.cameraBackground) return;
+    if (this.restoring || this.nativeAR || this.editor.arMode || this.editor.recording || this.editor.cameraBackground) return;
     const id = this.projectId ??= crypto.randomUUID();
     const snap = snapshot(this.editor, this.projectName);
     // Serialize writes so a slow thumbnail never overwrites a newer snapshot or another project.

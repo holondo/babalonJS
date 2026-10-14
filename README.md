@@ -99,6 +99,11 @@ The `editor` object is exposed on `window` for debugging from the browser consol
 
 Development guidelines (for people and coding agents) are in [AGENTS.md](AGENTS.md).
 
+Android AR uses a native SceneView/ARCore Activity while the PWA keeps Babylon
+WebXR. See [Native Android AR integration](docs/android_ar.md) for the scene
+transfer, session lifecycle, placement rules, Samsung debug-build workaround and
+device verification commands.
+
 ## License
 
 Copyright (C) 2026 Guilherme Holanda Sanches

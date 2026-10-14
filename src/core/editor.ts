@@ -2241,7 +2241,7 @@ export class Editor {
    * The scene as a GLB. Compact: optimized geometry and textures where the user optimized,
    * meshopt-compressed (loaded on demand); otherwise the original models, as they were loaded.
    */
-  async exportGLB(compact = false): Promise<Blob> {
+  async exportGLB(compact = false, forAR = false): Promise<Blob> {
     if (this.fusion.preview || this.fusion.busy) this.fusion.cancel();
     this.wrap.cancel();
     this.rigger.difference.clear();
@@ -2258,15 +2258,27 @@ export class Editor {
     if (this.skybox) exclude.add(this.skybox);
     exclude.add(this.pose.ikTarget);
     exclude.add(this.rigger.handle);
-    const original = compact ? [] : this.entities.filter((e) => e.optimization);
+    const original = compact || forAR ? [] : this.entities.filter((e) => e.optimization);
     for (const e of original) this.optimizer.preview(e, true);
-    const textures = this.textureOptimizer.forExport(compact);
+    const textures = this.textureOptimizer.forExport(compact || forAR);
     let glb: Blob;
     const { affineExport } = await import('../edit/affineExport');
     const restoreAffineExport = affineExport(this.scene);
+    const { nativeAnimationName } = await import('../ar/nativeScene');
+    const groups = this.scene.animationGroups;
+    const active = this.entities.filter(e => e.visible && this.anim.isPlaying(e))
+      .map(e => ({ group: this.anim.current(e)!, name: nativeAnimationName(e) }));
+    const groupNames = active.map(({ group }) => group.name);
+    const arAnimations = new Set(active.flatMap(({ group }) => group.targetedAnimations.map(a => a.animation)));
     try {
+      if (forAR) {
+        this.scene.animationGroups = active.map(({ group, name }) => { group.name = name; return group; });
+      }
       const { GLTF2Export } = await import('@babylonjs/serializers/glTF/2.0/glTFSerializer.js');
       const data = await GLTF2Export.GLBAsync(this.scene, 'scene', {
+        // Native AR shows the current composition, without baking every library clip
+        // or quantizing skin weights for a different renderer.
+        shouldExportAnimation: forAR ? animation => arAnimations.has(animation) : undefined,
         shouldExportNode: (node) => {
           if (exclude.has(node) || node.name === 'ambient') return false;
           return node.isEnabled();
@@ -2274,6 +2286,10 @@ export class Editor {
       });
       glb = data.files['scene.glb'] as Blob;
     } finally {
+      if (forAR) {
+        this.scene.animationGroups = groups;
+        active.forEach(({ group }, i) => { group.name = groupNames[i]; });
+      }
       restoreAffineExport();
       textures.restore();
       for (const e of original) this.optimizer.preview(e, false);

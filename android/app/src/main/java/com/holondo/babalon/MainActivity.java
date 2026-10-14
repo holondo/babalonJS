@@ -45,6 +45,63 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
+    private String pendingArGlbPath = null;
+    private String pendingArTitle = null;
+    private String pendingArPlacement = null;
+    private java.io.File arTransferFile;
+
+    private void notifyArState(String state) {
+        getBridge().getWebView().evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('nativearstate', {detail:" + org.json.JSONObject.quote(state) + "}));", null);
+    }
+
+    private final ActivityResultLauncher<Intent> arActivityLauncher =
+        registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (arTransferFile != null) { arTransferFile.delete(); arTransferFile = null; }
+            notifyArState("closed");
+        });
+
+    private final ActivityResultLauncher<String[]> arPermissionLauncher =
+        registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
+            Boolean cameraGranted = result.get(android.Manifest.permission.CAMERA);
+            if (cameraGranted != null && cameraGranted) {
+                if (pendingArGlbPath != null) {
+                    Intent intent = new Intent(MainActivity.this, com.holondo.babalon.ar.ArActivity.class);
+                    intent.putExtra("glb_path", pendingArGlbPath);
+                    intent.putExtra("title", pendingArTitle);
+                    intent.putExtra("placement", pendingArPlacement);
+                    arActivityLauncher.launch(intent);
+                    notifyArState("started");
+                    pendingArGlbPath = null;
+                    pendingArTitle = null;
+                    pendingArPlacement = null;
+                }
+            } else {
+                notifyArState("Camera permission is needed for AR");
+                if (arTransferFile != null) { arTransferFile.delete(); arTransferFile = null; }
+                pendingArGlbPath = null;
+                pendingArTitle = null;
+                pendingArPlacement = null;
+            }
+        });
+
+    private void launchArActivity(String glbPath, String title, String placement) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            pendingArGlbPath = glbPath;
+            pendingArTitle = title;
+            pendingArPlacement = placement;
+            arPermissionLauncher.launch(new String[]{android.Manifest.permission.CAMERA});
+            return;
+        }
+        Intent intent = new Intent(MainActivity.this, com.holondo.babalon.ar.ArActivity.class);
+        intent.putExtra("glb_path", glbPath);
+        intent.putExtra("title", title);
+        intent.putExtra("placement", placement);
+        arActivityLauncher.launch(intent);
+        notifyArState("started");
+    }
+
     private class CustomWebChromeClient extends BridgeWebChromeClient {
         public CustomWebChromeClient(Bridge bridge) {
             super(bridge);
@@ -142,6 +199,36 @@ public class MainActivity extends BridgeActivity {
             @JavascriptInterface
             public boolean isFullscreen() {
                 return isFullscreen;
+            }
+
+            @JavascriptInterface
+            public void launchAr(String filePath, String title) {
+                runOnUiThread(() -> launchArActivity(filePath, title, null));
+            }
+
+            @JavascriptInterface
+            public void launchArWithData(String base64Data, String title, String placement) {
+                new Thread(() -> {
+                    try {
+                        byte[] bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+                        java.io.File glbFile = java.io.File.createTempFile("native-ar-", ".glb", getCacheDir());
+                        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(glbFile)) {
+                            fos.write(bytes);
+                            fos.flush();
+                        }
+                        runOnUiThread(() -> {
+                            arTransferFile = glbFile;
+                            try { launchArActivity(glbFile.getAbsolutePath(), title, placement); }
+                            catch (Exception e) {
+                                glbFile.delete(); arTransferFile = null;
+                                notifyArState("Could not open native AR");
+                            }
+                        });
+                    } catch (Exception e) {
+                        android.util.Log.e("MainActivity", "Failed to decode and launch AR", e);
+                        runOnUiThread(() -> notifyArState("Could not prepare the AR scene"));
+                    }
+                }).start();
             }
         }, "AndroidNative");
     }

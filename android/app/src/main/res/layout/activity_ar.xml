@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- AR SceneView powered by Filament + ARCore -->
+    <com.holondo.babalon.ar.NativeArSceneView
+        android:id="@+id/sceneView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Center placement reticle / surface cursor -->
+    <ImageView
+        android:id="@+id/reticleView"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="center"
+        android:src="@drawable/ar_reticle"
+        android:visibility="visible" />
+
+    <!-- Measurements labels container -->
+    <FrameLayout
+        android:id="@+id/measurementsContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false" />
+
+    <!-- UI Overlay elements -->
+    <FrameLayout
+        android:id="@+id/uiContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <!-- Top Bar Area -->
+        <LinearLayout
+            android:id="@+id/topBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="16dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="8dp">
+
+            <!-- Header Row with Exit on Left and Action Buttons on Right -->
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <!-- Exit AR -->
+                <ImageButton
+                    android:id="@+id/btnExit"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_alignParentStart="true"
+                    android:layout_centerVertical="true"
+                    android:background="@drawable/bg_glass_round"
+                    android:contentDescription="Exit AR"
+                    android:padding="10dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ar_close" />
+
+                <!-- Top Right Actions -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <!-- Depth Occlusion Toggle -->
+                    <ImageButton
+                        android:id="@+id/btnOcclusion"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_glass_round"
+                        android:contentDescription="Depth Occlusion"
+                        android:padding="10dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ar_layers" />
+
+                    <!-- Hide Interface Toggle -->
+                    <ImageButton
+                        android:id="@+id/btnHideUi"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_glass_round"
+                        android:contentDescription="Hide Interface"
+                        android:padding="10dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ar_eye_off" />
+                </LinearLayout>
+            </RelativeLayout>
+
+            <!-- Centered Hint Pill (Cleanly separated below header buttons) -->
+            <LinearLayout
+                android:id="@+id/hintContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_glass_pill"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="8dp">
+
+                <TextView
+                    android:id="@+id/tvHint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="Tap screen or button to place"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- Recording Indicator Pill -->
+            <LinearLayout
+                android:id="@+id/recordingIndicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_glass_pill"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="6dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvRecordTimer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="● REC 00:00"
+                    android:textColor="#FF4D4D"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Bottom Controls Container -->
+        <LinearLayout
+            android:id="@+id/bottomContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="24dp">
+
+            <!-- Place Model Button (Visible before placement or when moving) -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnPlaceInFront"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_glass_pill"
+                android:minWidth="180dp"
+                android:paddingStart="28dp"
+                android:paddingEnd="28dp"
+                android:text="Place Model"
+                android:textAllCaps="false"
+                android:textColor="#F5C542"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <!-- Placed controls bar (Move, Measure, Shutter, Scale, Video) -->
+            <LinearLayout
+                android:id="@+id/placedControls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <!-- Reposition / Move button -->
+                <ImageButton
+                    android:id="@+id/btnMove"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginEnd="12dp"
+                    android:background="@drawable/bg_glass_round"
+                    android:contentDescription="Move scene"
+                    android:padding="11dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ar_move" />
+
+                <!-- Measure real objects button -->
+                <ImageButton
+                    android:id="@+id/btnMeasure"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginEnd="16dp"
+                    android:background="@drawable/bg_glass_round"
+                    android:contentDescription="Measure objects"
+                    android:padding="11dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ar_ruler" />
+
+                <!-- Main Shutter Button -->
+                <ImageButton
+                    android:id="@+id/btnShutter"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:background="@drawable/bg_shutter"
+                    android:contentDescription="Capture" />
+
+                <!-- Scale % / 1:1 Reset button -->
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/btnScale"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="16dp"
+                    android:background="@drawable/bg_glass_round"
+                    android:text="1:1"
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <!-- Mode Toggle (Photo vs Video) -->
+                <ImageButton
+                    android:id="@+id/btnCaptureMode"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/bg_glass_round"
+                    android:contentDescription="Toggle Video Mode"
+                    android:padding="11dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ar_video" />
+            </LinearLayout>
+        </LinearLayout>
+
+    </FrameLayout>
+
+    <!-- Floating Show UI button when interface is hidden -->
+    <ImageButton
+        android:id="@+id/btnShowUi"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:background="@drawable/bg_glass_round"
+        android:contentDescription="Show Interface"
+        android:padding="10dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_ar_eye"
+        android:visibility="gone" />
+
+    <!-- Flash Screen overlay for photo capture -->
+    <View
+        android:id="@+id/flashView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FFFFFF"
+        android:visibility="gone" />
+
+</FrameLayout>

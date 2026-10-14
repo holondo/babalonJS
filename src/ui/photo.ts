@@ -30,6 +30,20 @@ export class PhotoMode {
 
   cancelRecording() { this.videoAbort?.abort(); }
 
+  /** Release WebView camera ownership while ARCore is using the physical camera. */
+  suspendCamera() {
+    const device = this.backdrop?.active ? this.backdrop.deviceId : null;
+    const zoom = this.backdrop?.zoomValue ?? 1;
+    this.backdrop?.stop();
+    return async () => {
+      if (device !== null && this.ui.editor.photoMode && this.backdrop) {
+        await this.backdrop.start(device);
+        const range = this.backdrop.zoom;
+        if (range) await this.backdrop.setZoom(Math.min(range.max, Math.max(range.min, zoom)));
+      }
+    };
+  }
+
   photoPanelContent() {
     const ed = this.ui.editor;
     const { slider, toggle, chips, action } = editControls(this.ui, () => ({ ...ed.photo }), (s) => ed.setPhoto(s));
