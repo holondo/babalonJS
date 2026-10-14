@@ -57,6 +57,23 @@ body {
   touch-action: none;
 }
 
+button,
+input,
+select,
+textarea,
+.tab,
+.ibtn,
+.btn,
+.chip,
+.segmented button,
+.toggle,
+.menu-item,
+.card,
+.panel-grip,
+.num-step {
+  touch-action: manipulation;
+}
+
 button {
   font: inherit;
   color: inherit;
@@ -67,6 +84,27 @@ button {
 button:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/* Tactile micro-press feedback */
+.tab:active,
+.btn:active:not(:disabled),
+.ibtn:active:not(:disabled),
+.chip:active,
+.segmented button:active,
+.card:active,
+.num-step:active {
+  transform: scale(0.95);
+  transition: transform 0.06s ease-out;
+}
+.tab:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+.btn:active:not(:disabled) {
+  filter: brightness(0.92);
+}
+.btn.primary:active:not(:disabled) {
+  filter: brightness(0.9);
 }
 
 /* ---------- Buttons ---------- */
@@ -81,7 +119,7 @@ button:disabled {
   padding: 0 10px;
   border-radius: 999px;
   color: var(--text);
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, transform 0.08s;
 }
 .ibtn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.08);
@@ -119,6 +157,7 @@ button:disabled {
   border: 1px solid var(--line);
   font-weight: 500;
   flex: 1;
+  transition: background 0.15s, border-color 0.15s, transform 0.08s;
 }
 .btn:hover {
   background: rgba(255, 255, 255, 0.12);
@@ -245,7 +284,7 @@ button:disabled {
   border-radius: 999px;
   color: var(--muted);
   font-size: 11.5px;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, transform 0.08s;
 }
 .tab:hover {
   color: var(--text);
@@ -322,11 +361,14 @@ button:disabled {
   backdrop-filter: var(--blur);
   border: 1px solid var(--line);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  transform: translateX(20px);
+  transform: translateX(18px) scale(0.98);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s, transform 0.2s;
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
   z-index: 7;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .panel.show {
   opacity: 1;
@@ -350,9 +392,11 @@ button:disabled {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 4px 16px 18px;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
 }
 .panel-body > .row:first-child {
   margin-top: 8px;
@@ -423,26 +467,32 @@ input[type='range'] {
 input[type='range']::-webkit-slider-runnable-track {
   height: 5px;
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(to right, var(--accent) var(--val-pct, 0%), rgba(255, 255, 255, 0.14) var(--val-pct, 0%));
 }
 input[type='range']::-moz-range-track {
   height: 5px;
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(to right, var(--accent) var(--val-pct, 0%), rgba(255, 255, 255, 0.14) var(--val-pct, 0%));
 }
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
-  margin-top: -7.5px;
+  width: 22px;
+  height: 22px;
+  margin-top: -8.5px;
   border-radius: 50%;
   background: var(--accent);
   border: 3px solid var(--purple);
-  box-shadow: 0 0 0 1px rgba(233, 168, 59, 0.45);
+  box-shadow: 0 0 0 1px rgba(233, 168, 59, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.12s ease-out;
+}
+input[type='range']:active::-webkit-slider-thumb,
+.slider-track.dragging input[type='range']::-webkit-slider-thumb {
+  transform: scale(1.3);
+  box-shadow: 0 0 0 4px rgba(233, 168, 59, 0.35), 0 3px 10px rgba(0, 0, 0, 0.5);
 }
 input[type='range']::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--accent);
   border: 3px solid var(--purple);
@@ -482,11 +532,11 @@ input[type='range']::-moz-range-thumb {
 }
 .toggle i {
   position: relative;
-  width: 42px;
-  height: 24px;
-  border-radius: 24px;
+  width: 44px;
+  height: 26px;
+  border-radius: 26px;
   background: rgba(255, 255, 255, 0.16);
-  transition: background 0.15s;
+  transition: background 0.2s ease;
   flex: none;
 }
 .toggle i::after {
@@ -494,11 +544,15 @@ input[type='range']::-moz-range-thumb {
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #fff;
-  transition: transform 0.15s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  transition: transform 0.24s cubic-bezier(0.34, 1.4, 0.64, 1), width 0.15s ease, background 0.2s;
+}
+.toggle:active i::after {
+  width: 23px;
 }
 .toggle input:checked + i {
   background: var(--accent);
@@ -521,6 +575,10 @@ input.name {
 .select select {
   max-width: 60%;
 }
+.select select option {
+  background: var(--purple);
+  color: var(--text);
+}
 input.name {
   width: 100%;
   user-select: text;
@@ -540,6 +598,7 @@ input.name {
   border: 1px solid var(--line);
   font-size: 13px;
   white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s, transform 0.08s ease-out;
 }
 .chip:hover {
   background: rgba(255, 255, 255, 0.12);
@@ -553,7 +612,7 @@ input.name {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 .card {
@@ -910,8 +969,21 @@ body.photo .panel {
     bottom: calc(var(--dock-h) + 16px + var(--safe-b));
     height: var(--sheet-height, 48vh);
     max-height: var(--ctx-panel-max, calc(100dvh - var(--top) - var(--dock-h) - 32px - var(--safe-b)));
-    transition: opacity .2s, transform .2s, height .24s cubic-bezier(.2, .8, .2, 1);
-    transform: translateY(20px);
+    transform: translateY(14px) scale(0.98);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease-out, height 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity, height;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  .panel.show {
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .panel.sheet-dragging {
+    transition: none !important;
   }
   body.photo .panel {
     top: auto;
@@ -931,7 +1003,20 @@ body.photo .panel {
     cursor: ns-resize;
     touch-action: none;
   }
-  .panel-grip::after { content: ''; width: 40px; height: 4px; border-radius: 4px; background: currentColor; }
+  .panel-grip::after {
+    content: '';
+    width: 38px;
+    height: 4px;
+    border-radius: 4px;
+    background: currentColor;
+    opacity: 0.6;
+    transition: width 0.18s cubic-bezier(0.2, 0, 0, 1), opacity 0.18s ease;
+  }
+  .panel-grip:active::after,
+  .panel.sheet-dragging .panel-grip::after {
+    width: 48px;
+    opacity: 1;
+  }
   body { --safe-b: calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-inset, 0px)); }
   .panel-grip:focus-visible { outline: 2px solid var(--gold); outline-offset: -4px; }
   .panel.sheet-dragging { transition: none; }
@@ -993,6 +1078,8 @@ button:disabled svg.lucide {
   max-width: calc(100vw - 20px);
   max-height: calc(100dvh - var(--top) - 12px);
   overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
   padding: 10px;
   border-radius: 28px;
   background: var(--glass-strong);
@@ -1001,9 +1088,9 @@ button:disabled svg.lucide {
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   z-index: 12;
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(-8px) scale(0.97);
   pointer-events: none;
-  transition: opacity 0.18s, transform 0.18s;
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .menu.show {
   opacity: 1;
@@ -1113,8 +1200,16 @@ button:disabled svg.lucide {
 
 .dims {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.dims .num-step {
+  display: none;
+}
+.dims .num-field {
+  padding: 0 8px;
 }
 .num {
   display: flex;
@@ -1124,14 +1219,56 @@ button:disabled svg.lucide {
   color: var(--muted);
   min-width: 0;
 }
+.num-label {
+  cursor: ew-resize;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+  transition: color 0.15s ease;
+}
+.num-label:hover {
+  color: var(--text);
+}
 .num-field {
   display: flex;
   align-items: center;
   height: 36px;
-  padding: 0 10px;
+  padding: 0 4px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid var(--line);
+  gap: 2px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.num-step {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  flex: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 0.12s, color 0.12s, transform 0.06s;
+}
+.num-step:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+.num-step:active {
+  transform: scale(0.9);
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--text);
 }
 .num-field input {
   flex: 1;
@@ -1146,6 +1283,7 @@ button:disabled svg.lucide {
   user-select: text;
   -webkit-user-select: text;
   -moz-appearance: textfield;
+  text-align: center;
 }
 .num-field input::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -1176,7 +1314,7 @@ button:disabled svg.lucide {
 
 .align-grid {
   display: grid;
-  grid-template-columns: auto repeat(3, 1fr);
+  grid-template-columns: auto repeat(3, minmax(0, 1fr));
   align-items: center;
   gap: 6px;
 }
@@ -1899,6 +2037,7 @@ body.ui-hidden .ui-restore {
   font-weight: 500;
   color: var(--muted);
   white-space: nowrap;
+  transition: background 0.18s cubic-bezier(0.2, 0, 0, 1), color 0.18s ease, transform 0.08s ease-out;
 }
 .segmented button.active {
   background: rgba(165, 122, 187, 0.4);
@@ -1914,7 +2053,7 @@ body.ui-hidden .ui-restore {
 @media (pointer: coarse) {
   /* A strip on the right edge with no controls, for the thumb to scroll the panel */
   .panel-body {
-    padding-right: 34px;
+    padding-right: 18px;
   }
   .panel-body .sec > * + * {
     margin-top: 12px;

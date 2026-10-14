@@ -55,7 +55,7 @@ import type { GyroControl } from '../device/gyro';
 import { saveAndOfferShare, timestampedName } from '../core/files';
 import { LANGS, getLang, setLang, tr } from '../core/i18n';
 import type { Lang } from '../core/i18n';
-import { button, chips, h, hint, icon, iconButton, menuItem, progressBar, row, section, segmented, scrollableSegmented } from './dom';
+import { button, chips, h, haptic, hint, icon, iconButton, menuItem, progressBar, row, section, segmented, scrollableSegmented } from './dom';
 import { AddPanel } from './panels/add';
 import { ObjectsPanel } from './panels/objects';
 import { MaterialPanel } from './panels/material';
@@ -200,7 +200,7 @@ export class UI {
     window.addEventListener('nativefullscreenchange', () => this.renderViewStack());
     root.append(this.clipInput);
     this.contextBar = new ContextBar(this);
-    this.panelSheet = new PanelSheet(this.panel, () => this.contextBar.layout(false));
+    this.panelSheet = new PanelSheet(this.panel, () => this.contextBar.layout(false), () => this.openTab(null));
     root.append(this.labels, this.jointOverlay.el, this.frame, this.topbar, this.contextBar.el, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
     this.fileInput.addEventListener('change', () => {
       const files = [...(this.fileInput.files ?? [])];
@@ -1074,6 +1074,7 @@ export class UI {
 
   openTab(tab: Tab | null) {
     this.tab = this.tab === tab ? null : tab;
+    haptic(this.tab ? 'selection' : 'light');
     this.renderDock();
     this.renderPanel();
     this.labelsUI.buildLabels();
@@ -1374,6 +1375,8 @@ export class UI {
     return false;
   }
 
+  private panelCloseTimer = 0;
+
   renderPanel() {
     const ed = this.editor;
     const tab: Tab | null = ed.photoMode ? (this.photoPanel ? 'photo' : null) : this.tab;
@@ -1381,10 +1384,16 @@ export class UI {
     document.body.classList.toggle('panel-open', !!tab);
     this.panelSheet.scheduleLayout();
     if (!tab) {
-      this.panel.replaceChildren();
+      window.clearTimeout(this.panelCloseTimer);
+      this.panelCloseTimer = window.setTimeout(() => {
+        if (!this.tab && (!this.editor.photoMode || !this.photoPanel)) {
+          this.panel.replaceChildren();
+        }
+      }, 280);
       if (ed.rigger.active) this.renderSelbar();
       return;
     }
+    window.clearTimeout(this.panelCloseTimer);
     const title = tr(PANEL_TITLES[tab]);
     const scroll = this.panel.querySelector('.panel-body')?.scrollTop ?? 0;
     const parts = this.panelParts(tab);

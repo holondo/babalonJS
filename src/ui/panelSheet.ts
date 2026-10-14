@@ -12,28 +12,41 @@ export class PanelSheet {
 
   private panel: HTMLElement;
   private layout: () => void;
+  private onDismiss?: () => void;
 
-  constructor(panel: HTMLElement, layout: () => void) {
+  constructor(panel: HTMLElement, layout: () => void, onDismiss?: () => void) {
     this.panel = panel;
     this.layout = layout;
+    this.onDismiss = onDismiss;
     this.handle.className = 'panel-grip';
     this.handle.type = 'button';
-    this.handle.addEventListener('pointerdown', (event) => {
+
+    const startDrag = (event: PointerEvent) => {
       if (event.button !== 0 || window.innerWidth > 760) return;
+      if ((event.target as HTMLElement)?.closest?.('button:not(.panel-grip)')) return;
       this.drag = { id: event.pointerId, y: event.clientY, height: panel.offsetHeight, heights: this.heights() };
       this.pendingHeight = this.drag.height;
       this.handle.setPointerCapture(event.pointerId);
       panel.classList.add('sheet-dragging');
-    });
+    };
+
+    this.handle.addEventListener('pointerdown', startDrag);
     this.handle.addEventListener('pointermove', (event) => {
       if (!this.drag || event.pointerId !== this.drag.id) return;
       const heights = this.drag.heights;
-      this.pendingHeight = Math.max(heights[0], Math.min(heights[2], this.drag.height + this.drag.y - event.clientY));
+      const rawHeight = this.drag.height + this.drag.y - event.clientY;
+      const maxHeight = heights[2];
+      if (rawHeight > maxHeight) {
+        this.pendingHeight = maxHeight + (rawHeight - maxHeight) * 0.25;
+      } else {
+        this.pendingHeight = Math.max(0, rawHeight);
+      }
       if (!this.heightFrame) this.heightFrame = requestAnimationFrame(() => { this.heightFrame = 0; this.setHeight(this.pendingHeight); });
     });
     const finish = (event: PointerEvent) => {
       if (!this.drag || event.pointerId !== this.drag.id) return;
       const moved = Math.abs(event.clientY - this.drag.y) > 6;
+      const deltaY = event.clientY - this.drag.y;
       const heights = this.drag.heights;
       cancelAnimationFrame(this.heightFrame); this.heightFrame = 0;
       this.drag = null;
@@ -41,6 +54,19 @@ export class PanelSheet {
       if (this.handle.hasPointerCapture(event.pointerId)) this.handle.releasePointerCapture(event.pointerId);
       if (moved) {
         const height = this.pendingHeight;
+        // Swiped down past minimum threshold -> dismiss panel smoothly without height flick
+        if (height < heights[0] * 0.65 || (deltaY > 65 && height <= heights[1])) {
+          this.level = 1;
+          this.suppressClick = true;
+          this.setHeight(0);
+          this.onDismiss?.();
+          setTimeout(() => {
+            if (!this.panel.classList.contains('show')) {
+              this.update();
+            }
+          }, 300);
+          return;
+        }
         this.level = heights.reduce((best, value, index, values) => Math.abs(value - height) < Math.abs(values[best] - height) ? index : best, 0);
       }
       this.update();

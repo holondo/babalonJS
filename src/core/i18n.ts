@@ -891,6 +891,8 @@ const PT: Record<string, string> = {
   'Invert': 'Inverter',
   'Grow': 'Aumentar',
   'Shrink': 'Diminuir',
+  'Decrease': 'Diminuir',
+  'Increase': 'Aumentar',
   'Parts of the file': 'Partes do arquivo',
   'Cut with a plane': 'Cortar com um plano',
   'For pieces that touch: place the plane between them. The gold side becomes the new object.': 'Para peças que se tocam: coloque o plano entre elas. O lado dourado vira o novo objeto.',
