@@ -56,5 +56,6 @@ export function nativeARStrings() {
     "Light intensity",
     "Shadows",
     "Show FPS",
+    "Close",
   ].map(text => [text, tr(text)]));
 }

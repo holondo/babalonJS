@@ -232,6 +232,7 @@ class ArActivity : AppCompatActivity() {
         binding.btnExit.contentDescription = tr("Exit AR")
         binding.btnOcclusion.contentDescription = tr("Depth occlusion")
         binding.btnOptions.contentDescription = tr("AR options")
+        binding.btnCloseOptions.contentDescription = tr("Close")
         binding.btnHideUi.contentDescription = tr("Hide interface")
         binding.btnPlaceInFront.text = tr("Place scene")
         binding.btnMove.contentDescription = tr("Move scene")
@@ -553,6 +554,9 @@ class ArActivity : AppCompatActivity() {
             light.destroy()
         }
         rigLights.clear()
+
+        // Critical: Detach environment from Filament scene before destroying its native IndirectLight
+        sceneView.environment = Environment()
         customIndirectLight?.let {
             sceneView.engine.destroyIndirectLight(it)
             customIndirectLight = null
@@ -560,34 +564,40 @@ class ArActivity : AppCompatActivity() {
 
         val session = sceneView.session
         if (mode == "room") {
-            try {
+            runCatching {
                 session?.let { s ->
-                    s.configure(s.config.apply {
-                        lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
-                    })
-                }
-            } catch (_: Exception) {
-                try {
-                    session?.let { s ->
-                        s.configure(s.config.apply {
-                            lightEstimationMode = Config.LightEstimationMode.AMBIENT_INTENSITY
-                        })
+                    val cfg = s.config
+                    if (cfg.lightEstimationMode != Config.LightEstimationMode.ENVIRONMENTAL_HDR) {
+                        cfg.lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
+                        s.configure(cfg)
                     }
-                } catch (_: Exception) {}
+                }
+            }.onFailure {
+                runCatching {
+                    session?.let { s ->
+                        val cfg = s.config
+                        if (cfg.lightEstimationMode != Config.LightEstimationMode.AMBIENT_INTENSITY) {
+                            cfg.lightEstimationMode = Config.LightEstimationMode.AMBIENT_INTENSITY
+                            s.configure(cfg)
+                        }
+                    }
+                }
             }
             sceneView.lightEstimator?.isEnabled = true
+            sceneView.mainLightNode?.isVisible = true
             sceneView.mainLightNode?.let { it.intensity = 100_000f * lightIntensityLevel }
         } else {
-            try {
-                session?.let { s ->
-                    s.configure(s.config.apply {
-                        lightEstimationMode = Config.LightEstimationMode.DISABLED
-                    })
-                }
-            } catch (e: Exception) {
-                Log.w("ArActivity", "Failed to disable ARCore light estimation", e)
-            }
             sceneView.lightEstimator?.isEnabled = false
+            sceneView.mainLightNode?.isVisible = false
+            runCatching {
+                session?.let { s ->
+                    val cfg = s.config
+                    if (cfg.lightEstimationMode != Config.LightEstimationMode.DISABLED) {
+                        cfg.lightEstimationMode = Config.LightEstimationMode.DISABLED
+                        s.configure(cfg)
+                    }
+                }
+            }
 
             val preset = lightingPresets.firstOrNull { it.id == mode } ?: lightingPresets[0]
 
@@ -668,6 +678,7 @@ class ArActivity : AppCompatActivity() {
         isOptionsOpen = false
         binding.optionsPanel.visibility = View.GONE
         binding.btnOptions.setColorFilter(Color.WHITE)
+        binding.hintContainer.visibility = if (!isPlaced || isMoving) View.VISIBLE else View.GONE
     }
 
     private fun measurementHit(x: Float, y: Float): HitResult? {
@@ -843,7 +854,12 @@ class ArActivity : AppCompatActivity() {
         binding.btnOptions.setOnClickListener {
             isOptionsOpen = !isOptionsOpen
             binding.optionsPanel.visibility = if (isOptionsOpen) View.VISIBLE else View.GONE
-            binding.btnOptions.setColorFilter(if (isOptionsOpen) Color.parseColor("#F5C542") else Color.WHITE)
+            binding.btnOptions.setColorFilter(if (isOptionsOpen) Color.parseColor("#E9A83B") else Color.WHITE)
+            binding.hintContainer.visibility = if (isOptionsOpen) View.GONE else (if (!isPlaced || isMoving) View.VISIBLE else View.GONE)
+        }
+
+        binding.btnCloseOptions.setOnClickListener {
+            closeOptionsPanel()
         }
 
         binding.chipRoom.setOnClickListener { applyLightingMode("room") }
@@ -932,7 +948,7 @@ class ArActivity : AppCompatActivity() {
                 Log.w("ArActivity", "Depth configuration failed", exception)
                 return@setOnClickListener
             }
-            binding.btnOcclusion.setColorFilter(if (isOcclusionEnabled) Color.parseColor("#F5C542") else Color.WHITE)
+            binding.btnOcclusion.setColorFilter(if (isOcclusionEnabled) Color.parseColor("#E9A83B") else Color.WHITE)
             Toast.makeText(
                 this,
                 if (isOcclusionEnabled) tr("Depth occlusion ON") else tr("Depth occlusion OFF"),
@@ -944,7 +960,7 @@ class ArActivity : AppCompatActivity() {
             isMeasuring = !isMeasuring
             clearPendingMeasurement()
             closeOptionsPanel()
-            binding.btnMeasure.setColorFilter(if (isMeasuring) Color.parseColor("#F5C542") else Color.WHITE)
+            binding.btnMeasure.setColorFilter(if (isMeasuring) Color.parseColor("#E9A83B") else Color.WHITE)
             if (isMeasuring) {
                 binding.sceneView.planeRenderer.isEnabled = true
                 try {
@@ -974,7 +990,7 @@ class ArActivity : AppCompatActivity() {
             isVideoMode = !isVideoMode
             if (isVideoMode) {
                 binding.btnCaptureMode.setImageResource(R.drawable.ic_ar_video)
-                binding.btnCaptureMode.setColorFilter(Color.parseColor("#F5C542"))
+                binding.btnCaptureMode.setColorFilter(Color.parseColor("#E9A83B"))
                 binding.btnShutter.setBackgroundResource(R.drawable.bg_shutter)
                 Toast.makeText(this, tr("Switched to Video Mode"), Toast.LENGTH_SHORT).show()
             } else {
@@ -1099,6 +1115,7 @@ class ArActivity : AppCompatActivity() {
             light.destroy()
         }
         rigLights.clear()
+        binding.sceneView.environment = Environment()
         customIndirectLight?.let {
             binding.sceneView.engine.destroyIndirectLight(it)
             customIndirectLight = null

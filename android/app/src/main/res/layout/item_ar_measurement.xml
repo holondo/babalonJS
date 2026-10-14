@@ -14,7 +14,7 @@
         android:id="@+id/tvDistance"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="#F5C542"
+        android:textColor="#E9A83B"
         android:textSize="13sp"
         android:textStyle="bold" />
 </LinearLayout>
