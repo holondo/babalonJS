@@ -1107,35 +1107,49 @@ class ArActivity : AppCompatActivity() {
 
     private fun releaseSceneContent() {
         fpsTimerHandler.removeCallbacks(fpsRunnable)
+        timerHandler.removeCallbacks(timerRunnable)
         modelLoad?.cancel()
         clearMeasurements()
 
         for (light in rigLights) {
             binding.sceneView.removeChildNode(light)
-            light.destroy()
+            runCatching { light.destroy() }
         }
         rigLights.clear()
         binding.sceneView.environment = Environment()
         customIndirectLight?.let {
-            binding.sceneView.engine.destroyIndirectLight(it)
+            runCatching { binding.sceneView.engine.destroyIndirectLight(it) }
             customIndirectLight = null
         }
+
+        modelNode?.let { node ->
+            sceneNode?.removeChildNode(node)
+            binding.sceneView.removeChildNode(node)
+            // ModelLoader owns the glTF entities, including ModelNode's root.
+            // Destroying that root here makes loader teardown destroy it twice.
+        }
+        modelNode = null
 
         sceneNode?.let { content ->
             content.parent?.removeChildNode(content)
             binding.sceneView.removeChildNode(content)
-            modelNode?.let { content.removeChildNode(it) }
-            content.destroy()
+            runCatching { content.destroy() }
         }
-        anchorNode?.let { binding.sceneView.removeChildNode(it); it.destroy() }
-        modelNode = null
         sceneNode = null
+
+        anchorNode?.let { node ->
+            binding.sceneView.removeChildNode(node)
+            runCatching { node.destroy() }
+        }
         anchorNode = null
     }
 
     override fun onDestroy() {
         fpsTimerHandler.removeCallbacks(fpsRunnable)
         timerHandler.removeCallbacks(timerRunnable)
+        // NativeArSceneView.releaseContent runs before its engine is destroyed.
+        // SceneView owns Session.close() and runs it off the main thread. Calling
+        // it here races that teardown and can abort inside ArSession_destroy.
         super.onDestroy()
     }
 }

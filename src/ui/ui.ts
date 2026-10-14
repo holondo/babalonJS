@@ -409,6 +409,7 @@ export class UI {
   private arOverlay: HTMLElement | null = null;
   private arLoader: (() => Promise<void>) | null = null;
   private arLoading: Promise<void> | null = null;
+  private arPreparing = false;
 
   setARLoader(loader: () => Promise<void>) {
     this.arLoader = loader;
@@ -424,26 +425,44 @@ export class UI {
   }
 
   private async enterAR() {
+    if (this.arPreparing || this.nativeAR || this.ar?.active) return;
+    this.arPreparing = true;
+    try {
+      await this.prepareAndEnterAR();
+    } catch (error) {
+      this.toast(tr('Could not start AR: {error}', { error: errorMessage(error) }), 'error');
+    } finally {
+      this.arPreparing = false;
+    }
+  }
+
+  private async prepareAndEnterAR() {
     if (Capacitor.isNativePlatform()) {
       if (this.nativeAR) return;
       this.nativeAR = true;
       const restoreCamera = this.photoUI.suspendCamera();
       if (this.editor.separator.active) this.leaveMesh();
       const activity = this.beginActivity(tr('Preparing AR…'), View);
+      interface NativeBridge {
+        startArTransfer?: (title: string, placement: string) => void;
+        appendArChunk?: (base64Chunk: string) => boolean;
+        finishArTransfer?: () => void;
+        cancelArTransfer?: () => void;
+        launchArWithData?: (data: string, title: string, placement: string) => void;
+      }
+      const nativeBridge = (window as unknown as { AndroidNative?: NativeBridge }).AndroidNative;
       try {
-        const blob = await this.editor.exportGLB(false, true);
+        if (!nativeBridge) throw new Error(tr('Native AR bridge unavailable'));
+        const restoreModels = await this.prepareLightAR();
+        let blob: Blob | null;
+        try {
+          blob = await this.editor.exportGLB(false, true);
+        } finally {
+          // Native AR uses the exported copy; restore the editor immediately,
+          // including when export fails.
+          restoreModels?.();
+        }
         if (!blob) throw new Error(tr('Failed to export 3D scene for AR'));
-        const reader = new FileReader();
-        const base64Promise = new Promise<string>((resolve, reject) => {
-          reader.onload = () => {
-            const res = reader.result as string;
-            const b64 = res.includes(',') ? res.split(',')[1] : res;
-            resolve(b64);
-          };
-          reader.onerror = reject;
-        });
-        reader.readAsDataURL(blob);
-        const base64 = await base64Promise;
 
         const bounds = this.editor.sceneBounds();
         const view = this.editor.camera.position.subtract(this.editor.camera.target);
@@ -453,8 +472,9 @@ export class UI {
           strings: nativeARStrings(),
           language: getLang(),
           // Babylon is left-handed; glTF and ARCore are right-handed.
-          origin: bounds ? [bounds.center.x, bounds.min.y, -bounds.center.z] : [0, 0, 0],
-          baseYaw: Math.atan2(view.x, -view.z),
+          // Babylon GLTF2Export converts left-handed to right-handed by negating X (x_gltf = -x_babylon, z_gltf = z_babylon).
+          origin: bounds ? [-bounds.center.x, bounds.min.y, bounds.center.z] : [0, 0, 0],
+          baseYaw: Math.atan2(-view.x, view.z),
           animations: this.editor.entities.filter(e => e.visible && this.editor.anim.isPlaying(e)).map(e => {
             const clip = this.editor.anim.current(e)!;
             return { name: nativeAnimationName(e), speed: clip.speedRatio, loop: clip.loopAnimation };
@@ -462,8 +482,38 @@ export class UI {
           lighting: 'room',
           lightLevel: this.editor.env.intensity || 1.0,
         });
-        const nativeBridge = (window as unknown as { AndroidNative?: { launchArWithData?: (data: string, title: string, placement: string) => void } }).AndroidNative;
-        if (nativeBridge?.launchArWithData) {
+
+        const projectTitle = this.projectName || 'Babalon AR';
+
+        if (nativeBridge.startArTransfer && nativeBridge.appendArChunk && nativeBridge.finishArTransfer) {
+          nativeBridge.startArTransfer(projectTitle, placement);
+          const CHUNK_SIZE = 1024 * 1024;
+          const totalSize = blob.size;
+          let offset = 0;
+
+          while (offset < totalSize) {
+            const slice = blob.slice(offset, Math.min(offset + CHUNK_SIZE, totalSize));
+            const chunkBase64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const res = reader.result as string;
+                resolve(res.includes(',') ? res.split(',')[1] : res);
+              };
+              reader.onerror = reject;
+              reader.readAsDataURL(slice);
+            });
+
+            const ok = nativeBridge.appendArChunk(chunkBase64);
+            if (!ok) {
+              nativeBridge.cancelArTransfer?.();
+              throw new Error(tr('Failed to transfer 3D model to native AR'));
+            }
+            offset += CHUNK_SIZE;
+          }
+
+          // Dereference blob immediately before AR opens so JS GC can free memory
+          blob = null;
+
           await new Promise<void>((resolve, reject) => {
             const stateChanged = (event: Event) => {
               const state = (event as CustomEvent<string>).detail;
@@ -478,7 +528,42 @@ export class UI {
               else reject(new Error(tr(state)));
             };
             window.addEventListener('nativearstate', stateChanged);
-            try { nativeBridge.launchArWithData!(base64, this.projectName || 'Babalon AR', placement); }
+            try {
+              nativeBridge.finishArTransfer!();
+            } catch (error) {
+              this.editor.resumeRendering();
+              window.removeEventListener('nativearstate', stateChanged);
+              reject(error);
+            }
+          });
+        } else if (nativeBridge.launchArWithData) {
+          const reader = new FileReader();
+          const base64Promise = new Promise<string>((resolve, reject) => {
+            reader.onload = () => {
+              const res = reader.result as string;
+              resolve(res.includes(',') ? res.split(',')[1] : res);
+            };
+            reader.onerror = reject;
+          });
+          reader.readAsDataURL(blob);
+          const base64 = await base64Promise;
+          blob = null;
+
+          await new Promise<void>((resolve, reject) => {
+            const stateChanged = (event: Event) => {
+              const state = (event as CustomEvent<string>).detail;
+              if (state === 'started') {
+                this.editor.pauseRendering();
+                activity.finish();
+                return;
+              }
+              window.removeEventListener('nativearstate', stateChanged);
+              this.editor.resumeRendering();
+              if (state === 'closed') resolve();
+              else reject(new Error(tr(state)));
+            };
+            window.addEventListener('nativearstate', stateChanged);
+            try { nativeBridge.launchArWithData!(base64, projectTitle, placement); }
             catch (error) {
               this.editor.resumeRendering();
               window.removeEventListener('nativearstate', stateChanged);
@@ -489,6 +574,7 @@ export class UI {
           throw new Error(tr('Native AR bridge unavailable'));
         }
       } catch (e) {
+        nativeBridge?.cancelArTransfer?.();
         this.toast(tr('Could not start AR: {error}', { error: errorMessage(e) }), 'error');
       } finally {
         this.editor.resumeRendering();
@@ -537,17 +623,7 @@ export class UI {
    * changed). True when the user must tap again to start AR: the browser asks for a fresh tap.
    */
   private async lightenForAR() {
-    const ed = this.editor;
-    const cost = analyzeScene(ed);
-    const budget = deviceBudget();
-    if (!overBudget(cost, budget)) return false;
-    const models = ed.entities.filter((e) => e.kind === 'model' && e.visible && !e.optimization && !ed.optimizer.blocker(e));
-    if (!models.length || !confirm(tr('This scene is heavy for this device and AR may stutter. Use a lighter copy in AR? Your project stays as it is.'))) return false;
-    const ratio = Math.min(0.5, Math.max(0.02, (budget.triangles / Math.max(1, cost.triangles)) * 0.9));
-    let restore: (() => void) | null = null;
-    await this.run(async () => {
-      restore = await ed.optimizer.applyForSession(models, { ...DEFAULT_OPTIMIZE, ratio });
-    });
+    const restore = await this.prepareLightAR();
     if (!restore) return false;
     this.arRestore = restore;
     let entered = false;
@@ -561,6 +637,18 @@ export class UI {
       if (!entered) this.endLightAR(watch);
     }, 16000);
     return true;
+  }
+
+  /** Shared opt-in geometry reduction; callers own the temporary copy's lifetime. */
+  private async prepareLightAR(): Promise<(() => void) | null> {
+    const ed = this.editor;
+    const cost = analyzeScene(ed);
+    const budget = deviceBudget();
+    if (!overBudget(cost, budget)) return null;
+    const models = ed.entities.filter((e) => e.kind === 'model' && e.visible && !e.optimization && !ed.optimizer.blocker(e));
+    if (!models.length || !confirm(tr('This scene is heavy for this device and AR may stutter. Use a lighter copy in AR? Your project stays as it is.'))) return null;
+    const ratio = Math.min(0.5, Math.max(0.02, (budget.triangles / Math.max(1, cost.triangles)) * 0.9));
+    return ed.optimizer.applyForSession(models, { ...DEFAULT_OPTIMIZE, ratio });
   }
 
   private endLightAR(watch: Observer<void> | null) {

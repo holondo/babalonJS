@@ -48,7 +48,20 @@ public class MainActivity extends BridgeActivity {
     private String pendingArGlbPath = null;
     private String pendingArTitle = null;
     private String pendingArPlacement = null;
-    private java.io.File arTransferFile;
+    private java.io.File arTransferFile = null;
+    private java.io.BufferedOutputStream arTransferStream = null;
+
+    private void cleanOldArTransferFiles() {
+        try {
+            java.io.File cacheDir = getCacheDir();
+            java.io.File[] oldFiles = cacheDir.listFiles((dir, name) -> name.startsWith("native-ar-") && name.endsWith(".glb"));
+            if (oldFiles != null) {
+                for (java.io.File f : oldFiles) {
+                    try { f.delete(); } catch (Exception ignored) {}
+                }
+            }
+        } catch (Exception ignored) {}
+    }
 
     private void notifyArState(String state) {
         getBridge().getWebView().evaluateJavascript(
@@ -57,7 +70,12 @@ public class MainActivity extends BridgeActivity {
 
     private final ActivityResultLauncher<Intent> arActivityLauncher =
         registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (arTransferStream != null) {
+                try { arTransferStream.close(); } catch (Exception ignored) {}
+                arTransferStream = null;
+            }
             if (arTransferFile != null) { arTransferFile.delete(); arTransferFile = null; }
+            cleanOldArTransferFiles();
             notifyArState("closed");
         });
 
@@ -78,7 +96,12 @@ public class MainActivity extends BridgeActivity {
                 }
             } else {
                 notifyArState("Camera permission is needed for AR");
+                if (arTransferStream != null) {
+                    try { arTransferStream.close(); } catch (Exception ignored) {}
+                    arTransferStream = null;
+                }
                 if (arTransferFile != null) { arTransferFile.delete(); arTransferFile = null; }
+                cleanOldArTransferFiles();
                 pendingArGlbPath = null;
                 pendingArTitle = null;
                 pendingArPlacement = null;
@@ -207,6 +230,88 @@ public class MainActivity extends BridgeActivity {
             }
 
             @JavascriptInterface
+            public void startArTransfer(String title, String placement) {
+                try {
+                    if (arTransferStream != null) {
+                        try { arTransferStream.close(); } catch (Exception ignored) {}
+                        arTransferStream = null;
+                    }
+                    if (arTransferFile != null && arTransferFile.exists()) {
+                        arTransferFile.delete();
+                        arTransferFile = null;
+                    }
+                    cleanOldArTransferFiles();
+                    arTransferFile = java.io.File.createTempFile("native-ar-", ".glb", getCacheDir());
+                    arTransferStream = new java.io.BufferedOutputStream(new java.io.FileOutputStream(arTransferFile), 65536);
+                    pendingArTitle = title;
+                    pendingArPlacement = placement;
+                } catch (Exception e) {
+                    android.util.Log.e("MainActivity", "Failed to start AR transfer", e);
+                    if (arTransferFile != null) { arTransferFile.delete(); arTransferFile = null; }
+                    notifyArState("Could not prepare AR scene transfer");
+                }
+            }
+
+            @JavascriptInterface
+            public boolean appendArChunk(String base64Chunk) {
+                try {
+                    if (arTransferStream == null) return false;
+                    byte[] bytes = android.util.Base64.decode(base64Chunk, android.util.Base64.DEFAULT);
+                    arTransferStream.write(bytes);
+                    return true;
+                } catch (Throwable t) {
+                    android.util.Log.e("MainActivity", "Failed to append AR chunk", t);
+                    return false;
+                }
+            }
+
+            @JavascriptInterface
+            public void finishArTransfer() {
+                new Thread(() -> {
+                    try {
+                        if (arTransferStream != null) {
+                            arTransferStream.flush();
+                            arTransferStream.close();
+                            arTransferStream = null;
+                        }
+                        final java.io.File finalFile = arTransferFile;
+                        final String title = pendingArTitle;
+                        final String placement = pendingArPlacement;
+                        if (finalFile != null && finalFile.exists() && finalFile.length() > 0) {
+                            runOnUiThread(() -> {
+                                try {
+                                    launchArActivity(finalFile.getAbsolutePath(), title, placement);
+                                } catch (Exception e) {
+                                    if (arTransferFile != null) { arTransferFile.delete(); arTransferFile = null; }
+                                    notifyArState("Could not open native AR");
+                                }
+                            });
+                        } else {
+                            runOnUiThread(() -> notifyArState("Empty AR transfer file"));
+                        }
+                    } catch (Exception e) {
+                        android.util.Log.e("MainActivity", "Failed to finish AR transfer", e);
+                        if (arTransferFile != null) { arTransferFile.delete(); arTransferFile = null; }
+                        runOnUiThread(() -> notifyArState("Could not complete AR file transfer"));
+                    }
+                }).start();
+            }
+
+            @JavascriptInterface
+            public void cancelArTransfer() {
+                try {
+                    if (arTransferStream != null) {
+                        arTransferStream.close();
+                        arTransferStream = null;
+                    }
+                    if (arTransferFile != null) {
+                        arTransferFile.delete();
+                        arTransferFile = null;
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            @JavascriptInterface
             public void launchArWithData(String base64Data, String title, String placement) {
                 new Thread(() -> {
                     java.io.File glbFile = null;
@@ -226,9 +331,9 @@ public class MainActivity extends BridgeActivity {
                                 notifyArState("Could not open native AR");
                             }
                         });
-                    } catch (Exception e) {
+                    } catch (Throwable t) {
                         if (glbFile != null && glbFile.exists()) glbFile.delete();
-                        android.util.Log.e("MainActivity", "Failed to decode and launch AR", e);
+                        android.util.Log.e("MainActivity", "Failed to decode and launch AR", t);
                         runOnUiThread(() -> notifyArState("Could not prepare the AR scene"));
                     }
                 }).start();

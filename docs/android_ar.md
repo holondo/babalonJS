@@ -92,14 +92,22 @@ loads; playback phase is not synchronized between the two renderers.
 PNG texture reductions remain selected; KTX2 textures fall back to source textures
 because Babylon's exporter cannot read compressed GPU textures directly. This can
 increase transfer size. Ordinary compact GLB export keeps its existing behavior.
-The current base64 bridge also keeps multiple copies of the GLB in memory; large
-scenes remain a memory risk. Successful small-scene placement is not evidence that
-arbitrarily large scenes can be transferred safely.
+The current bridge writes base64 chunks to the cache file instead of decoding the
+whole GLB into one Java byte array. The legacy bridge still transfers the whole
+file. Export and simultaneous web/native scene resources remain a memory risk for
+large scenes; chunking does not eliminate those allocations.
 
 The native bridge reports started/closed/error states. While native AR is active,
 duplicate entry and autosave are blocked, and Photo mode releases its camera.
 Returning restores Photo camera ownership when needed. Transfer files are deleted
 on return. Native UI strings come from the editor's translation dictionary.
+
+SceneView owns session and renderer destruction. `ArActivity.onDestroy` must not
+call `session.close()` or repeat `releaseSceneContent()`: lifecycle observers may
+already have destroyed the renderer and scheduled session closure on another
+thread. App-owned content is released only through `NativeArSceneView.releaseContent`
+before engine destruction. Detach the ModelNode without destroying its glTF root;
+ModelLoader owns that entity.
 
 `NativeArSceneView.loadScene` converts the cache `File` to a `file://` URI before
 calling the asynchronous SceneView loader. In 2.2.1, a bare absolute path falls
@@ -119,6 +127,8 @@ FileProvider share because it has no legacy storage permission.
 
 | Symptom | Finding and required action |
 | --- | --- |
+| Crash while closing/reopening AR, with `ArSession_destroy` / `Session.close` / `ArActivity.onDestroy` | S24 and SM-P619 crash logs showed the manual Activity close racing SceneView's session teardown. Keep session closure under SceneView ownership; `runCatching` cannot catch a native SIGABRT/SIGSEGV. |
+| `OutOfMemoryError` in `Base64.decode` / `launchArWithData` | S24 logs showed a failed 56,373,344-byte allocation. Use the chunked bridge; service-worker cache changes do not fix this Java heap allocation. |
 | Camera opens but no surfaces appear; virtual positions drift by many meters | Check the **installed APK's** debuggable flag first. The S24 investigation reproduced this with `true` and succeeded with `false`. A successful Gradle build alone does not verify tracking. |
 | `Could not load 3D scene: /data/user/0/.../cache/...` | Pass `Uri.fromFile(file).toString()`, not a scheme-less path. SceneView 2.2.1 otherwise attempts to open an APK asset. |
 | Raw hits exist but placement is unavailable | Inspect trackable type, orientation, distance and tracking state. Identity-oriented points at tens of meters were not usable surfaces; accepting them would conceal the tracking failure. |
@@ -193,6 +203,21 @@ build for physical AR acceptance. Release builds remain non-debuggable.
    scene, rotate/scale, lose and recover tracking, reposition, measure, capture,
    and reopen AR. Check that the contact point stays fixed, the scene remains
    upright, and returning preserves the editor. Compare the same scene with PWA.
+
+For a focused close/reopen regression, run `NativeArLifecycleTest` with
+`-e lifecycleProbe true -e glbPath /data/local/tmp/native-ar-regression.glb`.
+It opens the actual Activity three times, requires a loaded model and live camera
+frame in every cycle, then waits for Activity destruction. Keep the device unlocked
+with its screen on. This does not test WebView transfer, surface placement or gesture
+quality, and a run without camera frames is a failure rather than a teardown pass.
+
+On 2026-10-14, after removing the manual Activity session close and ModelNode root
+destruction, this lifecycle probe passed all three cycles on both the Galaxy Tab
+S6 Lite (SM-P619) and S24 (SM-S921B), using the bundled `mannequin.glb` and actual
+camera frames. The model-only load/release test also passed on both devices.
+Earlier locked-screen attempts failed because no camera frames arrived. These
+results do not establish memory behavior with the user's larger scene or WebView
+responsiveness after returning from AR.
 
 The export fixture passed on desktop and phone viewport sizes. After reproducing
 and fixing the cache-path failure, the asynchronous native model/lifecycle test
