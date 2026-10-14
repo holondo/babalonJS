@@ -172,12 +172,12 @@ interface Command {
 }
 
 export const ENV_PRESETS: Record<string, { label: string; url: string }> = {
-  studio: { label: 'Studio', url: 'https://assets.babylonjs.com/environments/studio.env' },
-  neutral: { label: 'Neutral', url: 'https://assets.babylonjs.com/environments/environmentSpecular.env' },
-  room: { label: 'Room', url: 'https://assets.babylonjs.com/textures/room.env' },
-  country: { label: 'Countryside', url: 'https://assets.babylonjs.com/textures/country.env' },
-  parking: { label: 'Parking lot', url: 'https://assets.babylonjs.com/textures/parking.env' },
-  night: { label: 'Night', url: 'https://assets.babylonjs.com/textures/night.env' },
+  studio: { label: 'Studio', url: `${import.meta.env.BASE_URL}environments/studio.env` },
+  neutral: { label: 'Neutral', url: `${import.meta.env.BASE_URL}environments/neutral.env` },
+  room: { label: 'Room', url: `${import.meta.env.BASE_URL}environments/room.env` },
+  country: { label: 'Countryside', url: `${import.meta.env.BASE_URL}environments/country.env` },
+  parking: { label: 'Parking lot', url: `${import.meta.env.BASE_URL}environments/parking.env` },
+  night: { label: 'Night', url: `${import.meta.env.BASE_URL}environments/night.env` },
 };
 
 export const SAMPLE_MODELS = [

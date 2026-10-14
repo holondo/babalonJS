@@ -1,4 +1,5 @@
 import { Observable } from '@babylonjs/core/Misc/observable.js';
+import { Capacitor } from '@capacitor/core';
 import type { Editor } from '../core/editor';
 
 /**
@@ -19,7 +20,7 @@ export class GyroControl {
 
   /** Phones and tablets with orientation sensors. */
   get available() {
-    return 'DeviceOrientationEvent' in window && matchMedia('(pointer: coarse)').matches;
+    return 'DeviceOrientationEvent' in window && (Capacitor.isNativePlatform() || matchMedia('(pointer: coarse)').matches);
   }
 
   /** Must be called from a tap: iPhone asks for permission to use the sensors. */
@@ -36,10 +37,14 @@ export class GyroControl {
     window.addEventListener('deviceorientation', this.onOrientation);
     this.active = true;
     this.changed.notifyObservers();
+
+    // On native platforms, keep active so it responds when the device/emulator tilts
+    if (Capacitor.isNativePlatform()) return true;
+
     // No reading after a moment: the device has no usable sensor
     const ok = await new Promise<boolean>((resolve) => {
       const start = performance.now();
-      const check = () => (this.prev ? resolve(true) : performance.now() - start > 1500 ? resolve(false) : setTimeout(check, 100));
+      const check = () => (this.prev ? resolve(true) : performance.now() - start > 4000 ? resolve(false) : setTimeout(check, 100));
       check();
     });
     if (!ok) this.disable();

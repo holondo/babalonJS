@@ -161,6 +161,16 @@ export default defineConfig({
               cacheableResponse: { statuses: [200] },
             },
           },
+          {
+            // Bundled HDR lighting environments
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/environments\/[^/]+\.env$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'environments',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 60 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
         ],
       },
     }),

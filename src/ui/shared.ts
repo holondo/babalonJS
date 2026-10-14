@@ -30,7 +30,33 @@ export function fileSafe(name: string) {
   return name.replace(/[\\/:*?"<>|]+/g, '-').trim() || tr('my-scene');
 }
 
+interface AndroidNativeBridge {
+  toggleFullscreen?(): void;
+  isFullscreen?(): boolean;
+}
+
+export function isFullscreen(): boolean {
+  const native = (window as unknown as { AndroidNative?: AndroidNativeBridge }).AndroidNative;
+  if (typeof native?.isFullscreen === 'function') {
+    return native.isFullscreen();
+  }
+  return !!document.fullscreenElement;
+}
+
+export function isFullscreenAvailable(): boolean {
+  const native = (window as unknown as { AndroidNative?: AndroidNativeBridge }).AndroidNative;
+  if (typeof native?.toggleFullscreen === 'function') {
+    return true;
+  }
+  return !!document.fullscreenEnabled;
+}
+
 export function toggleFullscreen() {
+  const native = (window as unknown as { AndroidNative?: AndroidNativeBridge }).AndroidNative;
+  if (typeof native?.toggleFullscreen === 'function') {
+    native.toggleFullscreen();
+    return;
+  }
   if (document.fullscreenElement) document.exitFullscreen();
   else document.documentElement.requestFullscreen?.().catch(() => {});
 }

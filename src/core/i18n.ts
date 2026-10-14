@@ -962,6 +962,8 @@ const PT: Record<string, string> = {
   'More tabs': 'Mais abas',
   'Camera and actions': 'Câmera e ações',
   'Orbit': 'Orbitar',
+  'Press back again to exit': 'Pressione voltar novamente para sair',
+  'WebXR AR requires Chrome on Android. WebView does not support WebXR.': 'O WebXR AR requer o Chrome no Android. O WebView não suporta WebXR.',
 };
 
 const DICTS: Partial<Record<Lang, Record<string, string>>> = { pt: PT };

@@ -78,7 +78,7 @@ import type { Observer } from '@babylonjs/core/Misc/observable.js';
 import { LightPanel } from './panels/light';
 import { PhotoMode } from './photo';
 import { MeasureLabels } from './measureLabels';
-import { KIND_ICON, fileSafe, toggleFullscreen, errorMessage } from './shared';
+import { KIND_ICON, fileSafe, toggleFullscreen, isFullscreen, isFullscreenAvailable, errorMessage } from './shared';
 import type { Tab } from './shared';
 
 /** Dock tabs. Photo isn't a tab: it's a mode, with its own panel inside photo mode. */
@@ -195,6 +195,7 @@ export class UI {
     this.gallery = new ProjectGallery(this);
     this.setupAutosave();
     document.addEventListener('fullscreenchange', () => this.renderViewStack());
+    window.addEventListener('nativefullscreenchange', () => this.renderViewStack());
     root.append(this.clipInput);
     this.contextBar = new ContextBar(this);
     this.panelSheet = new PanelSheet(this.panel, () => this.contextBar.layout(false));
@@ -437,6 +438,10 @@ export class UI {
       }
     }
     if (!this.ar || !this.arOverlay) return;
+    if (!this.ar.supported) {
+      this.toast(tr('WebXR AR requires Chrome on Android. WebView does not support WebXR.'), 'error');
+      return;
+    }
     if (this.editor.separator.active) this.leaveMesh();
     if (!this.arRestore && (await this.lightenForAR())) return;
     try {
@@ -1121,8 +1126,8 @@ export class UI {
     const buttons: (HTMLElement | null)[] = [
       iconButton(Scan, tr('Frame all (F)'), () => ed.frameAll()),
       this.gyroButton(),
-      document.fullscreenEnabled
-        ? document.fullscreenElement
+      isFullscreenAvailable()
+        ? isFullscreen()
           ? iconButton(Shrink, tr('Exit fullscreen'), () => toggleFullscreen())
           : iconButton(Expand, tr('Fullscreen'), () => toggleFullscreen())
         : null,
@@ -1140,6 +1145,67 @@ export class UI {
       this.toggleMenu(false);
       this.toggleSelMenu(false);
     }
+  }
+
+  /**
+   * Hierarchical back button handler for Android navigation.
+   * Returns true if a modal, menu, panel, or sub-mode was closed; false if already at root.
+   */
+  handleBack(): boolean {
+    if (this.menuOpen) {
+      this.toggleMenu(false);
+      return true;
+    }
+    if (this.selMenuOpen) {
+      this.toggleSelMenu(false);
+      return true;
+    }
+    if (this.uiHidden) {
+      this.setUiHidden(false);
+      return true;
+    }
+    if (this.editor.photoMode) {
+      if (this.photoPanel) {
+        this.photoPanel = false;
+        this.renderAll();
+        return true;
+      }
+      this.editor.setPhotoMode(false);
+      return true;
+    }
+    if (this.ar?.active) {
+      void this.ar.exit();
+      return true;
+    }
+    if (this.tab !== null) {
+      this.openTab(null);
+      return true;
+    }
+    if (this.editor.separator.active) {
+      this.leaveMesh();
+      return true;
+    }
+    if (this.editor.rigger.active) {
+      this.editor.rigger.cancel();
+      return true;
+    }
+    if (this.editor.pose.active) {
+      this.editor.pose.stop();
+      return true;
+    }
+    if (this.editor.tools.pending) {
+      this.editor.tools.cancelPending();
+      return true;
+    }
+    if (this.editor.tools.measureMode) {
+      this.editor.tools.setMeasureMode(false);
+      return true;
+    }
+    if (this.editor.selected || this.editor.multiSelect) {
+      this.editor.select(null);
+      return true;
+    }
+    return false;
   }
 
   renderPanel() {

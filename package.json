@@ -9,9 +9,16 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && tsc -p tsconfig.node.json && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:build": "npm run build && npx cap sync android && cd android && .\\gradlew.bat assembleDebug && cd ..",
+    "android:bundle": "npm run build && npx cap sync android && cd android && .\\gradlew.bat bundleRelease && cd ..",
+    "android:assets": "npx @capacitor/assets generate --android --iconBackgroundColor \"#120d1b\" --splashBackgroundColor \"#120d1b\"",
+    "android:open": "npx cap open android",
+    "android:run": "npx cap run android"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@types/earcut": "^3.0.0",
     "@types/node": "^26.6.5",
     "typescript": "~6.0.2",
@@ -24,6 +31,13 @@
     "@babylonjs/loaders": "^9.30.0",
     "@babylonjs/materials": "^9.30.0",
     "@babylonjs/serializers": "^9.30.0",
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.4",
+    "@capacitor/motion": "^8.0.1",
+    "@capacitor/share": "^8.0.3",
+    "@capacitor/status-bar": "^8.0.4",
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",

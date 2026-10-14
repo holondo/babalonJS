@@ -7,6 +7,7 @@ import { setupSystemBars } from './device/systemBars';
 import { takeSharedFiles } from './core/files';
 import { GyroControl } from './device/gyro';
 import { installedDisplay, prepareOffline } from './core/offline';
+import { Capacitor } from '@capacitor/core';
 
 document.documentElement.lang = locale();
 
@@ -17,9 +18,8 @@ const editor = new Editor(canvas);
 const ui = new UI(editor, document.querySelector<HTMLElement>('#app')!);
 setupSystemBars(editor);
 
-// Augmented reality (WebXR): only offered where the browser supports it (Android Chrome + ARCore)
-if (navigator.xr) navigator.xr.isSessionSupported('immersive-ar').then(async (supported) => {
-  if (!supported) return;
+// Augmented reality (WebXR): offered where supported or in native app container
+const registerAR = () => {
   ui.setARLoader(async () => {
     const [{ ARMode }, { ARHud }] = await Promise.all([import('./ar/ar'), import('./ar/arHud')]);
     const ar = new ARMode(editor);
@@ -27,7 +27,15 @@ if (navigator.xr) navigator.xr.isSessionSupported('immersive-ar').then(async (su
     await ar.checkSupport();
     ui.setAR(ar, arHud.el);
   });
-}).catch(() => {});
+};
+
+if (navigator.xr) {
+  navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+    if (supported) registerAR();
+  }).catch(() => {});
+} else if (Capacitor.isNativePlatform()) {
+  registerAR();
+}
 
 // Gyro mode: the phone's orientation turns the camera (any phone, no camera needed)
 ui.setGyro(new GyroControl(editor));
@@ -54,7 +62,7 @@ function cacheUsedCode() {
     for (const path of paths) {
       const url = new URL(path);
       const localCode = url.origin === location.origin && url.pathname.startsWith(`${import.meta.env.BASE_URL}assets/`) && /\.(?:js|css)$/.test(url.pathname);
-      const usedEnvironment = url.hostname === 'assets.babylonjs.com' && /\.env$/.test(url.pathname);
+      const usedEnvironment = (url.hostname === 'assets.babylonjs.com' || url.origin === location.origin) && /\.env$/.test(url.pathname);
       if (!localCode && !usedEnvironment) continue;
       if (!(await caches.match(path))) await fetch(path, { cache: 'force-cache' });
     }
@@ -64,6 +72,7 @@ navigator.serviceWorker?.addEventListener('controllerchange', () => { void cache
 let installedThisSession = false;
 let offlinePreparation: Promise<void> | null = null;
 function prepareInstalledApp() {
+  if (Capacitor.isNativePlatform()) return;
   if ((!installedThisSession && !installedDisplay()) || !('serviceWorker' in navigator) || !('caches' in window)) return;
   return offlinePreparation ??= (async () => {
     const activity = ui.beginActivity(tr('Downloading tools for offline use'));
@@ -110,6 +119,42 @@ const launchQueue = (window as unknown as { launchQueue?: { setConsumer(fn: (p: 
 launchQueue?.setConsumer(async (params) => {
   ui.openFiles(await Promise.all(params.files.map((h) => h.getFile())));
 });
+
+// Native Android back button and open-with/share file intents
+if (Capacitor.isNativePlatform()) {
+  void import('@capacitor/app').then(({ App }) => {
+    let lastBackPress = 0;
+    App.addListener('backButton', () => {
+      if (ui.handleBack()) return;
+      const now = Date.now();
+      if (now - lastBackPress < 2000) {
+        void App.exitApp();
+      } else {
+        lastBackPress = now;
+        ui.toast(tr('Press back again to exit'));
+      }
+    });
+
+    App.addListener('appUrlOpen', async (data) => {
+      try {
+        const { Filesystem } = await import('@capacitor/filesystem');
+        const content = await Filesystem.readFile({ path: data.url });
+        const name = data.url.split('/').pop() || 'imported-model';
+        const base64Data = typeof content.data === 'string' ? content.data : '';
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const file = new File([byteArray], name);
+        ui.openFiles([file]);
+      } catch (err) {
+        console.warn('Could not read opened file intent:', err);
+      }
+    });
+  });
+}
 
 // Exposed for debugging from the browser console
 Object.assign(window, { editor });
