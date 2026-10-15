@@ -26,6 +26,7 @@ android {
     }
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
     buildTypes {
         debug {
@@ -33,9 +34,12 @@ android {
             // Opt in only when attaching a debugger, not for physical AR acceptance.
             // https://github.com/google-ar/arcore-android-sdk/issues/1750
             debuggable = providers.gradleProperty('arDebuggable').map { it.toBoolean() }.getOrElse(false)
+            // Independent of debuggable above: lets debug builds be inspected over ADB.
+            buildConfigField 'boolean', 'WEBVIEW_DEBUG', 'true'
         }
         release {
             minifyEnabled false
+            buildConfigField 'boolean', 'WEBVIEW_DEBUG', 'false'
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
