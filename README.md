@@ -26,9 +26,9 @@ To try it on your phone over the same Wi-Fi network, run `npm run dev -- --host`
 
 babalon JS is a Progressive Web App. Once hosted over HTTPS (or on `localhost`), browsers offer to install it: the install icon in Chrome/Edge's address bar, the **Install app** item in the project menu, or *Add to Home Screen* on Android/iOS. Installed, it:
 
-- works offline (the whole app is cached; HDR environments and sample models are cached the first time they are used);
+- works offline (the whole app is cached; 6 default HDR environments are bundled; other sample models are cached the first time they are used);
 - on desktop, appears in "Open with" for `.babalon`, `.glb`, `.gltf`, `.obj`, `.stl`, `.fbx`, `.ply`, `.splat` and `.spz` files;
-- on Android, appears in the system **Share** menu: in any file manager (e.g. Samsung My Files) select a 3D file or a `.babalon` project → Share → babalon JS;
+- on Android, appears in the system **Share** menu: in any file manager (e.g. Samsung My Files) select single or multiple 3D files (including `.gltf` with textures and `.bin`) or a `.babalon` project → Share → babalon JS;
 - shows an **Update** button when a new version is deployed, instead of reloading under you.
 
 ## Features
@@ -99,10 +99,8 @@ The `editor` object is exposed on `window` for debugging from the browser consol
 
 Development guidelines (for people and coding agents) are in [AGENTS.md](AGENTS.md).
 
-Android AR uses a native SceneView/ARCore Activity while the PWA keeps Babylon
-WebXR. See [Native Android AR integration](docs/android_ar.md) for the scene
-transfer, session lifecycle, placement rules, Samsung debug-build workaround and
-device verification commands.
+Android integration uses Capacitor 8, native file bridges, and a native SceneView (Filament) + ARCore Activity for physical AR sessions while the web PWA provides WebXR AR. See [Native Android AR integration](docs/android_ar.md) for the scene transfer, session lifecycle, placement rules, Samsung debug-build workaround and device verification commands.
+A physical ARCore-supported device is required for native AR features; emulator tests verify standard web and UI layers.
 
 ## License
 
@@ -110,4 +108,4 @@ Copyright (C) 2026 Guilherme Holanda Sanches
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE).
 
-Third-party libraries keep their own licenses: Babylon.js (Apache-2.0), fflate (MIT), Lucide icons (ISC), meshoptimizer (MIT), ktx2-encoder (MIT) with the Basis Universal encoder (Apache-2.0), ktx-parse (MIT) and glTF-Transform (MIT). The bundled animations and Mannequin models are CC0 (Universal Animation Library by Quaternius), listed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Other sample models and HDR environments are loaded at runtime from the Babylon.js asset CDN and are not distributed with this repository.
+Third-party libraries keep their own licenses: Babylon.js (Apache-2.0), fflate (MIT), Lucide icons (ISC), meshoptimizer (MIT), ktx2-encoder (MIT) with the Basis Universal encoder (Apache-2.0), ktx-parse (MIT) and glTF-Transform (MIT). The bundled animations and Mannequin models are CC0 (Universal Animation Library by Quaternius). The six bundled HDR environments are CC BY 4.0 from Babylon.js Assets. All third-party assets are listed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Other sample models are loaded at runtime from the Babylon.js asset CDN and are not distributed with this repository.
