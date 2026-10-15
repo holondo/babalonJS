@@ -27,7 +27,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['licenses/earcut.txt', 'licenses/manifold-3d.txt', 'favicon.ico', 'icons/apple-touch-icon.png', 'brand/lettering.webp', 'brand/lettering.png'],
+      includeAssets: ['licenses/earcut.txt', 'licenses/manifold-3d.txt', 'favicon.ico', 'icons/apple-touch-icon.png', 'brand/lettering.webp', 'brand/lettering.png', 'brand/logo.webp', 'brand/logo.png'],
       manifest: {
         id: base,
         name: 'babalon JS',

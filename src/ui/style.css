@@ -274,7 +274,6 @@ textarea:focus-visible,
 .brand .brand-icon {
   display: none;
   height: 28px;
-  border-radius: 8px;
 }
 .top-actions {
   display: flex;
