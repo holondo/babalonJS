@@ -9,9 +9,11 @@ export function setupSystemBars(editor: Editor) {
   syncThemeColor(editor);
 }
 
+import { Capacitor } from '@capacitor/core';
+
 /** Where the theme color is visible: installed app, desktop title bar overlay, or a phone browser. */
 function themeColorMatters() {
-  return matchMedia('(display-mode: standalone), (display-mode: window-controls-overlay), (display-mode: fullscreen), (pointer: coarse)').matches;
+  return Capacitor.isNativePlatform() || matchMedia('(display-mode: standalone), (display-mode: window-controls-overlay), (display-mode: fullscreen), (pointer: coarse)').matches;
 }
 
 /**
@@ -53,6 +55,11 @@ function syncThemeColor(editor: Editor) {
     if (hex !== last) {
       last = hex;
       meta.content = hex;
+      if (Capacitor.isNativePlatform()) {
+        void import('@capacitor/status-bar').then(({ StatusBar }) => {
+          void StatusBar.setBackgroundColor({ color: hex }).catch(() => {});
+        });
+      }
     }
   });
 }

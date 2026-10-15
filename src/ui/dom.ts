@@ -1,5 +1,7 @@
 import { ChevronLeft, ChevronRight, createElement } from 'lucide';
 import type { IconNode } from 'lucide';
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { tr } from '../core/i18n';
 
 type Child = Node | string | null | undefined | false;
@@ -30,7 +32,10 @@ export function iconButton(node: IconNode, title: string, onClick: () => void, o
       title,
       'aria-label': title,
       disabled: opts.disabled,
-      onClick,
+      onClick: () => {
+        haptic('light');
+        onClick();
+      },
     },
     icon(node),
     opts.label ? h('span', {}, opts.label) : null,
@@ -46,7 +51,43 @@ export function row(...children: Child[]) {
 }
 
 export function button(label: string, onClick: () => void, opts: { icon?: IconNode; cls?: string; active?: boolean } = {}) {
-  return h('button', { class: `btn ${opts.cls ?? ''} ${opts.active ? 'active' : ''}`, onClick }, opts.icon ? icon(opts.icon, 18) : null, h('span', {}, label));
+  return h(
+    'button',
+    {
+      class: `btn ${opts.cls ?? ''} ${opts.active ? 'active' : ''}`,
+      onClick: () => {
+        haptic('light');
+        onClick();
+      },
+    },
+    opts.icon ? icon(opts.icon, 18) : null,
+    h('span', {}, label),
+  );
+}
+
+/** Tactile micro-haptic on mobile (Android Capacitor / PWA). */
+export function haptic(type: 'light' | 'selection' | 'medium' = 'light') {
+  const fallback = () => {
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        if (type === 'light') navigator.vibrate(25);
+        else if (type === 'selection') navigator.vibrate(35);
+        else if (type === 'medium') navigator.vibrate(50);
+      }
+    } catch { /* Ignore if device blocks vibration */ }
+  };
+  try {
+    if (Capacitor.isNativePlatform()) {
+      const p = type === 'selection'
+        ? Haptics.selectionChanged()
+        : Haptics.impact({ style: type === 'medium' ? ImpactStyle.Medium : ImpactStyle.Light });
+      p.catch(() => fallback());
+      return;
+    }
+    fallback();
+  } catch {
+    fallback();
+  }
 }
 
 export function chips<T extends string>(options: { value: T; label: string }[], value: T, onPick: (v: T) => void) {
@@ -55,6 +96,7 @@ export function chips<T extends string>(options: { value: T; label: string }[], 
     class: `chip ${o.value === value ? 'active' : ''}`,
     'aria-pressed': String(o.value === value),
     onClick: (event: Event) => {
+      haptic('light');
       // Some controls change only transient tool state, so they don't rebuild their panel.
       for (const button of el.querySelectorAll('button')) {
         const active = button === event.currentTarget;
@@ -89,14 +131,23 @@ export function slider(label: string, value: number, opts: SliderOpts, onInput: 
     max: String(opts.max),
     step: String(opts.step ?? (opts.max - opts.min) / 200),
     value: String(to(value)),
+    'aria-label': label,
   });
+  const updateFill = () => {
+    const min = parseFloat(input.min);
+    const max = parseFloat(input.max);
+    const pct = ((parseFloat(input.value) - min) / (max - min || 1)) * 100;
+    input.style.setProperty('--val-pct', `${Math.max(0, Math.min(100, pct))}%`);
+  };
   const update = () => {
+    updateFill();
     const v = from(parseFloat(input.value));
     out.textContent = fmt(v);
     onInput(v);
   };
   input.addEventListener('input', update);
   input.addEventListener('change', () => opts.onCommit?.());
+  updateFill();
   // Double-click/double-tap the label to restore the initial value
   const initial = value;
   const lab = h('label', {
@@ -136,19 +187,28 @@ export function scrollFriendlyRange(track: HTMLElement, input: HTMLInputElement)
       }
       if (Math.abs(dx) < 8) return;
       drag.active = true;
-      track.setPointerCapture(e.pointerId);
+      try { track.setPointerCapture(e.pointerId); } catch { /* ignore if already released */ }
       track.classList.add('dragging');
+      haptic('light');
     }
     const min = parseFloat(input.min);
     const max = parseFloat(input.max);
+    const step = parseFloat(input.step);
     const width = track.clientWidth || 1;
-    input.value = String(Math.min(max, Math.max(min, drag.value + (dx / width) * (max - min))));
+    let val = Math.min(max, Math.max(min, drag.value + (dx / width) * (max - min)));
+    if (Number.isFinite(step) && step > 0) {
+      val = Math.round((val - min) / step) * step + min;
+    }
+    input.value = String(+val.toFixed(6));
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
   const end = (e: PointerEvent) => {
     if (!drag || e.pointerId !== drag.id) return;
     if (drag.active) input.dispatchEvent(new Event('change', { bubbles: true }));
     track.classList.remove('dragging');
+    if (track.hasPointerCapture(e.pointerId)) {
+      try { track.releasePointerCapture(e.pointerId); } catch { /* ignore if already released */ }
+    }
     drag = null;
   };
   track.addEventListener('pointerup', end);
@@ -163,7 +223,15 @@ export function segmented(options: { id: string; label: string; icon?: IconNode 
     ...options.map((o) =>
       h(
         'button',
-        { class: o.id === value ? 'active' : '', role: 'tab', 'aria-selected': String(o.id === value), onClick: () => onPick(o.id) },
+        {
+          class: o.id === value ? 'active' : '',
+          role: 'tab',
+          'aria-selected': String(o.id === value),
+          onClick: () => {
+            haptic('light');
+            onPick(o.id);
+          },
+        },
         o.icon ? icon(o.icon, 16) : null,
         h('span', {}, o.label),
       ),
@@ -211,7 +279,13 @@ export function scrollableSegmented(options: { id: string; label: string; icon?:
 export function menuItem(node: IconNode, label: string, run: () => void, opts: { kbd?: string; on?: boolean; description?: string } = {}) {
   return h(
     'button',
-    { class: `menu-item ${opts.on ? 'on' : ''} ${opts.description ? 'described' : ''}`, onClick: run },
+    {
+      class: `menu-item ${opts.on ? 'on' : ''} ${opts.description ? 'described' : ''}`,
+      onClick: () => {
+        haptic('light');
+        run();
+      },
+    },
     icon(node, 18),
     h('span', {}, label, opts.description ? h('small', {}, opts.description) : null),
     opts.kbd ? h('kbd', {}, opts.kbd) : opts.on !== undefined ? h('i', { class: 'menu-check' }) : null,
@@ -220,7 +294,19 @@ export function menuItem(node: IconNode, label: string, run: () => void, opts: {
 
 /** Big round camera shutter (photo mode and AR). */
 export function shutterButton(label: string, onClick: () => void) {
-  return h('button', { class: 'shutter', title: label, 'aria-label': label, onClick }, h('i', {}));
+  return h(
+    'button',
+    {
+      class: 'shutter',
+      title: label,
+      'aria-label': label,
+      onClick: () => {
+        haptic('medium');
+        onClick();
+      },
+    },
+    h('i', {}),
+  );
 }
 
 /** White flash over a container, as feedback for a photo. */
@@ -231,7 +317,7 @@ export function flashScreen(parent: HTMLElement) {
 }
 
 export function colorInput(label: string, value: string, onInput: (hex: string) => void, onCommit?: () => void) {
-  const input = h('input', { type: 'color', value });
+  const input = h('input', { type: 'color', value, 'aria-label': label });
   input.addEventListener('input', () => onInput(input.value));
   input.addEventListener('change', () => onCommit?.());
   return h('label', { class: 'color' }, h('span', {}, label), input);
@@ -239,12 +325,15 @@ export function colorInput(label: string, value: string, onInput: (hex: string) 
 
 export function toggle(label: string, value: boolean, onChange: (v: boolean) => void) {
   const input = h('input', { type: 'checkbox', checked: value });
-  input.addEventListener('change', () => onChange(input.checked));
+  input.addEventListener('change', () => {
+    haptic('selection');
+    onChange(input.checked);
+  });
   return h('label', { class: 'toggle' }, h('span', {}, label), input, h('i', {}));
 }
 
 export function select(label: string, options: { value: string; label: string }[], value: string, onChange: (v: string) => void) {
-  const sel = h('select', {}, ...options.map((o) => h('option', { value: o.value, selected: o.value === value }, o.label)));
+  const sel = h('select', { 'aria-label': label }, ...options.map((o) => h('option', { value: o.value, selected: o.value === value }, o.label)));
   sel.addEventListener('change', () => onChange(sel.value));
   return h('label', { class: 'select' }, h('span', {}, label), sel);
 }
@@ -253,14 +342,79 @@ export function hint(text: string) {
   return h('p', { class: 'hint' }, text);
 }
 
-/** Number field that commits on Enter/blur. */
+/** Number field with quick decrement/increment stepper buttons. */
 export function numberInput(label: string, value: number, opts: { step?: number; suffix?: string }, onCommit: (v: number) => void) {
-  const input = h('input', { type: 'number', value: String(+value.toFixed(4)), step: opts.step ? String(opts.step) : 'any', inputmode: 'decimal' });
-  input.addEventListener('change', () => {
-    const v = parseFloat(input.value.replace(',', '.'));
-    if (Number.isFinite(v)) onCommit(v);
+  const step = opts.step ?? 1;
+  const input = h('input', { type: 'number', value: String(+value.toFixed(4)), step: String(step), inputmode: 'decimal', 'aria-label': label });
+  let lastCommitted: number | null = Number.isFinite(value) ? +value.toFixed(4) : null;
+  const commit = (delta?: number, vibrate = true) => {
+    let v = parseFloat(input.value.replace(',', '.'));
+    if (delta !== undefined) {
+      v = +(v + delta).toFixed(4);
+      input.value = String(v);
+    }
+    if (Number.isFinite(v) && v !== lastCommitted) {
+      lastCommitted = v;
+      onCommit(v);
+      if (vibrate) haptic('light');
+    }
+  };
+  input.addEventListener('change', () => commit(undefined, false));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      commit(undefined, true);
+      input.blur();
+    }
   });
-  return h('label', { class: 'num' }, h('span', {}, label), h('div', { class: 'num-field' }, input, opts.suffix ? h('em', {}, opts.suffix) : null));
+  const btnMinus = h('button', {
+    type: 'button',
+    class: 'num-step minus',
+    title: tr('Decrease'),
+    'aria-label': tr('Decrease'),
+    onClick: (e: Event) => { e.preventDefault(); e.stopPropagation(); commit(-step, true); },
+  }, '−');
+  const btnPlus = h('button', {
+    type: 'button',
+    class: 'num-step plus',
+    title: tr('Increase'),
+    'aria-label': tr('Increase'),
+    onClick: (e: Event) => { e.preventDefault(); e.stopPropagation(); commit(step, true); },
+  }, '+');
+  const lab = h('span', { class: 'num-label', title: tr('Drag to adjust, tap to edit') }, label);
+  let scrub: { x: number; val: number; active: boolean } | null = null;
+  lab.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    scrub = { x: e.clientX, val: parseFloat(input.value.replace(',', '.')) || 0, active: false };
+  });
+  lab.addEventListener('pointermove', (e) => {
+    if (!scrub) return;
+    const dx = e.clientX - scrub.x;
+    if (!scrub.active) {
+      if (Math.abs(dx) < 6) return;
+      scrub.active = true;
+      try { lab.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      haptic('light');
+    }
+    const delta = dx * step * 0.05;
+    const next = +(scrub.val + delta).toFixed(4);
+    input.value = String(next);
+  });
+  const endScrub = (e: PointerEvent) => {
+    if (!scrub) return;
+    if (scrub.active) {
+      commit(undefined, false);
+      try {
+        if (lab.hasPointerCapture(e.pointerId)) {
+          lab.releasePointerCapture(e.pointerId);
+        }
+      } catch { /* ignore */ }
+      haptic('light');
+    }
+    scrub = null;
+  };
+  lab.addEventListener('pointerup', endScrub);
+  lab.addEventListener('pointercancel', endScrub);
+  return h('label', { class: 'num' }, lab, h('div', { class: 'num-field' }, btnMinus, input, opts.suffix ? h('em', {}, opts.suffix) : null, btnPlus));
 }
 
 /** Progress of a long task (0–1), with its message. */

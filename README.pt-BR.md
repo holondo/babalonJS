@@ -26,9 +26,9 @@ Para testar no celular na mesma rede Wi-Fi: `npm run dev -- --host` e abra o end
 
 O babalon JS é um Progressive Web App. Publicado em HTTPS (ou em `localhost`), o navegador oferece a instalação: ícone de instalar na barra de endereço do Chrome/Edge, item **Instalar app** no menu de projeto, ou *Adicionar à tela inicial* no Android/iOS. Instalado, ele:
 
-- funciona offline (o app inteiro fica em cache; ambientes HDR e modelos de exemplo entram no cache na primeira vez que são usados);
+- funciona offline (o app inteiro fica em cache; 6 ambientes HDR padrão já vêm incluídos; outros modelos de exemplo entram no cache na primeira vez que são usados);
 - no computador, aparece em "Abrir com" para arquivos `.babalon`, `.glb`, `.gltf`, `.obj`, `.stl`, `.fbx`, `.ply`, `.splat` e `.spz`;
-- no Android, aparece no menu **Compartilhar** do sistema: em qualquer gerenciador de arquivos (ex.: Meus Arquivos da Samsung) selecione um arquivo 3D ou um projeto `.babalon` → Compartilhar → babalon JS;
+- no Android, aparece no menu **Compartilhar** do sistema: em qualquer gerenciador de arquivos (ex.: Meus Arquivos da Samsung) selecione arquivos 3D individuais ou múltiplos (inclusive `.gltf` com texturas e `.bin`) ou um projeto `.babalon` → Compartilhar → babalon JS;
 - mostra um botão **Atualizar** quando sai uma versão nova, em vez de recarregar sozinho.
 
 ## O que dá para fazer
@@ -96,7 +96,7 @@ Além disso: `vite.config.ts` (manifesto do PWA, cache offline e associação de
 
 O objeto `editor` fica disponível no console do navegador para depuração.
 
-As diretrizes de desenvolvimento (para pessoas e agentes de código) estão em [AGENTS.md](AGENTS.md).
+A integração Android utiliza Capacitor 8, pontes nativas para arquivos e uma Activity nativa com SceneView (Filament) + ARCore para sessões de realidade aumentada em aparelhos compatíveis, enquanto o PWA web oferece WebXR AR. Veja [Native Android AR integration](docs/android_ar.md) para detalhes de arquitetura e comandos de verificação.
 
 ## Licença
 
@@ -104,4 +104,4 @@ Copyright (C) 2026 Guilherme Holanda Sanches
 
 Este programa é software livre: você pode redistribuí-lo e/ou modificá-lo sob os termos da GNU General Public License publicada pela Free Software Foundation, na versão 3 da licença ou (a seu critério) qualquer versão posterior. Veja [LICENSE](LICENSE).
 
-As bibliotecas de terceiros mantêm suas próprias licenças: Babylon.js (Apache-2.0), fflate (MIT), ícones Lucide (ISC). As animações e os manequins incluídos são CC0 (Universal Animation Library, de Quaternius), listados em [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Os outros modelos de exemplo e ambientes HDR são carregados em tempo de execução do CDN de assets do Babylon.js e não são distribuídos neste repositório.
+As bibliotecas de terceiros mantêm suas próprias licenças: Babylon.js (Apache-2.0), fflate (MIT), ícones Lucide (ISC), meshoptimizer (MIT), ktx2-encoder (MIT) com o codificador Basis Universal (Apache-2.0), ktx-parse (MIT) e glTF-Transform (MIT). As animações e os manequins incluídos são CC0 (Universal Animation Library, de Quaternius). Os seis ambientes HDR pré-filtrados incluídos são CC BY 4.0 do repositório Babylon.js Assets. Todos os recursos de terceiros estão listados em [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Outros modelos de exemplo são carregados em tempo de execução do CDN do Babylon.js e não são distribuídos neste repositório.

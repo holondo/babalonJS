@@ -21,6 +21,7 @@ export default defineConfig({
       '@babylonjs/core/Cameras/universalCamera.js',
       '@babylonjs/serializers/glTF/2.0/glTFExporter.js',
       '@babylonjs/serializers/glTF/2.0/glTFSerializer.js',
+      '@babylonjs/serializers/glTF/2.0/index.js',
     ],
   },
   plugins: [
@@ -158,6 +159,16 @@ export default defineConfig({
             options: {
               cacheName: 'library',
               expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 60 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
+            // Bundled HDR lighting environments
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/environments\/[^/]+\.env$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'environments',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 60 },
               cacheableResponse: { statuses: [200] },
             },
           },

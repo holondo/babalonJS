@@ -102,7 +102,7 @@ export class JointOverlay {
       e.preventDefault();
       e.stopPropagation();
       drag = { pointer: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
-      dot.setPointerCapture(e.pointerId);
+      try { dot.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     });
     dot.addEventListener('pointermove', (e) => {
       if (!drag || e.pointerId !== drag.pointer || !this.handlers.onDrag) return;

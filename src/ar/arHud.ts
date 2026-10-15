@@ -196,7 +196,7 @@ export class ARHud {
 
     this.el.addEventListener('pointerdown', (ev) => {
       if ((ev.target as Element).closest('button, input, label, .ar-options')) return;
-      this.el.setPointerCapture(ev.pointerId);
+      try { this.el.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
       pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
       if (pointers.size === 1) {
         start = { x: ev.clientX, y: ev.clientY, t: performance.now() };

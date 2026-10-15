@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name" translatable="false">babalon JS</string>
+    <string name="title_activity_main" translatable="false">babalon JS</string>
+    <string name="package_name" translatable="false">com.holondo.babalon</string>
+    <string name="custom_url_scheme" translatable="false">com.holondo.babalon</string>
+    <string name="choose_files">Choose files</string>
+
+    <!-- AR: content descriptions before the web app's translations are applied at runtime -->
+    <string name="ar_exit">Exit AR</string>
+    <string name="ar_depth_occlusion">Depth occlusion</string>
+    <string name="ar_options">AR options</string>
+    <string name="ar_hide_interface">Hide interface</string>
+    <string name="ar_close">Close</string>
+    <string name="ar_move_scene">Move scene</string>
+    <string name="ar_measure_objects">Measure objects</string>
+    <string name="ar_capture">Capture</string>
+    <string name="ar_toggle_video">Toggle video mode</string>
+    <string name="ar_show_interface">Show interface</string>
+</resources>

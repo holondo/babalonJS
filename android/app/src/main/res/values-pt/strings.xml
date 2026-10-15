@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="choose_files">Escolher arquivos</string>
+
+    <string name="ar_exit">Sair do AR</string>
+    <string name="ar_depth_occlusion">Oclusão por profundidade</string>
+    <string name="ar_options">Opções de AR</string>
+    <string name="ar_hide_interface">Ocultar interface</string>
+    <string name="ar_close">Fechar</string>
+    <string name="ar_move_scene">Mover cena</string>
+    <string name="ar_measure_objects">Medir objetos</string>
+    <string name="ar_capture">Capturar</string>
+    <string name="ar_toggle_video">Alternar modo vídeo</string>
+    <string name="ar_show_interface">Mostrar interface</string>
+</resources>

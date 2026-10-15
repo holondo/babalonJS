@@ -32,7 +32,7 @@ export class ObjectsPanel {
     );
     list.querySelectorAll('.mini').forEach((b) => b.addEventListener('click', (ev) => ev.stopPropagation()));
     const out: (Node | null)[] = [
-      section(tr('Objects in scene'), ed.entities.length ? list : hint(tr('The scene is empty.')), row(button(tr('Clear scene'), () => confirm(tr('Remove everything from the scene?')) && ed.clearScene(), { icon: Trash2, cls: 'ghost' }))),
+      section(tr('Objects in scene'), ed.entities.length ? list : hint(tr('The scene is empty.')), ed.entities.length ? row(button(tr('Clear scene'), () => confirm(tr('Remove everything from the scene?')) && ed.clearScene(), { icon: Trash2, cls: 'ghost' })) : null),
     ];
     const e = ed.selected;
     if (!e) {
@@ -48,7 +48,7 @@ export class ObjectsPanel {
   transformSection(e: Entity) {
     const ed = this.ui.editor;
     const commit = () => this.ui.quiet(() => ed.endTransform());
-    const nameInput = h('input', { type: 'text', value: e.name, class: 'name' });
+    const nameInput = h('input', { type: 'text', value: e.name, class: 'name', 'aria-label': tr('Object name') });
     nameInput.addEventListener('change', () => ed.rename(e, nameInput.value.trim()));
     const euler = ed.getEuler(e);
     const rot = { x: deg(euler.x), y: deg(euler.y), z: deg(euler.z) };

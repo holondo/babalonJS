@@ -55,7 +55,7 @@ import type { GyroControl } from '../device/gyro';
 import { saveAndOfferShare, timestampedName } from '../core/files';
 import { LANGS, getLang, setLang, tr } from '../core/i18n';
 import type { Lang } from '../core/i18n';
-import { button, chips, h, hint, icon, iconButton, menuItem, progressBar, row, section, segmented, scrollableSegmented } from './dom';
+import { button, chips, h, haptic, hint, icon, iconButton, menuItem, progressBar, row, section, segmented, scrollableSegmented } from './dom';
 import { AddPanel } from './panels/add';
 import { ObjectsPanel } from './panels/objects';
 import { MaterialPanel } from './panels/material';
@@ -78,8 +78,9 @@ import type { Observer } from '@babylonjs/core/Misc/observable.js';
 import { LightPanel } from './panels/light';
 import { PhotoMode } from './photo';
 import { MeasureLabels } from './measureLabels';
-import { KIND_ICON, fileSafe, toggleFullscreen, errorMessage } from './shared';
+import { KIND_ICON, fileSafe, toggleFullscreen, isFullscreen, isFullscreenAvailable, errorMessage } from './shared';
 import type { Tab } from './shared';
+import { Capacitor } from '@capacitor/core';
 
 /** Dock tabs. Photo isn't a tab: it's a mode, with its own panel inside photo mode. */
 const TABS: { id: Exclude<Tab, 'photo'>; label: string; icon: IconNode }[] = [
@@ -117,6 +118,7 @@ export class UI {
 
   tab: Tab | null = null;
   private busy = false;
+  private nativeAR = false;
   private activityId = 0;
   private activityState = '';
   private readonly activities = new Map<string, { label: string; icon: IconNode; progress: number | null; cancel?: () => void }>();
@@ -195,9 +197,14 @@ export class UI {
     this.gallery = new ProjectGallery(this);
     this.setupAutosave();
     document.addEventListener('fullscreenchange', () => this.renderViewStack());
+    window.addEventListener('nativefullscreenchange', () => this.renderViewStack());
     root.append(this.clipInput);
     this.contextBar = new ContextBar(this);
-    this.panelSheet = new PanelSheet(this.panel, () => this.contextBar.layout(false));
+    this.panelSheet = new PanelSheet(this.panel, () => this.contextBar.layout(false), () => this.openTab(null));
+    this.panel.addEventListener('scroll', () => {
+      if (this.panel.scrollTop !== 0) this.panel.scrollTop = 0;
+      if (this.panel.scrollLeft !== 0) this.panel.scrollLeft = 0;
+    }, { passive: true });
     root.append(this.labels, this.jointOverlay.el, this.frame, this.topbar, this.contextBar.el, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
     this.fileInput.addEventListener('change', () => {
       const files = [...(this.fileInput.files ?? [])];
@@ -365,15 +372,15 @@ export class UI {
     setTimeout(() => t.remove(), life + 500);
   }
 
-  /** Files opened from outside: the OS ("Open with" on an installed PWA) or drag and drop. */
-  async openFiles(files: File[], attribution?: LibraryAttribution) {
+  /** Files opened from outside: the OS ("Open with" on an installed PWA) or drag and drop. Resolves whether they were opened. */
+  async openFiles(files: File[], attribution?: LibraryAttribution): Promise<boolean> {
     const environment = files.find((f) => /\.(hdr|exr|env)$/i.test(f.name));
     if (environment) {
       await this.editor.importEnvironment(environment);
       if (attribution) this.editor.applyEnv({ attribution });
-      return;
+      return true;
     }
-    if (files.length) await this.loadFiles(files, attribution);
+    return files.length ? this.loadFiles(files, attribution) : true;
   }
 
   private gyro: GyroControl | null = null;
@@ -406,6 +413,7 @@ export class UI {
   private arOverlay: HTMLElement | null = null;
   private arLoader: (() => Promise<void>) | null = null;
   private arLoading: Promise<void> | null = null;
+  private arPreparing = false;
 
   setARLoader(loader: () => Promise<void>) {
     this.arLoader = loader;
@@ -421,6 +429,167 @@ export class UI {
   }
 
   private async enterAR() {
+    if (this.arPreparing || this.nativeAR || this.ar?.active) return;
+    this.arPreparing = true;
+    try {
+      await this.prepareAndEnterAR();
+    } catch (error) {
+      this.toast(tr('Could not start AR: {error}', { error: errorMessage(error) }), 'error');
+    } finally {
+      this.arPreparing = false;
+    }
+  }
+
+  private async prepareAndEnterAR() {
+    if (Capacitor.isNativePlatform()) {
+      if (this.nativeAR) return;
+      this.nativeAR = true;
+      const restoreCamera = this.photoUI.suspendCamera();
+      if (this.editor.separator.active) this.leaveMesh();
+      const activity = this.beginActivity(tr('Preparing AR…'), View);
+      interface NativeBridge {
+        startArTransfer?: (title: string, placement: string) => void;
+        appendArChunk?: (base64Chunk: string) => boolean;
+        finishArTransfer?: () => void;
+        cancelArTransfer?: () => void;
+        launchArWithData?: (data: string, title: string, placement: string) => void;
+      }
+      const nativeBridge = (window as unknown as { AndroidNative?: NativeBridge }).AndroidNative;
+      try {
+        if (!nativeBridge) throw new Error(tr('Native AR bridge unavailable'));
+        const restoreModels = await this.prepareLightAR();
+        let blob: Blob | null;
+        try {
+          blob = await this.editor.exportGLB(false, true);
+        } finally {
+          // Native AR uses the exported copy; restore the editor immediately,
+          // including when export fails.
+          restoreModels?.();
+        }
+        if (!blob) throw new Error(tr('Failed to export 3D scene for AR'));
+
+        const bounds = this.editor.sceneBounds();
+        const view = this.editor.camera.position.subtract(this.editor.camera.target);
+        const { nativeARStrings } = await import('../ar/nativeStrings');
+        const { nativeAnimationName } = await import('../ar/nativeScene');
+        const placement = JSON.stringify({
+          strings: nativeARStrings(),
+          language: getLang(),
+          // Babylon is left-handed; glTF and ARCore are right-handed.
+          // Babylon GLTF2Export converts left-handed to right-handed by negating X (x_gltf = -x_babylon, z_gltf = z_babylon).
+          origin: bounds ? [-bounds.center.x, bounds.min.y, bounds.center.z] : [0, 0, 0],
+          baseYaw: Math.atan2(-view.x, view.z),
+          animations: this.editor.entities.filter(e => e.visible && this.editor.anim.isPlaying(e)).map(e => {
+            const clip = this.editor.anim.current(e)!;
+            return { name: nativeAnimationName(e), speed: clip.speedRatio, loop: clip.loopAnimation };
+          }),
+          lighting: 'room',
+          lightLevel: this.editor.env.intensity || 1.0,
+        });
+
+        const projectTitle = this.projectName || 'Babalon AR';
+
+        if (nativeBridge.startArTransfer && nativeBridge.appendArChunk && nativeBridge.finishArTransfer) {
+          nativeBridge.startArTransfer(projectTitle, placement);
+          const CHUNK_SIZE = 1024 * 1024;
+          const totalSize = blob.size;
+          let offset = 0;
+
+          while (offset < totalSize) {
+            const slice = blob.slice(offset, Math.min(offset + CHUNK_SIZE, totalSize));
+            const chunkBase64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const res = reader.result as string;
+                resolve(res.includes(',') ? res.split(',')[1] : res);
+              };
+              reader.onerror = reject;
+              reader.readAsDataURL(slice);
+            });
+
+            const ok = nativeBridge.appendArChunk(chunkBase64);
+            if (!ok) {
+              nativeBridge.cancelArTransfer?.();
+              throw new Error(tr('Failed to transfer 3D model to native AR'));
+            }
+            offset += CHUNK_SIZE;
+          }
+
+          // Dereference blob immediately before AR opens so JS GC can free memory
+          blob = null;
+
+          await new Promise<void>((resolve, reject) => {
+            const stateChanged = (event: Event) => {
+              const state = (event as CustomEvent<string>).detail;
+              if (state === 'started') {
+                this.editor.pauseRendering();
+                activity.finish();
+                return;
+              }
+              window.removeEventListener('nativearstate', stateChanged);
+              this.editor.resumeRendering();
+              if (state === 'closed') resolve();
+              else reject(new Error(tr(state)));
+            };
+            window.addEventListener('nativearstate', stateChanged);
+            try {
+              nativeBridge.finishArTransfer!();
+            } catch (error) {
+              this.editor.resumeRendering();
+              window.removeEventListener('nativearstate', stateChanged);
+              reject(error);
+            }
+          });
+        } else if (nativeBridge.launchArWithData) {
+          const reader = new FileReader();
+          const base64Promise = new Promise<string>((resolve, reject) => {
+            reader.onload = () => {
+              const res = reader.result as string;
+              resolve(res.includes(',') ? res.split(',')[1] : res);
+            };
+            reader.onerror = reject;
+          });
+          reader.readAsDataURL(blob);
+          const base64 = await base64Promise;
+          blob = null;
+
+          await new Promise<void>((resolve, reject) => {
+            const stateChanged = (event: Event) => {
+              const state = (event as CustomEvent<string>).detail;
+              if (state === 'started') {
+                this.editor.pauseRendering();
+                activity.finish();
+                return;
+              }
+              window.removeEventListener('nativearstate', stateChanged);
+              this.editor.resumeRendering();
+              if (state === 'closed') resolve();
+              else reject(new Error(tr(state)));
+            };
+            window.addEventListener('nativearstate', stateChanged);
+            try { nativeBridge.launchArWithData!(base64, projectTitle, placement); }
+            catch (error) {
+              this.editor.resumeRendering();
+              window.removeEventListener('nativearstate', stateChanged);
+              reject(error);
+            }
+          });
+        } else {
+          throw new Error(tr('Native AR bridge unavailable'));
+        }
+      } catch (e) {
+        nativeBridge?.cancelArTransfer?.();
+        this.toast(tr('Could not start AR: {error}', { error: errorMessage(e) }), 'error');
+      } finally {
+        this.editor.resumeRendering();
+        this.nativeAR = false;
+        activity.finish();
+        await restoreCamera().catch(e => this.toast(errorMessage(e), 'error'));
+        this.scheduleAutosave();
+      }
+      return;
+    }
+
     if (!this.ar && this.arLoader) {
       const activity = this.beginActivity(tr('Preparing AR…'), View);
       try {
@@ -437,6 +606,10 @@ export class UI {
       }
     }
     if (!this.ar || !this.arOverlay) return;
+    if (!this.ar.supported) {
+      this.toast(tr('WebXR AR requires Chrome on Android. WebView does not support WebXR.'), 'error');
+      return;
+    }
     if (this.editor.separator.active) this.leaveMesh();
     if (!this.arRestore && (await this.lightenForAR())) return;
     try {
@@ -454,17 +627,7 @@ export class UI {
    * changed). True when the user must tap again to start AR: the browser asks for a fresh tap.
    */
   private async lightenForAR() {
-    const ed = this.editor;
-    const cost = analyzeScene(ed);
-    const budget = deviceBudget();
-    if (!overBudget(cost, budget)) return false;
-    const models = ed.entities.filter((e) => e.kind === 'model' && e.visible && !e.optimization && !ed.optimizer.blocker(e));
-    if (!models.length || !confirm(tr('This scene is heavy for this device and AR may stutter. Use a lighter copy in AR? Your project stays as it is.'))) return false;
-    const ratio = Math.min(0.5, Math.max(0.02, (budget.triangles / Math.max(1, cost.triangles)) * 0.9));
-    let restore: (() => void) | null = null;
-    await this.run(async () => {
-      restore = await ed.optimizer.applyForSession(models, { ...DEFAULT_OPTIMIZE, ratio });
-    });
+    const restore = await this.prepareLightAR();
     if (!restore) return false;
     this.arRestore = restore;
     let entered = false;
@@ -478,6 +641,18 @@ export class UI {
       if (!entered) this.endLightAR(watch);
     }, 16000);
     return true;
+  }
+
+  /** Shared opt-in geometry reduction; callers own the temporary copy's lifetime. */
+  private async prepareLightAR(): Promise<(() => void) | null> {
+    const ed = this.editor;
+    const cost = analyzeScene(ed);
+    const budget = deviceBudget();
+    if (!overBudget(cost, budget)) return null;
+    const models = ed.entities.filter((e) => e.kind === 'model' && e.visible && !e.optimization && !ed.optimizer.blocker(e));
+    if (!models.length || !confirm(tr('This scene is heavy for this device and AR may stutter. Use a lighter copy in AR? Your project stays as it is.'))) return null;
+    const ratio = Math.min(0.5, Math.max(0.02, (budget.triangles / Math.max(1, cost.triangles)) * 0.9));
+    return ed.optimizer.applyForSession(models, { ...DEFAULT_OPTIMIZE, ratio });
   }
 
   private endLightAR(watch: Observer<void> | null) {
@@ -494,7 +669,7 @@ export class UI {
     if (this.menuOpen) this.toggleMenu(true);
   }
 
-  private async loadFiles(files: File[], attribution?: LibraryAttribution) {
+  private async loadFiles(files: File[], attribution?: LibraryAttribution): Promise<boolean> {
     const project = files.find((f) => f.name.toLowerCase().endsWith(PROJECT_EXT));
     if (project) return this.openProjectFile(project);
     try {
@@ -503,8 +678,10 @@ export class UI {
       if (entity?.kind === 'model' && overBudget(analyzeEntity(this.editor, entity), budget)) this.toast(
         tr(budget.phone ? 'This model is heavy for this phone and may run slowly. You can optimize it.' : 'This model is very heavy. You can optimize it.'),
         'info', { label: tr('Optimize'), run: () => this.openPart('objects', 'optimize') }, 9000);
+      return true;
     } catch (e) {
       this.toast(errorMessage(e), 'error');
+      return false;
     }
   }
 
@@ -708,15 +885,18 @@ export class UI {
     }
   }
 
-  private async openProjectFile(file: File) {
-    if (this.hasContent() && !confirm(tr('Opening the project will replace the current scene. Continue?'))) return;
+  /** Resolves `false` only when the file could not be read; declining the replace prompt counts as handled. */
+  private async openProjectFile(file: File): Promise<boolean> {
+    if (this.hasContent() && !confirm(tr('Opening the project will replace the current scene. Continue?'))) return true;
     const activity = this.beginActivity(tr('Opening project: {name}', { name: file.name }), Upload);
     try {
       const snap = await fromZip(file);
       if (!snap.json.name) snap.json.name = file.name.replace(/\.[^.]+$/, '');
       await this.loadSnapshot(snap);
+      return true;
     } catch (e) {
       this.toast(errorMessage(e), 'error');
+      return false;
     } finally {
       activity.finish();
     }
@@ -852,7 +1032,7 @@ export class UI {
 
   private scheduleAutosave() {
     // During AR the environment is temporarily changed: don't save that state
-    if (this.restoring || this.editor.arMode || this.editor.recording || this.editor.cameraBackground) return;
+    if (this.restoring || this.nativeAR || this.editor.arMode || this.editor.recording || this.editor.cameraBackground) return;
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = window.setTimeout(() => this.autosaveNow().catch((e) => {
       // The reason (quota, private window, blocked storage…) is what tells the user and us what to do
@@ -864,7 +1044,7 @@ export class UI {
   private async autosaveNow() {
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = 0;
-    if (this.restoring || this.editor.arMode || this.editor.recording || this.editor.cameraBackground) return;
+    if (this.restoring || this.nativeAR || this.editor.arMode || this.editor.recording || this.editor.cameraBackground) return;
     const id = this.projectId ??= crypto.randomUUID();
     const snap = snapshot(this.editor, this.projectName);
     // Serialize writes so a slow thumbnail never overwrites a newer snapshot or another project.
@@ -903,6 +1083,7 @@ export class UI {
 
   openTab(tab: Tab | null) {
     this.tab = this.tab === tab ? null : tab;
+    haptic(this.tab ? 'selection' : 'light');
     this.renderDock();
     this.renderPanel();
     this.labelsUI.buildLabels();
@@ -928,7 +1109,7 @@ export class UI {
     // Scene reset can end Mesh mode directly, without going through the panel's Cancel.
     if (this.separateUI && !this.editor.separator.active) {
       this.separateUI.sync();
-      if (this.segment.objects === 'separate') this.segment.objects = 'object';
+      if (this.segment.objects && ['separate', 'select', 'sculpt'].includes(this.segment.objects)) this.segment.objects = 'object';
     }
     const previous = this.focusedContext;
     this.contextBar.render(this.contexts());
@@ -1011,7 +1192,7 @@ export class UI {
     if (ed.pose.active) out.push({ id: 'pose', icon: PersonStanding, label: tr('Pose'), render: () => this.poseUI.renderPoseBar(), expand: () => this.openPart('objects', 'pose') });
     if (ed.separator.active) {
       const n = ed.separator.selection?.count ?? 0;
-      out.push({ id: 'mesh', icon: Triangle, label: n ? tr('{n} faces', { n: n.toLocaleString() }) : tr('Mesh'), render: () => this.renderFeatureContext('separate', () => this.separateUI!.bar()), expand: () => this.openPart('objects', 'separate') });
+      out.push({ id: 'mesh', icon: Triangle, label: n ? tr('{n} faces', { n: n.toLocaleString() }) : tr('Mesh'), render: () => this.renderFeatureContext('separate', () => this.separateUI!.bar()), expand: () => this.openPart('objects', this.separateUI?.getPart() ?? 'select') });
     }
     if (ed.tools.measureMode) out.push({ id: 'measure', icon: Ruler, label: tr('Measure'), render: () => this.selbar.replaceChildren(
       h('div', { class: 'sel-name measure always' }, icon(Ruler, 16), h('span', {}, ed.tools.pending ? tr('Tap the second point') : tr('Tap the first point'))),
@@ -1121,8 +1302,8 @@ export class UI {
     const buttons: (HTMLElement | null)[] = [
       iconButton(Scan, tr('Frame all (F)'), () => ed.frameAll()),
       this.gyroButton(),
-      document.fullscreenEnabled
-        ? document.fullscreenElement
+      isFullscreenAvailable()
+        ? isFullscreen()
           ? iconButton(Shrink, tr('Exit fullscreen'), () => toggleFullscreen())
           : iconButton(Expand, tr('Fullscreen'), () => toggleFullscreen())
         : null,
@@ -1142,6 +1323,69 @@ export class UI {
     }
   }
 
+  /**
+   * Hierarchical back button handler for Android navigation.
+   * Returns true if a modal, menu, panel, or sub-mode was closed; false if already at root.
+   */
+  handleBack(): boolean {
+    if (this.menuOpen) {
+      this.toggleMenu(false);
+      return true;
+    }
+    if (this.selMenuOpen) {
+      this.toggleSelMenu(false);
+      return true;
+    }
+    if (this.uiHidden) {
+      this.setUiHidden(false);
+      return true;
+    }
+    if (this.editor.photoMode) {
+      if (this.photoPanel) {
+        this.photoPanel = false;
+        this.renderAll();
+        return true;
+      }
+      this.editor.setPhotoMode(false);
+      return true;
+    }
+    if (this.ar?.active) {
+      void this.ar.exit();
+      return true;
+    }
+    if (this.tab !== null) {
+      this.openTab(null);
+      return true;
+    }
+    if (this.editor.separator.active) {
+      this.leaveMesh();
+      return true;
+    }
+    if (this.editor.rigger.active) {
+      this.editor.rigger.cancel();
+      return true;
+    }
+    if (this.editor.pose.active) {
+      this.editor.pose.stop();
+      return true;
+    }
+    if (this.editor.tools.pending) {
+      this.editor.tools.cancelPending();
+      return true;
+    }
+    if (this.editor.tools.measureMode) {
+      this.editor.tools.setMeasureMode(false);
+      return true;
+    }
+    if (this.editor.selected || this.editor.multiSelect) {
+      this.editor.select(null);
+      return true;
+    }
+    return false;
+  }
+
+  private panelCloseTimer = 0;
+
   renderPanel() {
     const ed = this.editor;
     const tab: Tab | null = ed.photoMode ? (this.photoPanel ? 'photo' : null) : this.tab;
@@ -1149,16 +1393,30 @@ export class UI {
     document.body.classList.toggle('panel-open', !!tab);
     this.panelSheet.scheduleLayout();
     if (!tab) {
-      this.panel.replaceChildren();
+      window.clearTimeout(this.panelCloseTimer);
+      this.panelCloseTimer = window.setTimeout(() => {
+        if (!this.tab && (!this.editor.photoMode || !this.photoPanel)) {
+          this.panel.replaceChildren();
+        }
+      }, 280);
       if (ed.rigger.active) this.renderSelbar();
       return;
     }
-    const title = tr(PANEL_TITLES[tab]);
+    window.clearTimeout(this.panelCloseTimer);
+    const title = this.editor.separator.active && tab === 'objects' ? tr('Mesh') : tr(PANEL_TITLES[tab]);
     const scroll = this.panel.querySelector('.panel-body')?.scrollTop ?? 0;
     const parts = this.panelParts(tab);
     const current = parts?.find((p) => p.id === this.segment[tab]) ? this.segment[tab]! : parts?.[0].id ?? '';
-    const body = h('div', { class: 'panel-body' }, ...this.panelContent(tab, current));
+    let content: (Node | null)[];
+    try {
+      content = this.panelContent(tab, current);
+    } catch (e) {
+      console.error('Error rendering panel content:', e);
+      content = [hint(tr('An error occurred while displaying this panel.')), button(tr('Try again'), () => this.renderPanel())];
+    }
+    const body = h('div', { class: 'panel-body' }, ...content);
     const rigging = tab === 'objects' && current === 'rig' && ed.rigger.active && ed.rigger.entity === ed.selected;
+    const meshActive = tab === 'objects' && ed.separator.active;
     this.panel.replaceChildren(
       this.panelSheet.handle,
       h(
@@ -1167,10 +1425,13 @@ export class UI {
         h('h2', {}, title),
         iconButton(X, tr('Close'), () => (ed.photoMode ? ((this.photoPanel = false), this.renderAll()) : this.openTab(null))),
       ),
-      ...(parts
+      ...(parts && parts.length > 1
         ? [
             scrollableSegmented(parts, current, (id) => {
               this.segment[tab] = id;
+              if (this.editor.separator.active && this.separateUI) {
+                this.separateUI.setPart(id as 'select' | 'sculpt' | 'modify');
+              }
               this.panel.querySelector('.panel-body')!.scrollTop = 0;
               this.renderPanel();
               this.labelsUI.buildLabels();
@@ -1180,7 +1441,10 @@ export class UI {
       ...(rigging && this.rigUI ? [this.rigUI.rigStepper()] : []),
       body,
       ...(rigging && this.rigUI ? [this.rigUI.rigFooter()] : []),
+      ...(meshActive && this.separateUI ? [this.separateUI.footer()] : []),
     );
+    this.panel.scrollTop = 0;
+    this.panel.scrollLeft = 0;
     body.scrollTop = scroll;
     this.panelSheet.update();
     if (ed.rigger.active) this.renderSelbar();
@@ -1193,7 +1457,13 @@ export class UI {
       case 'objects': {
         const e = this.editor.selected;
         if (!e || e.kind === 'light') return null;
-        if (this.editor.separator.active) return [{ id: 'separate', label: tr('Mesh') }];
+        if (this.editor.separator.active) {
+          return [
+            { id: 'select', label: tr('Select') },
+            { id: 'sculpt', label: tr('Sculpt') },
+            { id: 'modify', label: tr('Modify') },
+          ];
+        }
         if (e.groupMembers) return [{ id: 'object', label: tr('Object') }, { id: 'material', label: tr('Material') }, { id: 'modify', label: tr('Modify') }];
         return [
           { id: 'object', label: tr('Object') },
@@ -1316,6 +1586,9 @@ export class UI {
   }
 
   private objectsPart(part: string): (Node | null)[] {
+    if (this.editor.separator.active) {
+      return this.featureContent('separate', () => this.separateUI!.panel(part as 'select' | 'sculpt' | 'modify'));
+    }
     if (part === 'material') return this.materialUI.materialPanel();
     if (part === 'animate') return this.animateUI.animatePanel();
     if (part === 'pose') return this.poseUI.posePanel();

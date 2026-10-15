@@ -28,6 +28,7 @@ import { tr } from '../core/i18n';
 import { createLight, createShadowGenerator } from '../core/editor';
 import type { Editor } from '../core/editor';
 import { PHOTO_FILTERS, filterToCanvas, findLightPreset, presetIntensity } from '../core/presets';
+import { Capacitor } from '@capacitor/core';
 
 export type ARStatus = 'searching' | 'ready' | 'placed';
 /** "scene" = the editor's own lights; "room" = estimated by the phone; the rest are presets. */
@@ -95,9 +96,9 @@ export class ARMode {
 
   async checkSupport() {
     try {
-      this.supported = !!navigator.xr && (await WebXRSessionManager.IsSessionSupportedAsync('immersive-ar'));
+      this.supported = Capacitor.isNativePlatform() || (!!navigator.xr && (await WebXRSessionManager.IsSessionSupportedAsync('immersive-ar')));
     } catch {
-      this.supported = false;
+      this.supported = Capacitor.isNativePlatform();
     }
     this.changed.notifyObservers();
     return this.supported;

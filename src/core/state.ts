@@ -42,23 +42,23 @@ export function materialToJSON(m: Material): MaterialJSON {
     return {
       ...base,
       type: 'pbr',
-      albedo: m.albedoColor.toHexString(),
+      albedo: m.albedoColor ? m.albedoColor.toHexString() : '#ffffff',
       metallic: m.metallic,
       roughness: m.roughness,
-      clearCoat: m.clearCoat.isEnabled,
-      clearCoatIntensity: m.clearCoat.intensity,
+      clearCoat: m.clearCoat?.isEnabled ?? false,
+      clearCoatIntensity: m.clearCoat?.intensity ?? 1,
       unlit: m.unlit,
-      emissive: m.emissiveColor.toHexString(),
+      emissive: m.emissiveColor ? m.emissiveColor.toHexString() : '#000000',
       emissiveIntensity: m.emissiveIntensity,
       metallicChannels: [m.useRoughnessFromMetallicTextureAlpha, m.useRoughnessFromMetallicTextureGreen, m.useMetallnessFromMetallicTextureBlue],
       textureHidden: !!m.metadata?.stashedAlbedo,
       advanced: {
-        refraction: m.subSurface.isRefractionEnabled, transmission: m.subSurface.refractionIntensity,
-        ior: m.subSurface.indexOfRefraction, linkTransparency: m.subSurface.linkRefractionWithTransparency,
-        sheen: m.sheen.isEnabled, sheenIntensity: m.sheen.intensity, sheenColor: m.sheen.color.toHexString(), sheenRoughness: m.sheen.roughness,
-        iridescence: m.iridescence.isEnabled, iridescenceIntensity: m.iridescence.intensity,
-        filmMin: m.iridescence.minimumThickness, filmMax: m.iridescence.maximumThickness,
-        anisotropy: m.anisotropy.isEnabled, anisotropyIntensity: m.anisotropy.intensity, anisotropyDirection: m.anisotropy.direction.asArray(),
+        refraction: m.subSurface?.isRefractionEnabled ?? false, transmission: m.subSurface?.refractionIntensity ?? 0,
+        ior: m.subSurface?.indexOfRefraction ?? 1.5, linkTransparency: m.subSurface?.linkRefractionWithTransparency ?? false,
+        sheen: m.sheen?.isEnabled ?? false, sheenIntensity: m.sheen?.intensity ?? 0, sheenColor: m.sheen?.color ? m.sheen.color.toHexString() : '#ffffff', sheenRoughness: m.sheen?.roughness ?? null,
+        iridescence: m.iridescence?.isEnabled ?? false, iridescenceIntensity: m.iridescence?.intensity ?? 0,
+        filmMin: m.iridescence?.minimumThickness ?? 100, filmMax: m.iridescence?.maximumThickness ?? 400,
+        anisotropy: m.anisotropy?.isEnabled ?? false, anisotropyIntensity: m.anisotropy?.intensity ?? 0, anisotropyDirection: m.anisotropy?.direction?.asArray?.() ?? [1, 0],
       },
     };
   }
@@ -66,10 +66,10 @@ export function materialToJSON(m: Material): MaterialJSON {
     return {
       ...base,
       type: 'standard',
-      diffuse: m.diffuseColor.toHexString(),
-      specular: m.specularColor.toHexString(),
+      diffuse: m.diffuseColor ? m.diffuseColor.toHexString() : '#ffffff',
+      specular: m.specularColor ? m.specularColor.toHexString() : '#ffffff',
       specularPower: m.specularPower,
-      emissive: m.emissiveColor.toHexString(),
+      emissive: m.emissiveColor ? m.emissiveColor.toHexString() : '#000000',
     };
   }
   return { ...base, type: 'other' };
@@ -83,22 +83,34 @@ export function applyMaterial(m: Material, j: MaterialJSON) {
   m.wireframe = j.wireframe;
   if (m instanceof PBRMaterial && j.type === 'pbr') {
     if (j.metallicChannels) [m.useRoughnessFromMetallicTextureAlpha, m.useRoughnessFromMetallicTextureGreen, m.useMetallnessFromMetallicTextureBlue] = j.metallicChannels;
-    m.albedoColor = Color3.FromHexString(j.albedo!);
+    if (j.albedo) m.albedoColor = Color3.FromHexString(j.albedo);
     if (j.metallic !== undefined) m.metallic = j.metallic;
     if (j.roughness !== undefined) m.roughness = j.roughness;
-    m.clearCoat.isEnabled = !!j.clearCoat;
-    m.clearCoat.intensity = j.clearCoatIntensity ?? 1;
+    if (m.clearCoat) {
+      m.clearCoat.isEnabled = !!j.clearCoat;
+      m.clearCoat.intensity = j.clearCoatIntensity ?? 1;
+    }
     if (j.advanced) {
       const a = j.advanced;
-      Object.assign(m.subSurface, { isRefractionEnabled: a.refraction, refractionIntensity: a.transmission, indexOfRefraction: a.ior, linkRefractionWithTransparency: a.linkTransparency });
-      Object.assign(m.sheen, { isEnabled: a.sheen, intensity: a.sheenIntensity, roughness: a.sheenRoughness });
-      m.sheen.color = Color3.FromHexString(a.sheenColor);
-      Object.assign(m.iridescence, { isEnabled: a.iridescence, intensity: a.iridescenceIntensity, minimumThickness: a.filmMin, maximumThickness: a.filmMax });
-      Object.assign(m.anisotropy, { isEnabled: a.anisotropy, intensity: a.anisotropyIntensity });
-      m.anisotropy.direction.set(a.anisotropyDirection[0], a.anisotropyDirection[1]);
+      if (m.subSurface) {
+        Object.assign(m.subSurface, { isRefractionEnabled: a.refraction, refractionIntensity: a.transmission, indexOfRefraction: a.ior, linkRefractionWithTransparency: a.linkTransparency });
+      }
+      if (m.sheen) {
+        Object.assign(m.sheen, { isEnabled: a.sheen, intensity: a.sheenIntensity, roughness: a.sheenRoughness });
+        if (a.sheenColor) m.sheen.color = Color3.FromHexString(a.sheenColor);
+      }
+      if (m.iridescence) {
+        Object.assign(m.iridescence, { isEnabled: a.iridescence, intensity: a.iridescenceIntensity, minimumThickness: a.filmMin, maximumThickness: a.filmMax });
+      }
+      if (m.anisotropy) {
+        Object.assign(m.anisotropy, { isEnabled: a.anisotropy, intensity: a.anisotropyIntensity });
+        if (a.anisotropyDirection && m.anisotropy.direction) {
+          m.anisotropy.direction.set(a.anisotropyDirection[0], a.anisotropyDirection[1]);
+        }
+      }
     }
     m.unlit = !!j.unlit;
-    m.emissiveColor = Color3.FromHexString(j.emissive!);
+    if (j.emissive) m.emissiveColor = Color3.FromHexString(j.emissive);
     m.emissiveIntensity = j.emissiveIntensity ?? 1;
     if (j.textureHidden && m.albedoTexture) {
       (m.metadata ??= {}).stashedAlbedo = m.albedoTexture;
@@ -108,10 +120,10 @@ export function applyMaterial(m: Material, j: MaterialJSON) {
       m.metadata.stashedAlbedo = null;
     }
   } else if (m instanceof StandardMaterial && j.type === 'standard') {
-    m.diffuseColor = Color3.FromHexString(j.diffuse!);
-    m.specularColor = Color3.FromHexString(j.specular!);
+    if (j.diffuse) m.diffuseColor = Color3.FromHexString(j.diffuse);
+    if (j.specular) m.specularColor = Color3.FromHexString(j.specular);
     m.specularPower = j.specularPower ?? 64;
-    m.emissiveColor = Color3.FromHexString(j.emissive!);
+    if (j.emissive) m.emissiveColor = Color3.FromHexString(j.emissive);
   }
 }
 

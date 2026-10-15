@@ -69,7 +69,7 @@ export class MeasureLabels {
       moved = false;
       ev.preventDefault();
       ev.stopPropagation();
-      el.setPointerCapture(ev.pointerId);
+      try { el.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
       const rect = this.ui.editor.engine.getRenderingCanvas()!.getBoundingClientRect();
       const handle = this.ui.editor.toScreen(tools.guideHandle(g));
       offset = { x: ev.clientX - rect.left - handle.x, y: ev.clientY - rect.top - handle.y };

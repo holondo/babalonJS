@@ -334,21 +334,22 @@ export class ContextBar {
       this.layout();
     });
     let startY = 0, moved = false, pointer: number | null = null;
-    line.addEventListener('pointerdown', (ev) => {
-      startY = ev.clientY; moved = false; pointer = ev.pointerId;
-      try { line.setPointerCapture(ev.pointerId); } catch { /* moves still arrive over the line */ }
-      ev.preventDefault(); ev.stopPropagation();
-    });
-    window.addEventListener('pointermove', (ev) => {
+    const onMove = (ev: PointerEvent) => {
       if (ev.pointerId !== pointer) return;
       if (!moved && Math.abs(ev.clientY - startY) < 6) return;
       moved = true;
       this.dragging = ev.clientY;
       this.el.classList.add('dragging');
       this.layout();
-    });
-    const end = (ev: PointerEvent) => {
+    };
+    const onEnd = (ev: PointerEvent) => {
       if (ev.pointerId !== pointer) return;
+      if (line.hasPointerCapture(ev.pointerId)) {
+        try { line.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
+      }
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onCancel);
       pointer = null;
       // Snap to the nearest slot; a tap without moving switches slots
       const y = moved ? ev.clientY : this.slot === 'top' ? window.innerHeight : 0;
@@ -358,13 +359,26 @@ export class ContextBar {
       try { localStorage.setItem(SAVED, this.slot); } catch { /* private mode: just for this visit */ }
       this.layout();
     };
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', (ev) => {
+    const onCancel = (ev: PointerEvent) => {
       if (ev.pointerId !== pointer) return;
+      if (line.hasPointerCapture(ev.pointerId)) {
+        try { line.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
+      }
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onCancel);
       pointer = null;
       this.dragging = null;
       this.el.classList.remove('dragging');
       this.layout();
+    };
+    line.addEventListener('pointerdown', (ev) => {
+      startY = ev.clientY; moved = false; pointer = ev.pointerId;
+      try { line.setPointerCapture(ev.pointerId); } catch { /* moves still arrive over the line */ }
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onEnd);
+      window.addEventListener('pointercancel', onCancel);
+      ev.preventDefault(); ev.stopPropagation();
     });
   }
 }

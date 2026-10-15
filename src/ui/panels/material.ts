@@ -130,29 +130,30 @@ export class MaterialPanel {
       const { slider, toggle, colorInput, chips } = forMaterials((m): m is PBRMaterial => m instanceof PBRMaterial);
       const meta = (mat.metadata ??= {});
       const hasTex = !!(mat.albedoTexture || meta.stashedAlbedo);
+      const isUnlit = !!mat.unlit;
       return [
         section(tr('Material presets'), chips(MATERIAL_PRESETS.map((p) => ({ value: p.id, label: tr(p.label) })), '', (id, mat) => {
           const preset = MATERIAL_PRESETS.find((p) => p.id === id)!;
           const state = materialToJSON(mat);
           applyMaterial(mat, { ...state, alpha: 1, transparencyMode: null, clearCoat: false, clearCoatIntensity: 1, unlit: false, ...preset.values,
-            advanced: { ...state.advanced!, refraction: false, sheen: false, iridescence: false, anisotropy: false, linkTransparency: false, ...preset.advanced } });
+            advanced: state.advanced ? { ...state.advanced, refraction: false, sheen: false, iridescence: false, anisotropy: false, linkTransparency: false, ...preset.advanced } : undefined });
         })),
         h('details', { class: 'sec' }, h('summary', {}, tr('Advanced material')),
-          toggle(tr('Refraction'), mat.subSurface.isRefractionEnabled, (v, mat) => { mat.subSurface.isRefractionEnabled = v; }),
-          slider(tr('Transmission'), mat.subSurface.refractionIntensity, { min: 0, max: 1, step: .01 }, (v, mat) => { mat.subSurface.refractionIntensity = v; }),
-          slider(tr('Index of refraction'), mat.subSurface.indexOfRefraction, { min: 1, max: 2.5, step: .01 }, (v, mat) => { mat.subSurface.indexOfRefraction = v; }),
-          toggle(tr('Sheen'), mat.sheen.isEnabled, (v, mat) => { mat.sheen.isEnabled = v; }),
-          slider(tr('Sheen intensity'), mat.sheen.intensity, { min: 0, max: 1, step: .01 }, (v, mat) => { mat.sheen.intensity = v; }),
-          colorInput(tr('Sheen color'), mat.sheen.color.toHexString(), (v, mat) => { mat.sheen.color = Color3.FromHexString(v); }),
-          toggle(tr('Iridescence'), mat.iridescence.isEnabled, (v, mat) => { mat.iridescence.isEnabled = v; }),
-          slider(tr('Iridescence intensity'), mat.iridescence.intensity, { min: 0, max: 1, step: .01 }, (v, mat) => { mat.iridescence.intensity = v; }),
-          slider(tr('Film thickness (nm)'), mat.iridescence.maximumThickness, { min: 100, max: 1000, step: 1 }, (v, mat) => { mat.iridescence.maximumThickness = v; mat.iridescence.minimumThickness = Math.min(mat.iridescence.minimumThickness, v); }),
-          toggle(tr('Anisotropy'), mat.anisotropy.isEnabled, (v, mat) => { mat.anisotropy.isEnabled = v; }),
-          slider(tr('Anisotropy intensity'), mat.anisotropy.intensity, { min: 0, max: 1, step: .01 }, (v, mat) => { mat.anisotropy.intensity = v; }),
+          toggle(tr('Refraction'), mat.subSurface?.isRefractionEnabled ?? false, (v, mat) => { if (mat.subSurface) mat.subSurface.isRefractionEnabled = v; }),
+          slider(tr('Transmission'), mat.subSurface?.refractionIntensity ?? 0, { min: 0, max: 1, step: .01 }, (v, mat) => { if (mat.subSurface) mat.subSurface.refractionIntensity = v; }),
+          slider(tr('Index of refraction'), mat.subSurface?.indexOfRefraction ?? 1.5, { min: 1, max: 2.5, step: .01 }, (v, mat) => { if (mat.subSurface) mat.subSurface.indexOfRefraction = v; }),
+          toggle(tr('Sheen'), mat.sheen?.isEnabled ?? false, (v, mat) => { if (mat.sheen) mat.sheen.isEnabled = v; }),
+          slider(tr('Sheen intensity'), mat.sheen?.intensity ?? 0, { min: 0, max: 1, step: .01 }, (v, mat) => { if (mat.sheen) mat.sheen.intensity = v; }),
+          colorInput(tr('Sheen color'), mat.sheen?.color ? mat.sheen.color.toHexString() : '#FFFFFF', (v, mat) => { if (mat.sheen) mat.sheen.color = Color3.FromHexString(v); }),
+          toggle(tr('Iridescence'), mat.iridescence?.isEnabled ?? false, (v, mat) => { if (mat.iridescence) mat.iridescence.isEnabled = v; }),
+          slider(tr('Iridescence intensity'), mat.iridescence?.intensity ?? 0, { min: 0, max: 1, step: .01 }, (v, mat) => { if (mat.iridescence) mat.iridescence.intensity = v; }),
+          slider(tr('Film thickness (nm)'), mat.iridescence?.maximumThickness ?? 400, { min: 100, max: 1000, step: 1 }, (v, mat) => { if (mat.iridescence) { mat.iridescence.maximumThickness = v; mat.iridescence.minimumThickness = Math.min(mat.iridescence.minimumThickness, v); } }),
+          toggle(tr('Anisotropy'), mat.anisotropy?.isEnabled ?? false, (v, mat) => { if (mat.anisotropy) mat.anisotropy.isEnabled = v; }),
+          slider(tr('Anisotropy intensity'), mat.anisotropy?.intensity ?? 0, { min: 0, max: 1, step: .01 }, (v, mat) => { if (mat.anisotropy) mat.anisotropy.intensity = v; }),
         ),
         section(
           tr('Color'),
-          colorInput(hasTex ? tr('Tint (multiplies texture)') : tr('Base color'), mat.albedoColor.toHexString(), (v, mat) => q(() => (mat.albedoColor = Color3.FromHexString(v)))),
+          colorInput(hasTex ? tr('Tint (multiplies texture)') : tr('Base color'), mat.albedoColor ? mat.albedoColor.toHexString() : '#FFFFFF', (v, mat) => q(() => (mat.albedoColor = Color3.FromHexString(v)))),
           hasTex
             ? toggle(tr('Show texture'), !!mat.albedoTexture, (v, mat) => {
                 const meta = (mat.metadata ??= {});
@@ -170,14 +171,14 @@ export class MaterialPanel {
           tr('Surface'),
           slider(tr('Metallic'), mat.metallic ?? 1, { min: 0, max: 1, step: 0.01 }, (v, mat) => (mat.metallic = v)),
           slider(tr('Roughness'), mat.roughness ?? 1, { min: 0, max: 1, step: 0.01 }, (v, mat) => (mat.roughness = v)),
-          toggle(tr('Clear coat'), mat.clearCoat.isEnabled, (v, mat) => (mat.clearCoat.isEnabled = v)),
-          slider(tr('Clear coat intensity'), mat.clearCoat.intensity, { min: 0, max: 1, step: 0.01 }, (v, mat) => (mat.clearCoat.intensity = v)),
-          toggle(tr('Unlit'), mat.unlit, (v, mat) => (mat.unlit = v)),
+          toggle(tr('Clear coat'), mat.clearCoat?.isEnabled ?? false, (v, mat) => { if (mat.clearCoat) mat.clearCoat.isEnabled = v; }),
+          slider(tr('Clear coat intensity'), mat.clearCoat?.intensity ?? 1, { min: 0, max: 1, step: 0.01 }, (v, mat) => { if (mat.clearCoat) mat.clearCoat.intensity = v; }),
+          toggle(tr('Unlit'), isUnlit, (v, mat) => (mat.unlit = v)),
         ),
         section(
           tr('Emission'),
-          colorInput(tr('Emissive color'), mat.emissiveColor.toHexString(), (v, mat) => (mat.emissiveColor = Color3.FromHexString(v))),
-          slider(tr('Intensity'), mat.emissiveIntensity, { min: 0, max: 10, step: 0.05 }, (v, mat) => (mat.emissiveIntensity = v)),
+          colorInput(tr('Emissive color'), mat.emissiveColor ? mat.emissiveColor.toHexString() : '#000000', (v, mat) => (mat.emissiveColor = Color3.FromHexString(v))),
+          slider(tr('Intensity'), mat.emissiveIntensity ?? 1, { min: 0, max: 10, step: 0.05 }, (v, mat) => (mat.emissiveIntensity = v)),
         ),
         ...this.textureControls(mat, targets),
         section(tr('General'), ...common),
@@ -188,10 +189,10 @@ export class MaterialPanel {
       return [
         section(
           tr('Color'),
-          colorInput(tr('Diffuse color'), mat.diffuseColor.toHexString(), (v, mat) => (mat.diffuseColor = Color3.FromHexString(v))),
-          colorInput(tr('Specular color'), mat.specularColor.toHexString(), (v, mat) => (mat.specularColor = Color3.FromHexString(v))),
-          slider(tr('Glossiness'), mat.specularPower, { min: 1, max: 256, step: 1 }, (v, mat) => (mat.specularPower = v)),
-          colorInput(tr('Emissive'), mat.emissiveColor.toHexString(), (v, mat) => (mat.emissiveColor = Color3.FromHexString(v))),
+          colorInput(tr('Diffuse color'), mat.diffuseColor ? mat.diffuseColor.toHexString() : '#FFFFFF', (v, mat) => (mat.diffuseColor = Color3.FromHexString(v))),
+          colorInput(tr('Specular color'), mat.specularColor ? mat.specularColor.toHexString() : '#FFFFFF', (v, mat) => (mat.specularColor = Color3.FromHexString(v))),
+          slider(tr('Glossiness'), mat.specularPower ?? 64, { min: 1, max: 256, step: 1 }, (v, mat) => (mat.specularPower = v)),
+          colorInput(tr('Emissive'), mat.emissiveColor ? mat.emissiveColor.toHexString() : '#000000', (v, mat) => (mat.emissiveColor = Color3.FromHexString(v))),
         ),
         ...this.textureControls(mat, targets),
         section(tr('General'), ...common),

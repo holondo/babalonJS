@@ -158,16 +158,25 @@ export class ModelOptimizer {
    * every model back. Models already optimized are left as they are.
    */
   async applyForSession(entities: Entity[], settings: OptimizeSettings): Promise<() => void> {
-    const changed: Entity[] = [];
-    for (const e of entities) {
-      if (e.optimization || this.blocker(e)) continue;
-      const o = await this.apply(e, settings, false);
-      o.session = true;
-      changed.push(e);
-    }
-    return () => {
-      for (const e of changed) if (e.optimization?.session) this.swap(e, e.optimization, undefined);
+    const changed: { entity: Entity; optimization: Optimization }[] = [];
+    const restore = () => {
+      for (const { entity, optimization } of changed) {
+        if (entity.optimization === optimization) this.swap(entity, optimization, undefined);
+      }
+      changed.length = 0;
     };
+    try {
+      for (const e of entities) {
+        if (e.optimization || this.blocker(e)) continue;
+        const o = await this.apply(e, settings, false);
+        o.session = true;
+        changed.push({ entity: e, optimization: o });
+      }
+      return restore;
+    } catch (error) {
+      restore();
+      throw error;
+    }
   }
 
   /** Bakes the original's surface detail onto each optimized mesh that has UVs and a material. */

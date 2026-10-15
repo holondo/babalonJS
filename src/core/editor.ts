@@ -172,12 +172,12 @@ interface Command {
 }
 
 export const ENV_PRESETS: Record<string, { label: string; url: string }> = {
-  studio: { label: 'Studio', url: 'https://assets.babylonjs.com/environments/studio.env' },
-  neutral: { label: 'Neutral', url: 'https://assets.babylonjs.com/environments/environmentSpecular.env' },
-  room: { label: 'Room', url: 'https://assets.babylonjs.com/textures/room.env' },
-  country: { label: 'Countryside', url: 'https://assets.babylonjs.com/textures/country.env' },
-  parking: { label: 'Parking lot', url: 'https://assets.babylonjs.com/textures/parking.env' },
-  night: { label: 'Night', url: 'https://assets.babylonjs.com/textures/night.env' },
+  studio: { label: 'Studio', url: `${import.meta.env.BASE_URL}environments/studio.env` },
+  neutral: { label: 'Neutral', url: `${import.meta.env.BASE_URL}environments/neutral.env` },
+  room: { label: 'Room', url: `${import.meta.env.BASE_URL}environments/room.env` },
+  country: { label: 'Countryside', url: `${import.meta.env.BASE_URL}environments/country.env` },
+  parking: { label: 'Parking lot', url: `${import.meta.env.BASE_URL}environments/parking.env` },
+  night: { label: 'Night', url: `${import.meta.env.BASE_URL}environments/night.env` },
 };
 
 export const SAMPLE_MODELS = [
@@ -567,10 +567,25 @@ export class Editor {
     });
   }
 
-  // ---------- Events / history ----------
-
   private activeUntil = 0;
   private lastCameraState = '';
+  private renderingPaused = false;
+
+  /** Completely stops the render loop (e.g. while native AR is covering the screen). */
+  pauseRendering() {
+    this.renderingPaused = true;
+    this.engine.stopRenderLoop();
+  }
+
+  /** Resumes the render loop and redraws the scene. */
+  resumeRendering() {
+    if (!this.renderingPaused) return;
+    this.renderingPaused = false;
+    this.engine.runRenderLoop(() => {
+      if (this.needsRender()) this.scene.render();
+    });
+    this.invalidate();
+  }
 
   /** Keeps the scene drawing for a while (call after any change that should show on screen). */
   invalidate(ms = 1500) {
@@ -579,6 +594,7 @@ export class Editor {
 
   /** True while something is moving or loading; otherwise the last frame stays on screen. */
   private needsRender() {
+    if (this.renderingPaused) return false;
     // An AR session shows the camera feed: every frame must be drawn
     if (this.arMode || this.recording || this.cameraBackground) return true;
     if (performance.now() < this.activeUntil) return true;
@@ -2241,7 +2257,14 @@ export class Editor {
    * The scene as a GLB. Compact: optimized geometry and textures where the user optimized,
    * meshopt-compressed (loaded on demand); otherwise the original models, as they were loaded.
    */
-  async exportGLB(compact = false): Promise<Blob> {
+  async exportGLB(compact = false, forAR = false): Promise<Blob> {
+    // Load dependencies before changing the scene: an offline chunk failure must
+    // leave previews, textures and transforms untouched.
+    const [{ affineExport }, { nativeAnimationName }, { GLTF2Export }] = await Promise.all([
+      import('../edit/affineExport'),
+      import('../ar/nativeScene'),
+      import('@babylonjs/serializers/glTF/2.0/index.js'),
+    ]);
     if (this.fusion.preview || this.fusion.busy) this.fusion.cancel();
     this.wrap.cancel();
     this.rigger.difference.clear();
@@ -2258,15 +2281,26 @@ export class Editor {
     if (this.skybox) exclude.add(this.skybox);
     exclude.add(this.pose.ikTarget);
     exclude.add(this.rigger.handle);
-    const original = compact ? [] : this.entities.filter((e) => e.optimization);
-    for (const e of original) this.optimizer.preview(e, true);
-    const textures = this.textureOptimizer.forExport(compact);
+    const original = compact || forAR ? [] : this.entities.filter((e) => e.optimization);
+    let textures: ReturnType<TextureOptimizer['forExport']> | undefined;
+    let restoreAffineExport: (() => void) | undefined;
     let glb: Blob;
-    const { affineExport } = await import('../edit/affineExport');
-    const restoreAffineExport = affineExport(this.scene);
+    const groups = this.scene.animationGroups;
+    const active = this.entities.filter(e => e.visible && this.anim.isPlaying(e))
+      .map(e => ({ group: this.anim.current(e)!, name: nativeAnimationName(e) }));
+    const groupNames = active.map(({ group }) => group.name);
+    const arAnimations = new Set(active.flatMap(({ group }) => group.targetedAnimations.map(a => a.animation)));
     try {
-      const { GLTF2Export } = await import('@babylonjs/serializers/glTF/2.0/glTFSerializer.js');
+      for (const e of original) this.optimizer.preview(e, true);
+      textures = this.textureOptimizer.forExport(compact || forAR);
+      restoreAffineExport = affineExport(this.scene);
+      if (forAR) {
+        this.scene.animationGroups = active.map(({ group, name }) => { group.name = name; return group; });
+      }
       const data = await GLTF2Export.GLBAsync(this.scene, 'scene', {
+        // Native AR shows the current composition, without baking every library clip
+        // or quantizing skin weights for a different renderer.
+        shouldExportAnimation: forAR ? animation => arAnimations.has(animation) : undefined,
         shouldExportNode: (node) => {
           if (exclude.has(node) || node.name === 'ambient') return false;
           return node.isEnabled();
@@ -2274,10 +2308,20 @@ export class Editor {
       });
       glb = data.files['scene.glb'] as Blob;
     } finally {
-      restoreAffineExport();
-      textures.restore();
-      for (const e of original) this.optimizer.preview(e, false);
-      this.invalidate();
+      if (forAR) {
+        this.scene.animationGroups = groups;
+        active.forEach(({ group }, i) => { group.name = groupNames[i]; });
+      }
+      try {
+        restoreAffineExport?.();
+      } finally {
+        try {
+          textures?.restore();
+        } finally {
+          for (const e of original) this.optimizer.preview(e, false);
+          this.invalidate();
+        }
+      }
     }
     if (!compact) return glb;
     const { compactGLB } = await import('../optimize/export');

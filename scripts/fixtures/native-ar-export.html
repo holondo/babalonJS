@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Native AR export regression</title>
+<style>body{margin:0;font:16px system-ui;background:#120d1b;color:white}canvas{width:100vw;height:70vh}button{padding:12px;margin:8px}pre{white-space:pre-wrap}</style>
+<canvas id="scene"></canvas><button id="test">Test native AR export</button><a id="download" hidden>Download test scene</a><pre id="result"></pre>
+<script type="module">
+import { Editor } from '/src/core/editor';
+import { snapshot } from '/src/core/project';
+import { nativeAnimationName } from '/src/ar/nativeScene';
+import { Animation } from '@babylonjs/core/Animations/animation.js';
+import { AnimationGroup } from '@babylonjs/core/Animations/animationGroup.js';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+const editor = new Editor(document.querySelector('canvas'));
+const result = document.querySelector('#result');
+function assert(value, message) { if (!value) throw Error(message); }
+function projectState() {
+  const state = snapshot(editor, 'AR regression');
+  state.json.savedAt = '';
+  return JSON.stringify(state);
+}
+async function json(blob) {
+  const buffer = await blob.arrayBuffer();
+  const size = new DataView(buffer).getUint32(12, true);
+  return JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, size)));
+}
+document.querySelector('#test').onclick = async () => {
+  try {
+    editor.newScene();
+    const box = editor.addPrimitive('box');
+    box.root.position.set(3, 2, -4);
+    box.root.scaling.set(0.5, 1.5, 0.75);
+    const hidden = editor.addPrimitive('sphere');
+    hidden.root.name = 'AR hidden object';
+    hidden.visible = false;
+    hidden.root.setEnabled(false);
+    await editor.addFromUrl('/models/mannequin.glb', 'AR character');
+    const character = editor.selected;
+    assert(character, 'Real skinned model loaded');
+    editor.anim.pause(character);
+    character.root.position.set(4, 1, -4);
+    // Model loading frames the camera with an animation; let that user action finish.
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const before = projectState();
+    const blob = await editor.exportGLB(false, true);
+    const data = await json(blob);
+    assert(!data.extensionsRequired?.includes('EXT_meshopt_compression'), 'Native transfer must not quantize/compress again');
+    assert(!data.nodes.some(n => n.name === 'AR hidden object'), 'Hidden objects must be excluded');
+    assert(!data.animations?.length, 'Stopped library clips must not start in AR');
+    assert(data.skins?.length > 0, 'Skinning must be retained');
+    const after = projectState();
+    if (after !== before) {
+      const index = [...before].findIndex((char, i) => char !== after[i]);
+      throw Error(`Export changed state at ${index}: ${before.slice(index-80,index+160)} -> ${after.slice(index-80,index+160)}`);
+    }
+    const weights = data.meshes.flatMap(m => m.primitives).filter(p => p.attributes.WEIGHTS_0 !== undefined);
+    assert(weights.every(p => data.accessors[p.attributes.WEIGHTS_0].componentType === 5126), 'Skin weights must remain floating point');
+    function clip(name, end) {
+      const animation = new Animation(name, 'position', 30, Animation.ANIMATIONTYPE_VECTOR3, Animation.ANIMATIONLOOPMODE_CYCLE);
+      animation.setKeys([{frame:0,value:box.root.position.clone()},{frame:30,value:new Vector3(3,end,-4)}]);
+      const group = new AnimationGroup(name, editor.scene);
+      group.addTargetedAnimation(animation, box.root);
+      return group;
+    }
+    box.animationGroups = [clip('AR active clip', 3), clip('AR unused clip', 6)];
+    editor.anim.play(box, 0);
+    const active = await json(await editor.exportGLB(false, true));
+    assert(active.animations?.length === 1 && active.animations[0].name === nativeAnimationName(box), 'Only selected playing clips must transfer');
+    assert(editor.anim.current(box).name === 'AR active clip', 'Export must restore clip names');
+    assert(editor.anim.isPlaying(box), 'Export must preserve playback');
+    hidden.visible = true;
+    hidden.root.setEnabled(true);
+    const duplicate = new AnimationGroup('AR active clip', editor.scene);
+    duplicate.addTargetedAnimation(box.animationGroups[0].targetedAnimations[0].animation, hidden.root);
+    hidden.animationGroups = [duplicate];
+    editor.anim.play(hidden, 0);
+    const copied = await json(await editor.exportGLB(false, true));
+    const names = copied.animations.map(a => a.name);
+    assert(names.length === 2 && new Set(names).size === 2, 'Copied clips need distinct native names');
+    assert(names.includes(nativeAnimationName(box)) && names.includes(nativeAnimationName(hidden)), 'Each active object must keep its own clip');
+    editor.anim.pause(hidden);
+    editor.anim.pause(box);
+    const link = document.querySelector('#download');
+    if (link.href.startsWith('blob:')) URL.revokeObjectURL(link.href);
+    link.href = URL.createObjectURL(blob); link.download = 'native-ar-regression.glb'; link.hidden = false;
+    result.textContent = JSON.stringify({result:'passed', bytes:blob.size, skins:data.skins.length, weights:weights.length, activeClips:active.animations.map(a=>a.name), bounds:editor.sceneBounds()}, null, 2);
+  } catch (error) { result.textContent = error.stack; }
+};
+</script></html>
