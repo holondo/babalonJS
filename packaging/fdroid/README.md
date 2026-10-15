@@ -4,17 +4,15 @@
 [`fdroiddata`](https://gitlab.com/fdroid/fdroiddata) repository. It is not read by
 the Android or web builds.
 
-Before submission:
+Submission checklist:
 
-1. Replace the disabled build's `commit` with the full immutable commit hash
-   referenced by the published `v1.0.0` tag.
-2. Remove the `disable` field without changing the version name, version code,
-   application ID, or ARCore disclosure.
-3. Run `fdroid lint com.holondo.babalon`, `fdroid scanner com.holondo.babalon`,
+1. Confirm the build's `commit` is the full immutable commit hash referenced by
+   the published `v1.0.0` tag.
+2. Run `fdroid lint com.holondo.babalon`, `fdroid scanner com.holondo.babalon`,
    and `fdroid build com.holondo.babalon:1` in the official Linux tooling.
-4. Confirm the build output is
+3. Confirm the build output is
    `android/app/build/outputs/apk/release/app-release-unsigned.apk`.
-5. Add scanner exceptions only for a reviewed, freely redistributable artifact;
+4. Add scanner exceptions only for a reviewed, freely redistributable artifact;
    document each exception in `MaintainerNotes`.
 
 The first submission intentionally retains SceneView and ARCore. Native AR is

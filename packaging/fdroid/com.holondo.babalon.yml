@@ -19,8 +19,7 @@ Repo: https://github.com/holondo/babalonJS.git
 Builds:
   - versionName: 1.0.0
     versionCode: 1
-    commit: f78068bba23544cdc538ed6b925a0a8b99f05f3a
-    disable: Replace this pre-release commit with the immutable v1.0.0 release commit.
+    commit: ca2676d75cb8f4762dfbcc9df6e857b126d2762b
     subdir: android/app
     sudo:
       - apt-get update
