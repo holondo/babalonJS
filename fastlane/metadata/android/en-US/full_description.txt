@@ -1,0 +1,18 @@
+babalon JS is a simple, touch-friendly 3D scene composer built on Babylon.js. Place models, light them with HDR environments and customizable lamps, pose characters, and capture photos or turntable videos with cinematic effects in the spirit of a video game photo mode.
+
+Features:
+• Load & View: Import GLB, glTF, OBJ, STL, FBX, PLY, USDZ, and .babylon files from your device storage or via Android's Share menu.
+• Touch-First Controls: Intuitive finger navigation, object snapping, transform gizmos, alignment aids, and floor drops.
+• Lighting & Environments: Studio, daylight, sunset, and neon presets with point, spot, and directional lights. Includes bundled HDR skyboxes with real-time reflections and customizable shadows.
+• Material Editing: Adjust base color, metalness, roughness, clear coat, emission, opacity, double-sided rendering, and wireframe views.
+• Animations: Play, pause, scrub, and loop embedded skeletal clips with smooth crossfading. Apply ready-to-use humanoid motions (walk, run, dance, idle) to characters.
+• Posing & Rigging: Rotate bones in world space, aim limbs with two-bone inverse kinematics (IK), or give unrigged humanoid meshes an automatic skeleton with envelope/heat-diffusion skin weights.
+• Precision Tools: Snap-to-surface measurement tape, horizontal and vertical guide planes, and smart guides for precise alignments.
+• Photo Mode: Capture high-resolution renders with focal length (FoV), depth of field, exposure, vignette, bloom, film grain, and custom aspect frames (16:9, 1:1, 9:16, Cinema).
+• Augmented Reality (AR): Place full-scale 3D models into your physical room using ARCore surface detection, with ground shadows and ambient light estimation.
+• Gyroscope Camera: Tilt and rotate your phone to explore the 3D scene naturally without touching the screen.
+
+Privacy & Freedom:
+• 100% Free and Open Source (GPL-3.0-or-later).
+• No ads, no analytics, no user tracking, and no external account required.
+• Works fully offline.

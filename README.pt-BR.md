@@ -11,6 +11,20 @@ Coloque seus modelos, posicione com o dedo ou o mouse, ilumine a cena e tire fot
 
 A interface abre em inglês e pode ser trocada para português no menu de projeto (ícone de pasta).
 
+## Capturas de Tela
+
+<p align="center">
+  <img src="public/screenshots/Screenshot_20261015_152124_babalon%20JS.jpg" width="24%" alt="Editor de cena 3D" />
+  <img src="public/screenshots/Screenshot_20261015_152330_babalon%20JS.jpg" width="24%" alt="Modo foto" />
+  <img src="public/screenshots/Screenshot_20261015_152441_babalon%20JS.jpg" width="24%" alt="Realidade Aumentada (AR)" />
+  <img src="public/screenshots/Screenshot_20261015_152227_babalon%20JS.jpg" width="24%" alt="Ajuste de poses e articulações" />
+</p>
+<p align="center">
+  <img src="public/screenshots/Screenshot_20261015_152200_babalon%20JS.jpg" width="24%" alt="Poses prontas" />
+  <img src="public/screenshots/Screenshot_20261015_152043_babalon%20JS.jpg" width="24%" alt="Biblioteca de modelos gratuitos" />
+  <img src="public/screenshots/Screenshot_20261015_151642_babalon%20JS.jpg" width="24%" alt="Montagem de cena e importação" />
+</p>
+
 ## Rodar
 
 ```bash

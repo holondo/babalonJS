@@ -804,7 +804,7 @@ export class UI {
       h(
         'button',
         { class: `brand project-btn ${this.menuOpen ? 'open' : ''}`, title: tr('Project'), 'aria-label': tr('Project'), onClick: () => this.toggleMenu() },
-        h('img', { class: 'brand-lettering', src: `${base}brand/lettering.webp`, alt: 'babalon JS', width: 105, height: 32, draggable: false }),
+        h('img', { class: 'brand-lettering', src: `${base}brand/lettering.webp`, alt: 'babalon JS', width: 94, height: 32, draggable: false }),
         h('img', { class: 'brand-icon', src: `${base}brand/logo.webp`, alt: 'babalon JS', width: 28, height: 28, draggable: false }),
         icon(ChevronDown, 16),
       ),

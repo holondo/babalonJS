@@ -1,0 +1,8 @@
+Versão inicial do babalon JS para Android:
+• Editor de cenas e visualizador 3D (GLB, glTF, OBJ, STL, FBX, PLY, USDZ).
+• Controles por toque, iluminação HDR, sombras e editor de materiais.
+• Sistema de poses, rigging automático e biblioteca de animações.
+• Medição de distâncias na superfície e guias de alinhamento.
+• Modo foto com filtros e efeitos de pós-processamento.
+• Realidade Aumentada (ARCore) com detecção de planos reais.
+• 100% de código aberto e funcionamento offline.

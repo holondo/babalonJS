@@ -1,0 +1,8 @@
+Initial release of babalon JS for Android:
+• 3D scene composer and model viewer (GLB, glTF, OBJ, STL, FBX, PLY, USDZ).
+• Touch controls, lighting presets, HDR environments, and materials editor.
+• Character posing, automatic rigging, and animation playback.
+• Surface measurements and smart alignment guides.
+• Photo mode with cinematic post-processing filters.
+• Augmented Reality (ARCore) with real-world surface placement.
+• 100% offline and open-source.

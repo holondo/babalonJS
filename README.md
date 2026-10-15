@@ -11,6 +11,20 @@ Drop in your models, place them with your finger or mouse, light the scene and t
 
 The interface is in English by default and can be switched to Portuguese from the project menu (folder icon).
 
+## Screenshots
+
+<p align="center">
+  <img src="public/screenshots/Screenshot_20261015_152124_babalon%20JS.jpg" width="24%" alt="3D Scene Editor" />
+  <img src="public/screenshots/Screenshot_20261015_152330_babalon%20JS.jpg" width="24%" alt="Photo Mode" />
+  <img src="public/screenshots/Screenshot_20261015_152441_babalon%20JS.jpg" width="24%" alt="Augmented Reality (AR)" />
+  <img src="public/screenshots/Screenshot_20261015_152227_babalon%20JS.jpg" width="24%" alt="Skeleton Joint Posing" />
+</p>
+<p align="center">
+  <img src="public/screenshots/Screenshot_20261015_152200_babalon%20JS.jpg" width="24%" alt="Pose Presets" />
+  <img src="public/screenshots/Screenshot_20261015_152043_babalon%20JS.jpg" width="24%" alt="Free Model Library" />
+  <img src="public/screenshots/Screenshot_20261015_151642_babalon%20JS.jpg" width="24%" alt="Build Your Scene" />
+</p>
+
 ## Running
 
 ```bash

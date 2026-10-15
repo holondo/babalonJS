@@ -1,0 +1,18 @@
+O babalon JS é um editor e compositor de cenas 3D simples e amigável ao toque, desenvolvido com Babylon.js. Posicione seus modelos 3D, ilumine o ambiente com luzes customizadas e HDR, anime e ajuste poses de personagens, e registre fotos ou vídeos com efeitos no estilo do modo foto de videogames.
+
+Recursos:
+• Abrir e Visualizar: Suporte a arquivos GLB, glTF, OBJ, STL, FBX, PLY, USDZ e .babylon da memória do dispositivo ou via menu Compartilhar do Android.
+• Controles ao Toque: Arraste com o dedo pelo chão, rotação e escala por gizmos, encaixe na grade e alinhamentos automáticos.
+• Luzes e Ambientes: Presets de estúdio, luz do dia, pôr do sol e neon com pontos de luz, refletores e luz solar. Inclui ambientes HDR integrados com reflexos e sombras no chão.
+• Editor de Materiais: Ajuste cor, textura, metalicidade, rugosidade, verniz (clear coat), emissão, opacidade, face dupla e modo wireframe.
+• Animações: Reproduza, pause e avance quadros de animações esqueléticas com transições suaves. Aplique animações prontas (andar, correr, dançar) a personagens humanoides.
+• Poses e Rigging: Gire ossos no espaço 3D, use cinemática inversa (IK) para membros ou aplique esqueletos automáticos com pesos de pele por difusão de calor.
+• Ferramentas de Precisão: Fita métrica que adere à superfície do modelo, planos de guia horizontais/verticais e guias inteligentes.
+• Modo Foto: Crie capturas de alta resolução com ajuste de campo de visão (FoV), profundidade de campo, exposição, vinheta, bloom, granulação e proporções de tela (16:9, 1:1, 9:16, Cinema).
+• Realidade Aumentada (AR): Projete modelos 3D em tamanho real no ambiente físico através de detecção de superfícies com ARCore, sombras reais e estimativa de iluminação.
+• Modo Giroscópio: Mova e incline o celular para navegar na cena 3D de maneira imersiva.
+
+Privacidade e Liberdade:
+• 100% Software Livre e de Código Aberto (GPL-3.0 ou posterior).
+• Sem anúncios, sem rastreadores, sem telemetria e sem necessidade de cadastro.
+• Funciona totalmente offline.
