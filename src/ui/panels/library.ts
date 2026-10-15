@@ -143,8 +143,7 @@ export class LibraryPanel {
           controller.signal.throwIfAborted();
           progress = null; message = tr('Loading…'); renderBar();
           activity.finish();
-          await this.ui.openFiles(result.files, result.attribution);
-          this.ui.toast(tr('{name} added', { name: item.name }));
+          if (await this.ui.openFiles(result.files, result.attribution)) this.ui.toast(tr('{name} added', { name: item.name }));
           message = '';
           chosen = null;
         } catch (error) {

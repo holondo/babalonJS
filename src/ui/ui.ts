@@ -372,15 +372,15 @@ export class UI {
     setTimeout(() => t.remove(), life + 500);
   }
 
-  /** Files opened from outside: the OS ("Open with" on an installed PWA) or drag and drop. */
-  async openFiles(files: File[], attribution?: LibraryAttribution) {
+  /** Files opened from outside: the OS ("Open with" on an installed PWA) or drag and drop. Resolves whether they were opened. */
+  async openFiles(files: File[], attribution?: LibraryAttribution): Promise<boolean> {
     const environment = files.find((f) => /\.(hdr|exr|env)$/i.test(f.name));
     if (environment) {
       await this.editor.importEnvironment(environment);
       if (attribution) this.editor.applyEnv({ attribution });
-      return;
+      return true;
     }
-    if (files.length) await this.loadFiles(files, attribution);
+    return files.length ? this.loadFiles(files, attribution) : true;
   }
 
   private gyro: GyroControl | null = null;
@@ -669,7 +669,7 @@ export class UI {
     if (this.menuOpen) this.toggleMenu(true);
   }
 
-  private async loadFiles(files: File[], attribution?: LibraryAttribution) {
+  private async loadFiles(files: File[], attribution?: LibraryAttribution): Promise<boolean> {
     const project = files.find((f) => f.name.toLowerCase().endsWith(PROJECT_EXT));
     if (project) return this.openProjectFile(project);
     try {
@@ -678,8 +678,10 @@ export class UI {
       if (entity?.kind === 'model' && overBudget(analyzeEntity(this.editor, entity), budget)) this.toast(
         tr(budget.phone ? 'This model is heavy for this phone and may run slowly. You can optimize it.' : 'This model is very heavy. You can optimize it.'),
         'info', { label: tr('Optimize'), run: () => this.openPart('objects', 'optimize') }, 9000);
+      return true;
     } catch (e) {
       this.toast(errorMessage(e), 'error');
+      return false;
     }
   }
 
@@ -883,15 +885,18 @@ export class UI {
     }
   }
 
-  private async openProjectFile(file: File) {
-    if (this.hasContent() && !confirm(tr('Opening the project will replace the current scene. Continue?'))) return;
+  /** Resolves `false` only when the file could not be read; declining the replace prompt counts as handled. */
+  private async openProjectFile(file: File): Promise<boolean> {
+    if (this.hasContent() && !confirm(tr('Opening the project will replace the current scene. Continue?'))) return true;
     const activity = this.beginActivity(tr('Opening project: {name}', { name: file.name }), Upload);
     try {
       const snap = await fromZip(file);
       if (!snap.json.name) snap.json.name = file.name.replace(/\.[^.]+$/, '');
       await this.loadSnapshot(snap);
+      return true;
     } catch (e) {
       this.toast(errorMessage(e), 'error');
+      return false;
     } finally {
       activity.finish();
     }

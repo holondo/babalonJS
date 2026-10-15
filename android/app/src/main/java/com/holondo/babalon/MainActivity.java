@@ -27,8 +27,17 @@ import org.json.JSONObject;
 public class MainActivity extends BridgeActivity {
     private boolean isFullscreen = false;
     private ValueCallback<Uri[]> mFilePathCallback;
-    private String pendingInboundPath = null;
-    private String pendingInboundName = null;
+    /** Inbound files are copied into cache/INBOUND_DIR/&lt;batch id&gt;/, keeping their names. */
+    private static final String INBOUND_DIR = "inbound";
+    /** Upper bound for one inbound batch, so a broken provider can't fill the cache. */
+    private static final long INBOUND_MAX_BYTES = 1024L * 1024L * 1024L;
+    /** Batches the web app never acknowledged (e.g. it failed to open them) are deleted after a day. */
+    private static final long INBOUND_MAX_AGE_MS = 24L * 60L * 60L * 1000L;
+    private static final String INBOUND_PREFS = "inbound-state";
+    private static final String INBOUND_PREF_BATCH = "batch";
+    private static final String INBOUND_PREF_ID = "id";
+    private volatile String pendingInboundBatch = null;
+    private volatile String pendingInboundId = null;
 
     private final ActivityResultLauncher<Intent> fileChooserLauncher =
         registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -156,7 +165,7 @@ public class MainActivity extends BridgeActivity {
 
             // Using createChooser lets Android present all available file managers,
             // including Samsung "My Files" and system pickers.
-            Intent chooserIntent = Intent.createChooser(baseIntent, "Choose files");
+            Intent chooserIntent = Intent.createChooser(baseIntent, getString(R.string.choose_files));
 
             // Specifically bundle Samsung My Files action if available on Samsung One UI
             Intent samsungIntent = new Intent("com.sec.android.app.myfiles.PICK_DATA");
@@ -190,15 +199,15 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         // Ensure status and navigation bars have dark appearance (crisp light icons)
-        WindowInsetsControllerCompat controller = 
+        WindowInsetsControllerCompat controller =
             WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         if (controller != null) {
             controller.setAppearanceLightStatusBars(false);
             controller.setAppearanceLightNavigationBars(false);
         }
 
-        // Enable WebContents debugging to inspect WebView via DevTools/CDP over ADB
-        WebView.setWebContentsDebuggingEnabled(true);
+        // WebView inspection over ADB in debug builds only: release pages expose AndroidNative
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.WEBVIEW_DEBUG);
 
         // Install enhanced WebChromeClient to support Samsung My Files and standard file managers
         if (getBridge() != null && getBridge().getWebView() != null) {
@@ -210,7 +219,7 @@ public class MainActivity extends BridgeActivity {
             @JavascriptInterface
             public void toggleFullscreen() {
                 runOnUiThread(() -> {
-                    WindowInsetsControllerCompat insetsController = 
+                    WindowInsetsControllerCompat insetsController =
                         WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
                     if (insetsController != null) {
                         isFullscreen = !isFullscreen;
@@ -350,27 +359,31 @@ public class MainActivity extends BridgeActivity {
                 }).start();
             }
 
+            /** The latest inbound batch not yet acknowledged, as JSON {id, files:[{path,name,type}]}, or null. */
             @JavascriptInterface
-            public String getPendingFile() {
-                if (pendingInboundPath == null) return null;
-                try {
-                    JSONObject obj = new JSONObject();
-                    obj.put("path", pendingInboundPath);
-                    obj.put("name", pendingInboundName);
-                    return obj.toString();
-                } catch (Exception e) {
-                    return null;
-                }
+            public String getPendingFiles() {
+                return pendingInboundBatch;
             }
 
+            /** Called by the web app after it opened a batch: forgets it and deletes its cache copies. */
             @JavascriptInterface
-            public void clearPendingFile() {
-                pendingInboundPath = null;
-                pendingInboundName = null;
+            public void finishInbound(String id) {
+                if (id == null || !id.matches("[0-9a-f-]+")) return;
+                synchronized (MainActivity.this) {
+                    if (id.equals(pendingInboundId)) {
+                        pendingInboundBatch = null;
+                        pendingInboundId = null;
+                        clearPendingInbound();
+                    }
+                }
+                new Thread(() -> deleteRecursively(new File(inboundRoot(), id))).start();
             }
         }, "AndroidNative");
 
-        handleInboundIntent(getIntent());
+        new Thread(this::expireInboundFiles).start();
+        restorePendingInbound();
+        // A recreated activity keeps its original intent; don't import it twice.
+        if (savedInstanceState == null) handleInboundIntent(getIntent());
     }
 
     @Override
@@ -383,104 +396,201 @@ public class MainActivity extends BridgeActivity {
     private void handleInboundIntent(Intent intent) {
         if (intent == null) return;
         String action = intent.getAction();
-        if (Intent.ACTION_VIEW.equals(action) || Intent.ACTION_SEND.equals(action)) {
-            Uri uri = null;
-            if (Intent.ACTION_VIEW.equals(action)) {
-                uri = intent.getData();
-            } else if (Intent.ACTION_SEND.equals(action)) {
-                uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+        java.util.LinkedHashSet<Uri> uris = new java.util.LinkedHashSet<>();
+        if (Intent.ACTION_VIEW.equals(action)) {
+            if (intent.getData() != null) uris.add(intent.getData());
+        } else if (Intent.ACTION_SEND.equals(action) || Intent.ACTION_SEND_MULTIPLE.equals(action)) {
+            uris.addAll(streamExtras(intent));
+            // Providers commonly expose the same shared files through both EXTRA_STREAM and
+            // ClipData, sometimes using different URI spellings. Treat ClipData as a fallback
+            // instead of merging both representations, otherwise multi-share imports twice.
+            if (uris.isEmpty()) {
+                android.content.ClipData clip = intent.getClipData();
+                if (clip != null) {
+                    for (int i = 0; i < clip.getItemCount(); i++) {
+                        Uri u = clip.getItemAt(i).getUri();
+                        if (u != null) uris.add(u);
+                    }
+                }
             }
-            if (uri != null) {
-                processInboundUri(uri);
+        } else {
+            return;
+        }
+        if (uris.isEmpty()) return;
+        processInboundUris(new java.util.ArrayList<>(uris));
+    }
+
+    @SuppressWarnings("deprecation")
+    private java.util.List<Uri> streamExtras(Intent intent) {
+        java.util.List<Uri> out = new java.util.ArrayList<>();
+        try {
+            if (Intent.ACTION_SEND_MULTIPLE.equals(intent.getAction())) {
+                java.util.ArrayList<Uri> list = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+                if (list != null) for (Uri u : list) if (u != null) out.add(u);
+            } else {
+                Uri u = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+                if (u != null) out.add(u);
             }
+        } catch (Exception ignored) {}
+        return out;
+    }
+
+    private File inboundRoot() {
+        return new File(getCacheDir(), INBOUND_DIR);
+    }
+
+    private void persistPendingInbound(String id, String json) {
+        getSharedPreferences(INBOUND_PREFS, MODE_PRIVATE).edit()
+            .putString(INBOUND_PREF_ID, id)
+            .putString(INBOUND_PREF_BATCH, json)
+            .commit();
+    }
+
+    private void clearPendingInbound() {
+        // The acknowledgement must be durable before this bridge call returns: Android may
+        // recreate the Activity immediately afterwards and must not restore the same batch.
+        getSharedPreferences(INBOUND_PREFS, MODE_PRIVATE).edit().clear().commit();
+    }
+
+    private void restorePendingInbound() {
+        android.content.SharedPreferences prefs = getSharedPreferences(INBOUND_PREFS, MODE_PRIVATE);
+        String id = prefs.getString(INBOUND_PREF_ID, null);
+        String json = prefs.getString(INBOUND_PREF_BATCH, null);
+        File batchDir = id == null ? null : new File(inboundRoot(), id);
+        if (id == null || json == null || batchDir == null || !batchDir.isDirectory()
+            || System.currentTimeMillis() - batchDir.lastModified() > INBOUND_MAX_AGE_MS) {
+            clearPendingInbound();
+            return;
+        }
+        pendingInboundId = id;
+        pendingInboundBatch = json;
+    }
+
+    /** Deletes inbound batches older than {@link #INBOUND_MAX_AGE_MS} and copies left by older builds. */
+    private void expireInboundFiles() {
+        long now = System.currentTimeMillis();
+        File[] legacy = getCacheDir().listFiles((dir, name) -> name.startsWith("inbound-"));
+        if (legacy != null) for (File f : legacy) deleteRecursively(f);
+        File[] batches = inboundRoot().listFiles();
+        if (batches == null) return;
+        for (File b : batches) {
+            if (now - b.lastModified() > INBOUND_MAX_AGE_MS) deleteRecursively(b);
         }
     }
 
-    private void processInboundUri(Uri uri) {
+    private static void deleteRecursively(File f) {
+        if (f == null) return;
+        File[] children = f.listFiles();
+        if (children != null) for (File c : children) deleteRecursively(c);
+        try { f.delete(); } catch (Exception ignored) {}
+    }
+
+    /** A file name safe to create inside the batch folder, keeping the original name where possible. */
+    private static String safeName(String name, java.util.Set<String> used) {
+        String base = name.replaceAll("[\\\\/:*?\"<>|\\x00-\\x1f]", "_").trim();
+        if (base.isEmpty() || base.equals(".") || base.equals("..")) base = "file";
+        String candidate = base;
+        int dot = base.lastIndexOf('.');
+        String stem = dot > 0 ? base.substring(0, dot) : base, ext = dot > 0 ? base.substring(dot) : "";
+        for (int i = 2; used.contains(candidate.toLowerCase(java.util.Locale.ROOT)); i++) candidate = stem + " (" + i + ")" + ext;
+        used.add(candidate.toLowerCase(java.util.Locale.ROOT));
+        return candidate;
+    }
+
+    private String displayNameOf(Uri uri) {
+        String displayName = null;
+        if ("content".equals(uri.getScheme())) {
+            try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (nameIndex >= 0) displayName = cursor.getString(nameIndex);
+                }
+            } catch (Exception ignored) {}
+        }
+        if (displayName == null || displayName.trim().isEmpty()) displayName = uri.getLastPathSegment();
+        if (displayName == null || displayName.trim().isEmpty()) displayName = "model";
+        int slash = displayName.lastIndexOf('/');
+        if (slash >= 0) displayName = displayName.substring(slash + 1);
+        if (!displayName.contains(".")) {
+            String mime = getContentResolver().getType(uri);
+            displayName += mime != null && mime.contains("zip") ? ".babalon" : ".glb";
+        }
+        return displayName;
+    }
+
+    private InputStream openUri(Uri uri) throws java.io.IOException {
+        if ("file".equals(uri.getScheme()) && uri.getPath() != null) {
+            try { return new java.io.FileInputStream(new File(uri.getPath())); } catch (Exception ignored) {}
+        }
+        InputStream is = getContentResolver().openInputStream(uri);
+        if (is == null) throw new java.io.IOException("No stream for " + uri);
+        return is;
+    }
+
+    private void processInboundUris(java.util.List<Uri> uris) {
         new Thread(() -> {
+            expireInboundFiles();
+            String id = Long.toString(System.currentTimeMillis()) + "-" + Integer.toHexString((int) (Math.random() * 0xffff));
+            File batchDir = new File(inboundRoot(), id);
             try {
-                String displayName = null;
-                if ("content".equals(uri.getScheme())) {
-                    try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
-                        if (cursor != null && cursor.moveToFirst()) {
-                            int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                            if (nameIndex >= 0) {
-                                displayName = cursor.getString(nameIndex);
-                            }
-                        }
-                    } catch (Exception ignored) {}
-                }
-                if (displayName == null || displayName.trim().isEmpty()) {
-                    displayName = uri.getLastPathSegment();
-                }
-                if (displayName == null || displayName.trim().isEmpty()) {
-                    displayName = "model.glb";
-                }
-                if (!displayName.contains(".")) {
-                    String mime = getContentResolver().getType(uri);
-                    if (mime != null && (mime.contains("gltf") || mime.contains("model"))) {
-                        displayName += ".glb";
-                    } else if (mime != null && mime.contains("zip")) {
-                        displayName += ".babalon";
-                    } else {
-                        displayName += ".glb";
-                    }
-                }
-
-                File cacheDir = getCacheDir();
-                File[] old = cacheDir.listFiles((dir, name) -> name.startsWith("inbound-"));
-                if (old != null) {
-                    for (File f : old) {
-                        try { f.delete(); } catch (Exception ignored) {}
-                    }
-                }
-
-                String ext = displayName.contains(".") ? displayName.substring(displayName.lastIndexOf('.')) : ".glb";
-                File destFile = new File(cacheDir, "inbound-" + System.currentTimeMillis() + ext);
-                InputStream is = null;
-                if ("file".equals(uri.getScheme())) {
-                    String p = uri.getPath();
-                    if (p != null) {
-                        try { is = new java.io.FileInputStream(new File(p)); } catch (Exception ignored) {}
-                    }
-                }
-                if (is == null) {
-                    is = getContentResolver().openInputStream(uri);
-                }
-                try (InputStream stream = is;
-                     FileOutputStream fos = new FileOutputStream(destFile)) {
-                    if (stream != null) {
-                        byte[] buffer = new byte[65536];
+                if (!batchDir.mkdirs()) throw new java.io.IOException("Could not create " + batchDir);
+                org.json.JSONArray files = new org.json.JSONArray();
+                java.util.Set<String> used = new java.util.HashSet<>();
+                long total = 0;
+                byte[] buffer = new byte[65536];
+                for (Uri uri : uris) {
+                    String name = displayNameOf(uri);
+                    File dest = new File(batchDir, safeName(name, used));
+                    try (InputStream stream = openUri(uri); FileOutputStream fos = new FileOutputStream(dest)) {
                         int len;
                         while ((len = stream.read(buffer)) > 0) {
+                            total += len;
+                            if (total > INBOUND_MAX_BYTES) throw new InboundTooLarge();
                             fos.write(buffer, 0, len);
                         }
-                        fos.flush();
                     }
+                    if (dest.length() == 0) { dest.delete(); continue; }
+                    JSONObject f = new JSONObject();
+                    f.put("path", dest.getAbsolutePath());
+                    f.put("name", dest.getName());
+                    String mime = getContentResolver().getType(uri);
+                    f.put("type", mime != null ? mime : "");
+                    files.put(f);
                 }
-
-                if (destFile.exists() && destFile.length() > 0) {
-                    final String finalPath = destFile.getAbsolutePath();
-                    final String finalName = displayName;
-                    runOnUiThread(() -> {
-                        pendingInboundPath = finalPath;
-                        pendingInboundName = finalName;
-                        dispatchInboundFile(finalPath, finalName);
-                    });
-                }
+                if (files.length() == 0) throw new java.io.IOException("Empty inbound batch");
+                JSONObject batch = new JSONObject();
+                batch.put("id", id);
+                batch.put("files", files);
+                final String json = batch.toString();
+                persistPendingInbound(id, json);
+                runOnUiThread(() -> {
+                    pendingInboundBatch = json;
+                    pendingInboundId = id;
+                    dispatchInbound(json);
+                });
+            } catch (InboundTooLarge e) {
+                deleteRecursively(batchDir);
+                runOnUiThread(() -> dispatchInboundError("The shared files are too large to open (limit 1 GB)."));
             } catch (Exception e) {
-                android.util.Log.e("MainActivity", "Error importing inbound file: " + uri, e);
+                deleteRecursively(batchDir);
+                android.util.Log.e("MainActivity", "Error importing inbound files", e);
+                runOnUiThread(() -> dispatchInboundError("Could not read the shared files. Try sharing them again."));
             }
         }).start();
     }
 
-    private void dispatchInboundFile(String path, String name) {
-        if (getBridge() != null && getBridge().getWebView() != null) {
-            String js = "(function(){ try { if (window.onNativeFileOpen) { window.onNativeFileOpen("
-                + JSONObject.quote(path) + ", " + JSONObject.quote(name) + "); } else { window.dispatchEvent(new CustomEvent('nativefileopen', { detail: { path: "
-                + JSONObject.quote(path) + ", name: " + JSONObject.quote(name) + " } })); } } catch(e){} })();";
-            getBridge().getWebView().evaluateJavascript(js, null);
-        }
+    private static final class InboundTooLarge extends Exception {}
+
+    private void dispatchInbound(String batchJson) {
+        if (getBridge() == null || getBridge().getWebView() == null) return;
+        getBridge().getWebView().evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('nativefilesopen', { detail: " + batchJson + " }));", null);
+    }
+
+    private void dispatchInboundError(String message) {
+        if (getBridge() == null || getBridge().getWebView() == null) return;
+        getBridge().getWebView().evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('nativefileserror', { detail: " + JSONObject.quote(message) + " }));", null);
     }
 
     @Override

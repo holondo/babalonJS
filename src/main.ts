@@ -123,46 +123,49 @@ launchQueue?.setConsumer(async (params) => {
 
 // Native Android back button and open-with/share file intents
 if (Capacitor.isNativePlatform()) {
-  let loadedPath: string | null = null;
-  const loadNativeInbound = async (path: string, name: string) => {
-    if (loadedPath === path) return;
-    loadedPath = path;
+  interface InboundBatch { id: string; files: { path: string; name: string; type?: string }[] }
+  const nativeApi = (window as unknown as {
+    AndroidNative?: { getPendingFiles?: () => string | null; finishInbound?: (id: string) => void };
+  }).AndroidNative;
+  // Batches opened or being opened; a failed one is removed again so it can be retried.
+  const handled = new Set<string>();
+
+  const loadNativeInbound = async (batch: InboundBatch) => {
+    if (!batch?.id || !batch.files?.length || handled.has(batch.id)) return;
+    handled.add(batch.id);
     try {
-      const src = Capacitor.convertFileSrc(path);
-      const res = await fetch(src);
-      const blob = await res.blob();
-      const file = new File([blob], name, { type: 'model/gltf-binary' });
-      await ui.openFiles([file]);
+      const files = await Promise.all(batch.files.map(async (f) => {
+        const res = await fetch(Capacitor.convertFileSrc(f.path));
+        if (!res.ok) throw new Error(tr('Could not read shared file {name}.', { name: f.name }));
+        const blob = await res.blob();
+        return new File([blob], f.name, { type: f.type || blob.type || 'application/octet-stream' });
+      }));
+      if (!await ui.openFiles(files)) { handled.delete(batch.id); return; }
+      nativeApi?.finishInbound?.(batch.id);
     } catch (e) {
-      console.warn('Could not load native inbound file:', e);
+      handled.delete(batch.id);
+      ui.toast(e instanceof Error ? e.message : String(e), 'error');
     }
   };
 
-  // 1. Direct callback and event listeners for active sessions
-  (window as unknown as { onNativeFileOpen?: (path: string, name: string) => void }).onNativeFileOpen = (path, name) => {
-    void loadNativeInbound(path, name);
-  };
-  window.addEventListener('nativefileopen', (e: Event) => {
-    const detail = (e as CustomEvent<{ path: string; name: string }>).detail;
-    if (detail?.path && detail?.name) {
-      void loadNativeInbound(detail.path, detail.name);
-    }
+  // 1. Batches delivered while the app is running
+  window.addEventListener('nativefilesopen', (e: Event) => {
+    void loadNativeInbound((e as CustomEvent<InboundBatch>).detail);
+  });
+  window.addEventListener('nativefileserror', (e: Event) => {
+    ui.toast(tr((e as CustomEvent<string>).detail), 'error');
   });
 
-  // 2. Cold-start check with polling fallback in case Java copy completes after webview init
-  const nativeApi = (window as unknown as { AndroidNative?: { getPendingFile?: () => string | null; clearPendingFile?: () => void } }).AndroidNative;
+  // 2. Cold start: the native copy may finish before or after the page is ready
   const consumePending = () => {
-    const pending = nativeApi?.getPendingFile?.();
+    const pending = nativeApi?.getPendingFiles?.();
     if (!pending) return false;
     try {
-      const info = JSON.parse(pending) as { path: string; name: string };
-      if (info.path && info.name) {
-        nativeApi?.clearPendingFile?.();
-        void loadNativeInbound(info.path, info.name);
-        return true;
-      }
-    } catch {}
-    return false;
+      void loadNativeInbound(JSON.parse(pending) as InboundBatch);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   if (!consumePending()) {
