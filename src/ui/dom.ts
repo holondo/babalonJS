@@ -67,19 +67,27 @@ export function button(label: string, onClick: () => void, opts: { icon?: IconNo
 
 /** Tactile micro-haptic on mobile (Android Capacitor / PWA). */
 export function haptic(type: 'light' | 'selection' | 'medium' = 'light') {
+  const fallback = () => {
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        if (type === 'light') navigator.vibrate(25);
+        else if (type === 'selection') navigator.vibrate(35);
+        else if (type === 'medium') navigator.vibrate(50);
+      }
+    } catch { /* Ignore if device blocks vibration */ }
+  };
   try {
     if (Capacitor.isNativePlatform()) {
-      if (type === 'light') void Haptics.impact({ style: ImpactStyle.Light });
-      else if (type === 'selection') void Haptics.selectionChanged();
-      else if (type === 'medium') void Haptics.impact({ style: ImpactStyle.Medium });
+      const p = type === 'selection'
+        ? Haptics.selectionChanged()
+        : Haptics.impact({ style: type === 'medium' ? ImpactStyle.Medium : ImpactStyle.Light });
+      p.catch(() => fallback());
       return;
     }
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      if (type === 'light') navigator.vibrate(25);
-      else if (type === 'selection') navigator.vibrate(35);
-      else if (type === 'medium') navigator.vibrate(50);
-    }
-  } catch { /* Ignore if device blocks vibration */ }
+    fallback();
+  } catch {
+    fallback();
+  }
 }
 
 export function chips<T extends string>(options: { value: T; label: string }[], value: T, onPick: (v: T) => void) {
@@ -338,13 +346,15 @@ export function hint(text: string) {
 export function numberInput(label: string, value: number, opts: { step?: number; suffix?: string }, onCommit: (v: number) => void) {
   const step = opts.step ?? 1;
   const input = h('input', { type: 'number', value: String(+value.toFixed(4)), step: String(step), inputmode: 'decimal', 'aria-label': label });
+  let lastCommitted: number | null = Number.isFinite(value) ? +value.toFixed(4) : null;
   const commit = (delta?: number, vibrate = true) => {
     let v = parseFloat(input.value.replace(',', '.'));
     if (delta !== undefined) {
       v = +(v + delta).toFixed(4);
       input.value = String(v);
     }
-    if (Number.isFinite(v)) {
+    if (Number.isFinite(v) && v !== lastCommitted) {
+      lastCommitted = v;
       onCommit(v);
       if (vibrate) haptic('light');
     }
@@ -388,14 +398,16 @@ export function numberInput(label: string, value: number, opts: { step?: number;
     const delta = dx * step * 0.05;
     const next = +(scrub.val + delta).toFixed(4);
     input.value = String(next);
-    commit(undefined, false);
   });
   const endScrub = (e: PointerEvent) => {
     if (!scrub) return;
     if (scrub.active) {
-      if (lab.hasPointerCapture(e.pointerId)) {
-        try { lab.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-      }
+      commit(undefined, false);
+      try {
+        if (lab.hasPointerCapture(e.pointerId)) {
+          lab.releasePointerCapture(e.pointerId);
+        }
+      } catch { /* ignore */ }
       haptic('light');
     }
     scrub = null;

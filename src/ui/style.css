@@ -2092,7 +2092,8 @@ body.ui-hidden .ui-restore {
 .segmented button {
   flex: 1 0 auto;
   padding: 0 8px;
-  height: 34px;
+  height: 36px;
+  min-height: 36px;
   border-radius: 999px;
   font-size: 13px;
   font-weight: 500;
