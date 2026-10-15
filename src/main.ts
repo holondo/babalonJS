@@ -16,6 +16,7 @@ const editor = new Editor(canvas);
 // Exposed for browser automation and debugging (see AGENTS.md)
 (window as unknown as { editor: Editor }).editor = editor;
 const ui = new UI(editor, document.querySelector<HTMLElement>('#app')!);
+(window as unknown as { ui: UI }).ui = ui;
 setupSystemBars(editor);
 
 // Augmented reality (WebXR): offered where supported or in native app container
@@ -122,6 +123,57 @@ launchQueue?.setConsumer(async (params) => {
 
 // Native Android back button and open-with/share file intents
 if (Capacitor.isNativePlatform()) {
+  let loadedPath: string | null = null;
+  const loadNativeInbound = async (path: string, name: string) => {
+    if (loadedPath === path) return;
+    loadedPath = path;
+    try {
+      const src = Capacitor.convertFileSrc(path);
+      const res = await fetch(src);
+      const blob = await res.blob();
+      const file = new File([blob], name, { type: 'model/gltf-binary' });
+      await ui.openFiles([file]);
+    } catch (e) {
+      console.warn('Could not load native inbound file:', e);
+    }
+  };
+
+  // 1. Direct callback and event listeners for active sessions
+  (window as unknown as { onNativeFileOpen?: (path: string, name: string) => void }).onNativeFileOpen = (path, name) => {
+    void loadNativeInbound(path, name);
+  };
+  window.addEventListener('nativefileopen', (e: Event) => {
+    const detail = (e as CustomEvent<{ path: string; name: string }>).detail;
+    if (detail?.path && detail?.name) {
+      void loadNativeInbound(detail.path, detail.name);
+    }
+  });
+
+  // 2. Cold-start check with polling fallback in case Java copy completes after webview init
+  const nativeApi = (window as unknown as { AndroidNative?: { getPendingFile?: () => string | null; clearPendingFile?: () => void } }).AndroidNative;
+  const consumePending = () => {
+    const pending = nativeApi?.getPendingFile?.();
+    if (!pending) return false;
+    try {
+      const info = JSON.parse(pending) as { path: string; name: string };
+      if (info.path && info.name) {
+        nativeApi?.clearPendingFile?.();
+        void loadNativeInbound(info.path, info.name);
+        return true;
+      }
+    } catch {}
+    return false;
+  };
+
+  if (!consumePending()) {
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      if (consumePending() || attempts >= 30) clearInterval(interval);
+    }, 100);
+  }
+
+  // 3. Fallbacks via Capacitor App plugin
   void import('@capacitor/app').then(({ App }) => {
     let lastBackPress = 0;
     App.addListener('backButton', () => {
@@ -135,11 +187,13 @@ if (Capacitor.isNativePlatform()) {
       }
     });
 
-    App.addListener('appUrlOpen', async (data) => {
+    const handleUrl = async (url: string) => {
+      if (!url) return;
       try {
         const { Filesystem } = await import('@capacitor/filesystem');
-        const content = await Filesystem.readFile({ path: data.url });
-        const name = data.url.split('/').pop() || 'imported-model';
+        const content = await Filesystem.readFile({ path: url });
+        let name = url.split('/').pop() || 'imported-model.glb';
+        if (!name.includes('.')) name += '.glb';
         let file: File;
         if (typeof content.data === 'string') {
           const byteCharacters = atob(content.data);
@@ -155,7 +209,15 @@ if (Capacitor.isNativePlatform()) {
       } catch (err) {
         console.warn('Could not read opened file intent:', err);
       }
+    };
+
+    App.addListener('appUrlOpen', (data) => {
+      void handleUrl(data.url);
     });
+
+    App.getLaunchUrl().then((launch) => {
+      if (launch?.url) void handleUrl(launch.url);
+    }).catch(() => {});
   });
 }
 

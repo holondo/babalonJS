@@ -7,6 +7,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:requestLegacyExternalStorage="true"
         android:theme="@style/AppTheme">
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
@@ -20,13 +21,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Intent filter to open 3D model files and .babalon projects directly -->
+            <!-- Intent filters to open 3D model files and .babalon projects directly from file managers -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" />
-                <data android:mimeType="application/*" />
+                <data android:scheme="file" />
+                <data android:mimeType="model/*" />
             </intent-filter>
 
             <intent-filter>
@@ -34,7 +36,60 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" />
-                <data android:mimeType="model/*" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/gltf-binary" />
+                <data android:mimeType="application/gltf+json" />
+                <data android:mimeType="application/babalon" />
+            </intent-filter>
+
+            <!-- Extension-based matching for file managers passing content/file URI with explicit extension -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.glb" />
+                <data android:pathPattern=".*\\..*\\.glb" />
+                <data android:pathPattern=".*\\..*\\..*\\.glb" />
+                <data android:pathPattern=".*\\.gltf" />
+                <data android:pathPattern=".*\\..*\\.gltf" />
+                <data android:pathPattern=".*\\..*\\..*\\.gltf" />
+                <data android:pathPattern=".*\\.babalon" />
+                <data android:pathPattern=".*\\..*\\.babalon" />
+                <data android:pathPattern=".*\\..*\\..*\\.babalon" />
+                <data android:pathPattern=".*\\.obj" />
+                <data android:pathPattern=".*\\..*\\.obj" />
+                <data android:pathPattern=".*\\.stl" />
+                <data android:pathPattern=".*\\..*\\.stl" />
+            </intent-filter>
+
+            <!-- Extension-based matching for file managers passing setDataAndType(uri, "*/*") -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.glb" />
+                <data android:pathPattern=".*\\..*\\.glb" />
+                <data android:pathPattern=".*\\..*\\..*\\.glb" />
+                <data android:pathPattern=".*\\.gltf" />
+                <data android:pathPattern=".*\\..*\\.gltf" />
+                <data android:pathPattern=".*\\..*\\..*\\.gltf" />
+                <data android:pathPattern=".*\\.babalon" />
+                <data android:pathPattern=".*\\..*\\.babalon" />
+                <data android:pathPattern=".*\\..*\\..*\\.babalon" />
+                <data android:pathPattern=".*\\.obj" />
+                <data android:pathPattern=".*\\..*\\.obj" />
+                <data android:pathPattern=".*\\.stl" />
+                <data android:pathPattern=".*\\..*\\.stl" />
             </intent-filter>
 
             <!-- Intent filter to receive shared files from other apps -->
@@ -73,6 +128,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />

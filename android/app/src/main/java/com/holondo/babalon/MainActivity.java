@@ -3,8 +3,10 @@ package com.holondo.babalon;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -17,10 +19,16 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebChromeClient;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import org.json.JSONObject;
 
 public class MainActivity extends BridgeActivity {
     private boolean isFullscreen = false;
     private ValueCallback<Uri[]> mFilePathCallback;
+    private String pendingInboundPath = null;
+    private String pendingInboundName = null;
 
     private final ActivityResultLauncher<Intent> fileChooserLauncher =
         registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -189,6 +197,9 @@ public class MainActivity extends BridgeActivity {
             controller.setAppearanceLightNavigationBars(false);
         }
 
+        // Enable WebContents debugging to inspect WebView via DevTools/CDP over ADB
+        WebView.setWebContentsDebuggingEnabled(true);
+
         // Install enhanced WebChromeClient to support Samsung My Files and standard file managers
         if (getBridge() != null && getBridge().getWebView() != null) {
             getBridge().getWebView().setWebChromeClient(new CustomWebChromeClient(getBridge()));
@@ -338,7 +349,138 @@ public class MainActivity extends BridgeActivity {
                     }
                 }).start();
             }
+
+            @JavascriptInterface
+            public String getPendingFile() {
+                if (pendingInboundPath == null) return null;
+                try {
+                    JSONObject obj = new JSONObject();
+                    obj.put("path", pendingInboundPath);
+                    obj.put("name", pendingInboundName);
+                    return obj.toString();
+                } catch (Exception e) {
+                    return null;
+                }
+            }
+
+            @JavascriptInterface
+            public void clearPendingFile() {
+                pendingInboundPath = null;
+                pendingInboundName = null;
+            }
         }, "AndroidNative");
+
+        handleInboundIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleInboundIntent(intent);
+    }
+
+    private void handleInboundIntent(Intent intent) {
+        if (intent == null) return;
+        String action = intent.getAction();
+        if (Intent.ACTION_VIEW.equals(action) || Intent.ACTION_SEND.equals(action)) {
+            Uri uri = null;
+            if (Intent.ACTION_VIEW.equals(action)) {
+                uri = intent.getData();
+            } else if (Intent.ACTION_SEND.equals(action)) {
+                uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+            }
+            if (uri != null) {
+                processInboundUri(uri);
+            }
+        }
+    }
+
+    private void processInboundUri(Uri uri) {
+        new Thread(() -> {
+            try {
+                String displayName = null;
+                if ("content".equals(uri.getScheme())) {
+                    try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                        if (cursor != null && cursor.moveToFirst()) {
+                            int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                            if (nameIndex >= 0) {
+                                displayName = cursor.getString(nameIndex);
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+                if (displayName == null || displayName.trim().isEmpty()) {
+                    displayName = uri.getLastPathSegment();
+                }
+                if (displayName == null || displayName.trim().isEmpty()) {
+                    displayName = "model.glb";
+                }
+                if (!displayName.contains(".")) {
+                    String mime = getContentResolver().getType(uri);
+                    if (mime != null && (mime.contains("gltf") || mime.contains("model"))) {
+                        displayName += ".glb";
+                    } else if (mime != null && mime.contains("zip")) {
+                        displayName += ".babalon";
+                    } else {
+                        displayName += ".glb";
+                    }
+                }
+
+                File cacheDir = getCacheDir();
+                File[] old = cacheDir.listFiles((dir, name) -> name.startsWith("inbound-"));
+                if (old != null) {
+                    for (File f : old) {
+                        try { f.delete(); } catch (Exception ignored) {}
+                    }
+                }
+
+                String ext = displayName.contains(".") ? displayName.substring(displayName.lastIndexOf('.')) : ".glb";
+                File destFile = new File(cacheDir, "inbound-" + System.currentTimeMillis() + ext);
+                InputStream is = null;
+                if ("file".equals(uri.getScheme())) {
+                    String p = uri.getPath();
+                    if (p != null) {
+                        try { is = new java.io.FileInputStream(new File(p)); } catch (Exception ignored) {}
+                    }
+                }
+                if (is == null) {
+                    is = getContentResolver().openInputStream(uri);
+                }
+                try (InputStream stream = is;
+                     FileOutputStream fos = new FileOutputStream(destFile)) {
+                    if (stream != null) {
+                        byte[] buffer = new byte[65536];
+                        int len;
+                        while ((len = stream.read(buffer)) > 0) {
+                            fos.write(buffer, 0, len);
+                        }
+                        fos.flush();
+                    }
+                }
+
+                if (destFile.exists() && destFile.length() > 0) {
+                    final String finalPath = destFile.getAbsolutePath();
+                    final String finalName = displayName;
+                    runOnUiThread(() -> {
+                        pendingInboundPath = finalPath;
+                        pendingInboundName = finalName;
+                        dispatchInboundFile(finalPath, finalName);
+                    });
+                }
+            } catch (Exception e) {
+                android.util.Log.e("MainActivity", "Error importing inbound file: " + uri, e);
+            }
+        }).start();
+    }
+
+    private void dispatchInboundFile(String path, String name) {
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            String js = "(function(){ try { if (window.onNativeFileOpen) { window.onNativeFileOpen("
+                + JSONObject.quote(path) + ", " + JSONObject.quote(name) + "); } else { window.dispatchEvent(new CustomEvent('nativefileopen', { detail: { path: "
+                + JSONObject.quote(path) + ", name: " + JSONObject.quote(name) + " } })); } } catch(e){} })();";
+            getBridge().getWebView().evaluateJavascript(js, null);
+        }
     }
 
     @Override
