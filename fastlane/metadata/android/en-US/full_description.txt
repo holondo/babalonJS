@@ -15,4 +15,4 @@ Features:
 Privacy & Freedom:
 • 100% Free and Open Source (GPL-3.0-or-later).
 • No ads, no analytics, no user tracking, and no external account required.
-• Works fully offline.
+• The core editor and bundled assets work offline. Optional online library models require a first download.

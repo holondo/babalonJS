@@ -1,7 +1,7 @@
 {
   "name": "babalon-js",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A simple, touch-friendly 3D scene composer built on Babylon.js: place models, light them and take photos.",
   "license": "GPL-3.0-or-later",
   "author": "Guilherme Holanda Sanches",

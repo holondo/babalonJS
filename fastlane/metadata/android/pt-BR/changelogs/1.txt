@@ -5,4 +5,4 @@ Versão inicial do babalon JS para Android:
 • Medição de distâncias na superfície e guias de alinhamento.
 • Modo foto com filtros e efeitos de pós-processamento.
 • Realidade Aumentada (ARCore) com detecção de planos reais.
-• 100% de código aberto e funcionamento offline.
+• Editor principal de código aberto e recursos incluídos disponíveis offline.

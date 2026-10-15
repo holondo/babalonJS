@@ -31,6 +31,13 @@ Desktop.ini
 *.tsbuildinfo
 coverage
 
+# Android release signing (local secrets and generated artifacts)
+android/keystore.properties
+*.jks
+*.keystore
+*.apk
+*.aab
+
 # Local Claude Code config (app preview)
 .claude/
 

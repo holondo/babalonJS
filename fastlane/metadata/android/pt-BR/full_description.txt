@@ -15,4 +15,4 @@ Recursos:
 Privacidade e Liberdade:
 • 100% Software Livre e de Código Aberto (GPL-3.0 ou posterior).
 • Sem anúncios, sem rastreadores, sem telemetria e sem necessidade de cadastro.
-• Funciona totalmente offline.
+• O editor principal e os recursos incluídos funcionam offline. Modelos opcionais da biblioteca online exigem um primeiro download.

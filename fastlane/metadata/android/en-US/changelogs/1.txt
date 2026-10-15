@@ -5,4 +5,4 @@ Initial release of babalon JS for Android:
 • Surface measurements and smart alignment guides.
 • Photo mode with cinematic post-processing filters.
 • Augmented Reality (ARCore) with real-world surface placement.
-• 100% offline and open-source.
+• Open-source core editor and bundled assets available offline.
