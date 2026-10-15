@@ -19,6 +19,7 @@
         android:layout_height="56dp"
         android:layout_gravity="center"
         android:src="@drawable/ar_reticle"
+        android:importantForAccessibility="no"
         android:visibility="visible" />
 
     <!-- Measurements labels container -->
@@ -59,7 +60,7 @@
                     android:layout_alignParentStart="true"
                     android:layout_centerVertical="true"
                     android:background="@drawable/bg_glass_round"
-                    android:contentDescription="Exit AR"
+                    android:contentDescription="@string/ar_exit"
                     android:padding="10dp"
                     android:scaleType="fitCenter"
                     android:src="@drawable/ic_ar_close" />
@@ -80,7 +81,7 @@
                         android:layout_height="44dp"
                         android:layout_marginEnd="8dp"
                         android:background="@drawable/bg_glass_round"
-                        android:contentDescription="Depth Occlusion"
+                        android:contentDescription="@string/ar_depth_occlusion"
                         android:padding="10dp"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_ar_layers" />
@@ -92,7 +93,7 @@
                         android:layout_height="44dp"
                         android:layout_marginEnd="8dp"
                         android:background="@drawable/bg_glass_round"
-                        android:contentDescription="AR Options"
+                        android:contentDescription="@string/ar_options"
                         android:padding="10dp"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_ar_options" />
@@ -103,7 +104,7 @@
                         android:layout_width="44dp"
                         android:layout_height="44dp"
                         android:background="@drawable/bg_glass_round"
-                        android:contentDescription="Hide Interface"
+                        android:contentDescription="@string/ar_hide_interface"
                         android:padding="10dp"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_ar_eye_off" />
@@ -131,7 +132,7 @@
                         android:layout_height="wrap_content"
                         android:layout_alignParentStart="true"
                         android:layout_centerVertical="true"
-                        android:text="Lighting"
+                        tools:text="Lighting"
                         android:textColor="#FFFFFF"
                         android:textSize="14sp"
                         android:textStyle="bold" />
@@ -143,7 +144,7 @@
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true"
                         android:background="@drawable/bg_glass_round"
-                        android:contentDescription="Close options"
+                        android:contentDescription="@string/ar_close"
                         android:padding="8dp"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_ar_close" />
@@ -170,7 +171,7 @@
                             android:background="@drawable/bg_ar_chip_active"
                             android:minWidth="0dp"
                             android:minHeight="0dp"
-                            android:text="Real room"
+                            tools:text="Real room"
                             android:textAllCaps="false"
                             android:textColor="#120D1B"
                             android:textSize="13sp"
@@ -184,7 +185,7 @@
                             android:background="@drawable/bg_ar_chip_inactive"
                             android:minWidth="0dp"
                             android:minHeight="0dp"
-                            android:text="Studio"
+                            tools:text="Studio"
                             android:textAllCaps="false"
                             android:textColor="#FFFFFF"
                             android:textSize="13sp" />
@@ -197,7 +198,7 @@
                             android:background="@drawable/bg_ar_chip_inactive"
                             android:minWidth="0dp"
                             android:minHeight="0dp"
-                            android:text="Daylight"
+                            tools:text="Daylight"
                             android:textAllCaps="false"
                             android:textColor="#FFFFFF"
                             android:textSize="13sp" />
@@ -210,7 +211,7 @@
                             android:background="@drawable/bg_ar_chip_inactive"
                             android:minWidth="0dp"
                             android:minHeight="0dp"
-                            android:text="Sunset"
+                            tools:text="Sunset"
                             android:textAllCaps="false"
                             android:textColor="#FFFFFF"
                             android:textSize="13sp" />
@@ -223,7 +224,7 @@
                             android:background="@drawable/bg_ar_chip_inactive"
                             android:minWidth="0dp"
                             android:minHeight="0dp"
-                            android:text="Dramatic"
+                            tools:text="Dramatic"
                             android:textAllCaps="false"
                             android:textColor="#FFFFFF"
                             android:textSize="13sp" />
@@ -235,7 +236,7 @@
                             android:background="@drawable/bg_ar_chip_inactive"
                             android:minWidth="0dp"
                             android:minHeight="0dp"
-                            android:text="Neon"
+                            tools:text="Neon"
                             android:textAllCaps="false"
                             android:textColor="#FFFFFF"
                             android:textSize="13sp" />
@@ -247,7 +248,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
-                    android:text="Light intensity: 100%"
+                    tools:text="Light intensity: 100%"
                     android:textColor="#FFFFFF"
                     android:textSize="13sp" />
 
@@ -256,9 +257,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:max="250"
-                    android:min="20"
-                    android:progress="100"
+                    android:max="230"
+                    android:progress="80"
                     android:progressTint="#E9A83B"
                     android:thumbTint="#E9A83B" />
 
@@ -277,7 +277,20 @@
                         android:background="@drawable/bg_ar_chip_inactive"
                         android:minWidth="0dp"
                         android:minHeight="0dp"
-                        android:text="Shadows"
+                        tools:text="Shadows"
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnTogglePerformance"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_ar_chip_inactive"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        tools:text="Performance mode"
                         android:textAllCaps="false"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp" />
@@ -289,7 +302,7 @@
                         android:background="@drawable/bg_ar_chip_inactive"
                         android:minWidth="0dp"
                         android:minHeight="0dp"
-                        android:text="Show FPS"
+                        tools:text="Show FPS"
                         android:textAllCaps="false"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp" />
@@ -316,7 +329,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:gravity="center"
-                    android:text="Tap screen or button to place"
+                    tools:text="Tap screen or button to place"
                     android:textColor="#FFFFFF"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -341,7 +354,7 @@
                     android:id="@+id/tvRecordTimer"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="● REC 00:00"
+                    tools:text="● REC 00:00"
                     android:textColor="#FF4D4D"
                     android:textSize="13sp"
                     android:textStyle="bold" />
@@ -367,7 +380,7 @@
                     android:id="@+id/tvFps"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="— fps"
+                    tools:text="— fps"
                     android:textColor="#FFFFFF"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -396,7 +409,7 @@
                 android:minWidth="180dp"
                 android:paddingStart="28dp"
                 android:paddingEnd="28dp"
-                android:text="Place Model"
+                tools:text="Place Model"
                 android:textAllCaps="false"
                 android:textColor="#E9A83B"
                 android:textSize="15sp"
@@ -418,7 +431,7 @@
                     android:layout_height="48dp"
                     android:layout_marginEnd="12dp"
                     android:background="@drawable/bg_glass_round"
-                    android:contentDescription="Move scene"
+                    android:contentDescription="@string/ar_move_scene"
                     android:padding="11dp"
                     android:scaleType="fitCenter"
                     android:src="@drawable/ic_ar_move" />
@@ -430,7 +443,7 @@
                     android:layout_height="48dp"
                     android:layout_marginEnd="16dp"
                     android:background="@drawable/bg_glass_round"
-                    android:contentDescription="Measure objects"
+                    android:contentDescription="@string/ar_measure_objects"
                     android:padding="11dp"
                     android:scaleType="fitCenter"
                     android:src="@drawable/ic_ar_ruler" />
@@ -441,7 +454,7 @@
                     android:layout_width="72dp"
                     android:layout_height="72dp"
                     android:background="@drawable/bg_shutter"
-                    android:contentDescription="Capture" />
+                    android:contentDescription="@string/ar_capture" />
 
                 <!-- Scale % / 1:1 Reset button -->
                 <androidx.appcompat.widget.AppCompatButton
@@ -450,7 +463,7 @@
                     android:layout_height="48dp"
                     android:layout_marginStart="16dp"
                     android:background="@drawable/bg_glass_round"
-                    android:text="1:1"
+                    tools:text="1:1"
                     android:textAllCaps="false"
                     android:textColor="#FFFFFF"
                     android:textSize="12sp"
@@ -463,7 +476,7 @@
                     android:layout_height="48dp"
                     android:layout_marginStart="12dp"
                     android:background="@drawable/bg_glass_round"
-                    android:contentDescription="Toggle Video Mode"
+                    android:contentDescription="@string/ar_toggle_video"
                     android:padding="11dp"
                     android:scaleType="fitCenter"
                     android:src="@drawable/ic_ar_video" />
@@ -480,7 +493,7 @@
         android:layout_gravity="top|end"
         android:layout_margin="16dp"
         android:background="@drawable/bg_glass_round"
-        android:contentDescription="Show Interface"
+        android:contentDescription="@string/ar_show_interface"
         android:padding="10dp"
         android:scaleType="fitCenter"
         android:src="@drawable/ic_ar_eye"
