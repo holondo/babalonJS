@@ -1328,6 +1328,11 @@ export class UI {
    * Returns true if a modal, menu, panel, or sub-mode was closed; false if already at root.
    */
   handleBack(): boolean {
+    const dialog = document.querySelector('dialog[open]') as HTMLDialogElement | null;
+    if (dialog) {
+      dialog.close();
+      return true;
+    }
     if (this.menuOpen) {
       this.toggleMenu(false);
       return true;

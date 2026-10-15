@@ -222,6 +222,55 @@ if (Capacitor.isNativePlatform()) {
       if (launch?.url) void handleUrl(launch.url);
     }).catch(() => {});
   });
+} else {
+  // PWA and browser back-button navigation (mirrors native Android back-stack behavior)
+  const isStandalone = () =>
+    ['standalone', 'minimal-ui', 'window-controls-overlay'].some((mode) => matchMedia(`(display-mode: ${mode})`).matches) ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true ||
+    matchMedia('(pointer: coarse)').matches;
+
+  // Initialize history state so back gestures emit popstate instead of immediately closing the app
+  try {
+    history.replaceState({ root: true }, '');
+    history.pushState({ backTrap: true }, '');
+  } catch {}
+
+  let lastBackPress = 0;
+  let exiting = false;
+
+  window.addEventListener('popstate', () => {
+    if (exiting) return;
+
+    if (ui.handleBack()) {
+      // Re-arm the trap so subsequent back actions continue to close open layers
+      try {
+        history.pushState({ backTrap: true }, '');
+      } catch {}
+      return;
+    }
+
+    // At root level
+    if (isStandalone()) {
+      const now = Date.now();
+      if (now - lastBackPress < 2000) {
+        exiting = true;
+        history.back();
+      } else {
+        lastBackPress = now;
+        ui.toast(tr('Press back again to exit'));
+        try {
+          history.pushState({ backTrap: true }, '');
+        } catch {}
+      }
+    } else {
+      // In regular desktop browser tabs with nothing open, allow navigating to the previous page
+      exiting = true;
+      history.back();
+    }
+  });
+
+  window.addEventListener('pointerdown', () => { exiting = false; }, { passive: true });
+  window.addEventListener('keydown', () => { exiting = false; }, { passive: true });
 }
 
 // Exposed for debugging from the browser console
