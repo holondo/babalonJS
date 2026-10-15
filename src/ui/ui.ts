@@ -201,6 +201,10 @@ export class UI {
     root.append(this.clipInput);
     this.contextBar = new ContextBar(this);
     this.panelSheet = new PanelSheet(this.panel, () => this.contextBar.layout(false), () => this.openTab(null));
+    this.panel.addEventListener('scroll', () => {
+      if (this.panel.scrollTop !== 0) this.panel.scrollTop = 0;
+      if (this.panel.scrollLeft !== 0) this.panel.scrollLeft = 0;
+    }, { passive: true });
     root.append(this.labels, this.jointOverlay.el, this.frame, this.topbar, this.contextBar.el, this.viewStack, this.panel, this.dock, this.uiRestore, this.photoHud, this.empty, this.loader, this.toasts, this.dropzone, this.fileInput);
     this.fileInput.addEventListener('change', () => {
       const files = [...(this.fileInput.files ?? [])];
@@ -1100,7 +1104,7 @@ export class UI {
     // Scene reset can end Mesh mode directly, without going through the panel's Cancel.
     if (this.separateUI && !this.editor.separator.active) {
       this.separateUI.sync();
-      if (this.segment.objects === 'separate') this.segment.objects = 'object';
+      if (this.segment.objects && ['separate', 'select', 'sculpt'].includes(this.segment.objects)) this.segment.objects = 'object';
     }
     const previous = this.focusedContext;
     this.contextBar.render(this.contexts());
@@ -1183,7 +1187,7 @@ export class UI {
     if (ed.pose.active) out.push({ id: 'pose', icon: PersonStanding, label: tr('Pose'), render: () => this.poseUI.renderPoseBar(), expand: () => this.openPart('objects', 'pose') });
     if (ed.separator.active) {
       const n = ed.separator.selection?.count ?? 0;
-      out.push({ id: 'mesh', icon: Triangle, label: n ? tr('{n} faces', { n: n.toLocaleString() }) : tr('Mesh'), render: () => this.renderFeatureContext('separate', () => this.separateUI!.bar()), expand: () => this.openPart('objects', 'separate') });
+      out.push({ id: 'mesh', icon: Triangle, label: n ? tr('{n} faces', { n: n.toLocaleString() }) : tr('Mesh'), render: () => this.renderFeatureContext('separate', () => this.separateUI!.bar()), expand: () => this.openPart('objects', this.separateUI?.getPart() ?? 'select') });
     }
     if (ed.tools.measureMode) out.push({ id: 'measure', icon: Ruler, label: tr('Measure'), render: () => this.selbar.replaceChildren(
       h('div', { class: 'sel-name measure always' }, icon(Ruler, 16), h('span', {}, ed.tools.pending ? tr('Tap the second point') : tr('Tap the first point'))),
@@ -1394,12 +1398,20 @@ export class UI {
       return;
     }
     window.clearTimeout(this.panelCloseTimer);
-    const title = tr(PANEL_TITLES[tab]);
+    const title = this.editor.separator.active && tab === 'objects' ? tr('Mesh') : tr(PANEL_TITLES[tab]);
     const scroll = this.panel.querySelector('.panel-body')?.scrollTop ?? 0;
     const parts = this.panelParts(tab);
     const current = parts?.find((p) => p.id === this.segment[tab]) ? this.segment[tab]! : parts?.[0].id ?? '';
-    const body = h('div', { class: 'panel-body' }, ...this.panelContent(tab, current));
+    let content: (Node | null)[];
+    try {
+      content = this.panelContent(tab, current);
+    } catch (e) {
+      console.error('Error rendering panel content:', e);
+      content = [hint(tr('An error occurred while displaying this panel.')), button(tr('Try again'), () => this.renderPanel())];
+    }
+    const body = h('div', { class: 'panel-body' }, ...content);
     const rigging = tab === 'objects' && current === 'rig' && ed.rigger.active && ed.rigger.entity === ed.selected;
+    const meshActive = tab === 'objects' && ed.separator.active;
     this.panel.replaceChildren(
       this.panelSheet.handle,
       h(
@@ -1408,10 +1420,13 @@ export class UI {
         h('h2', {}, title),
         iconButton(X, tr('Close'), () => (ed.photoMode ? ((this.photoPanel = false), this.renderAll()) : this.openTab(null))),
       ),
-      ...(parts
+      ...(parts && parts.length > 1
         ? [
             scrollableSegmented(parts, current, (id) => {
               this.segment[tab] = id;
+              if (this.editor.separator.active && this.separateUI) {
+                this.separateUI.setPart(id as 'select' | 'sculpt' | 'modify');
+              }
               this.panel.querySelector('.panel-body')!.scrollTop = 0;
               this.renderPanel();
               this.labelsUI.buildLabels();
@@ -1421,7 +1436,10 @@ export class UI {
       ...(rigging && this.rigUI ? [this.rigUI.rigStepper()] : []),
       body,
       ...(rigging && this.rigUI ? [this.rigUI.rigFooter()] : []),
+      ...(meshActive && this.separateUI ? [this.separateUI.footer()] : []),
     );
+    this.panel.scrollTop = 0;
+    this.panel.scrollLeft = 0;
     body.scrollTop = scroll;
     this.panelSheet.update();
     if (ed.rigger.active) this.renderSelbar();
@@ -1434,7 +1452,13 @@ export class UI {
       case 'objects': {
         const e = this.editor.selected;
         if (!e || e.kind === 'light') return null;
-        if (this.editor.separator.active) return [{ id: 'separate', label: tr('Mesh') }];
+        if (this.editor.separator.active) {
+          return [
+            { id: 'select', label: tr('Select') },
+            { id: 'sculpt', label: tr('Sculpt') },
+            { id: 'modify', label: tr('Modify') },
+          ];
+        }
         if (e.groupMembers) return [{ id: 'object', label: tr('Object') }, { id: 'material', label: tr('Material') }, { id: 'modify', label: tr('Modify') }];
         return [
           { id: 'object', label: tr('Object') },
@@ -1557,6 +1581,9 @@ export class UI {
   }
 
   private objectsPart(part: string): (Node | null)[] {
+    if (this.editor.separator.active) {
+      return this.featureContent('separate', () => this.separateUI!.panel(part as 'select' | 'sculpt' | 'modify'));
+    }
     if (part === 'material') return this.materialUI.materialPanel();
     if (part === 'animate') return this.animateUI.animatePanel();
     if (part === 'pose') return this.poseUI.posePanel();

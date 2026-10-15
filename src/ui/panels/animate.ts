@@ -206,6 +206,10 @@ export class AnimatePanel {
     const f = a.frame(s.entity);
     const g = a.current(s.entity)!;
     s.input.value = String(f);
+    const min = parseFloat(s.input.min);
+    const max = parseFloat(s.input.max);
+    const pct = ((f - min) / (max - min || 1)) * 100;
+    s.input.style.setProperty('--val-pct', `${Math.max(0, Math.min(100, pct))}%`);
     s.out.textContent = `${((f - g.from) / s.fps).toFixed(2)} s`;
   }
 }

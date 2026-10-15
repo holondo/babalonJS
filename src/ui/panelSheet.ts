@@ -122,6 +122,7 @@ export class PanelSheet {
 
   private setHeight(height: number) {
     this.panel.style.setProperty('--sheet-height', `${height}px`);
+    if (this.panel.scrollTop !== 0) this.panel.scrollTop = 0;
   }
 
   update() {

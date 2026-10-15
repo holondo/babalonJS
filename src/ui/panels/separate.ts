@@ -1,4 +1,4 @@
-import { Brush, Focus, Lasso, MousePointer2, MousePointerClick, Move3d, Rotate3d, Scale3d, Scissors, Triangle, Wand } from 'lucide';
+import { Brush, Check, Focus, Lasso, MousePointer2, MousePointerClick, Move3d, Rotate3d, Scale3d, Scissors, Triangle, Wand } from 'lucide';
 import { MultiMaterial } from '@babylonjs/core/Materials/multiMaterial.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import type { Entity, PrimitiveType } from '../../core/editor';
@@ -24,8 +24,23 @@ export class SeparatePanel {
   private brushPoint: ScreenPoint | null = null;
   private listening = false;
   private resetStroke: (() => void) | null = null;
+  private origMultiTouchPan: any = null;
+  private activeTouches = 0;
   /** Part of the panel: selecting faces, sculpting, or changing the mesh. */
   private part: 'select' | 'sculpt' | 'modify' = 'select';
+
+  getPart(): 'select' | 'sculpt' | 'modify' {
+    return this.ui.editor.separator.mode === 'surface' ? 'sculpt' : this.part;
+  }
+
+  setPart(part: 'select' | 'sculpt' | 'modify') {
+    const s = this.ui.editor.separator;
+    if (part === 'sculpt') s.setMode('surface');
+    else if (s.mode === 'surface') s.setMode('select');
+    this.part = part;
+    this.sync();
+    this.ui.renderSelbar();
+  }
 
   constructor(ui: UI) {
     this.ui = ui;
@@ -104,7 +119,7 @@ export class SeparatePanel {
     ]);
   }
 
-  panel(): (Node | null)[] {
+  panel(requestedPart?: 'select' | 'sculpt' | 'modify'): (Node | null)[] {
     const ed = this.ui.editor;
     const s = ed.separator;
     const sel = s.selection;
@@ -118,8 +133,8 @@ export class SeparatePanel {
     const hints: Record<SelectTool, string> = {
       piece: tr('Tap the model: selects the whole connected piece.'),
       smart: tr('Tap the model: selects a region up to creases, texture seams and narrow parts.'),
-      lasso: tr('Draw around what you want with one finger. Two fingers (or the right mouse button) move the view.'),
-      brush: tr('Paint over what you want with one finger. Two fingers (or the right mouse button) move the view.'),
+      lasso: tr('Draw around what you want with one finger. Two fingers (or the right mouse button) rotate the view, pinch to zoom.'),
+      brush: tr('Paint over what you want with one finger. Two fingers (or the right mouse button) rotate the view, pinch to zoom.'),
     };
     const meshes = [...sel.faces.keys()];
     const cut = s.cut;
@@ -159,22 +174,17 @@ export class SeparatePanel {
           )
         : null,
     ];
-    const part = s.mode === 'surface' ? 'sculpt' : this.part === 'sculpt' ? 'select' : this.part;
-    const tabs = segmented([{ id: 'select', label: tr('Select') }, { id: 'sculpt', label: tr('Sculpt') }, { id: 'modify', label: tr('Modify') }], part, (id) => this.ui.run(() => {
-      if (id === 'sculpt') s.setMode('surface');
-      else if (s.mode === 'surface') s.setMode('select');
-      this.part = id as typeof this.part;
-      this.sync(); this.ui.renderSelbar(); this.ui.renderPanel();
-    }));
-    const done = button(tr('Done'), () => this.cancel());
-    if (part === 'select') return [tabs, ...selectContent, done];
-    if (part === 'sculpt') return [tabs, section(tr('Surface brushes'),
-      chips([{ value: 'off', label: tr('Off') }, { value: 'pull', label: tr('Pull') }, { value: 'inflate', label: tr('Inflate') }, { value: 'smooth', label: tr('Smooth') }, { value: 'flatten', label: tr('Flatten') }], s.surfaceBrush ?? 'off', v => { s.surfaceBrush = v === 'off' ? null : v as NonNullable<typeof s.surfaceBrush>; this.sync(); }),
-      this.brushSizeControl(),
-      slider(tr('Strength'), s.brushStrength, { min: .01, max: 1, step: .01 }, v => { s.brushStrength = v; }),
-      toggle(tr('Only selected region'), s.brushSelected, v => { s.brushSelected = v; }),
-      hint(tr('One finger edits; two fingers move the view. Brushes change existing faces.'))), done];
-    return [tabs,
+    const part = requestedPart ?? (s.mode === 'surface' ? 'sculpt' : this.part === 'sculpt' ? 'select' : this.part);
+    if (part === 'select') return selectContent;
+    if (part === 'sculpt') return [
+      section(tr('Surface brushes'),
+        chips([{ value: 'off', label: tr('Off') }, { value: 'pull', label: tr('Pull') }, { value: 'inflate', label: tr('Inflate') }, { value: 'smooth', label: tr('Smooth') }, { value: 'flatten', label: tr('Flatten') }], s.surfaceBrush ?? 'off', v => { s.surfaceBrush = v === 'off' ? null : v as NonNullable<typeof s.surfaceBrush>; this.sync(); }),
+        this.brushSizeControl(),
+        slider(tr('Strength'), s.brushStrength, { min: .01, max: 1, step: .01 }, v => { s.brushStrength = v; }),
+        toggle(tr('Only selected region'), s.brushSelected, v => { s.brushSelected = v; }),
+        hint(tr('One finger edits; two fingers (or the right mouse button) rotate the view, pinch to zoom. Brushes change existing faces.'))),
+    ];
+    return [
       section(
         tr('Cut with a plane'),
         hint(tr('For pieces that touch: place the plane between them. The gold side becomes the new object.')),
@@ -215,7 +225,15 @@ export class SeparatePanel {
         toggle(tr('Reverse connection'), s.bridgeReverse, v => { s.bridgeReverse = v; s.clearBridge(); }),
         slider(tr('Border offset'), s.bridgeOffset, { min: 0, max: 100, step: 1 }, v => { s.bridgeOffset = v; s.clearBridge(); }),
         row(button(tr('Preview'), () => this.ui.run(() => s.previewBridge())), button(tr('Apply connection'), () => this.ui.run(() => { s.connect(); this.sync(); this.ui.renderPanel(); })), button(tr('Cancel'), () => s.clearBridge()))),
-      done];
+    ];
+  }
+
+  footer() {
+    return h(
+      'div',
+      { class: 'panel-foot' },
+      button(tr('Done'), () => this.cancel(), { icon: Check, cls: 'primary grow' }),
+    );
   }
 
   private separate() {
@@ -336,10 +354,12 @@ export class SeparatePanel {
         replayed.add(again);
         canvas.dispatchEvent(again);
         passed.add(ev.pointerId);
+        this.activeTouches = passed.size;
         return;
       }
       if (passed.size) {
         passed.add(ev.pointerId);
+        this.activeTouches = passed.size;
         return;
       }
       const start = local(ev);
@@ -368,6 +388,7 @@ export class SeparatePanel {
     }, true);
     const end = (ev: PointerEvent) => {
       passed.delete(ev.pointerId);
+      this.activeTouches = passed.size;
       if (ev.pointerType !== 'mouse' || ev.type === 'pointercancel') this.cursor.style.display = 'none';
       if (!stroke || ev.pointerId !== stroke.id) return;
       swallow(ev);
@@ -381,15 +402,46 @@ export class SeparatePanel {
     canvas.addEventListener('pointercancel', end, true);
   }
 
-  /** While drawing with a mouse, the right button turns the view and the middle one pans (left draws). */
+  /**
+   * While drawing with a mouse, the right button turns the view and the middle one pans (left draws).
+   * With touch pointers, 2 fingers rotate the view (and pinch to zoom), while 3 fingers pan.
+   */
   private cameraButtons(drawing: boolean) {
     type Entry = { source: string; button?: number; modifiers?: object; interaction: string };
-    const input = (this.ui.editor.camera as unknown as { movement: { input: { inputMap: Entry[] } } }).movement.input;
-    const plain = (e: Entry) => e.source === 'pointer' && !e.modifiers;
-    const rotate = input.inputMap.find((e) => plain(e) && e.interaction === 'rotate');
-    const pan = input.inputMap.find((e) => plain(e) && e.interaction === 'pan');
-    if (rotate) rotate.button = drawing ? 2 : 0;
-    if (pan) pan.button = drawing ? 1 : 2;
+    const cam = this.ui.editor.camera;
+    const input = (cam as unknown as { movement?: { input?: { inputMap?: Entry[] } } }).movement?.input;
+    if (input?.inputMap) {
+      const plain = (e: Entry) => e.source === 'pointer' && !e.modifiers;
+      const rotate = input.inputMap.find((e) => plain(e) && e.interaction === 'rotate');
+      const pan = input.inputMap.find((e) => plain(e) && e.interaction === 'pan');
+      if (rotate) rotate.button = drawing ? 2 : 0;
+      if (pan) pan.button = drawing ? 1 : 2;
+    }
+    const pointers = (cam.inputs?.attached?.pointers as any);
+    if (pointers) {
+      if (drawing && !this.origMultiTouchPan) {
+        this.origMultiTouchPan = pointers._computeMultiTouchPanning;
+        pointers._computeMultiTouchPanning = (previous: { x: number; y: number }, current: { x: number; y: number }) => {
+          if (!previous || !current) return;
+          const moveDeltaX = current.x - previous.x;
+          const moveDeltaY = current.y - previous.y;
+          if (this.activeTouches >= 3) {
+            const panScale = cam.panningSensibility ? 1 / cam.panningSensibility : 0.001;
+            cam.inertialPanningX += -moveDeltaX * panScale;
+            cam.inertialPanningY += moveDeltaY * panScale;
+          } else {
+            const rotScaleX = cam.angularSensibilityX ? 1 / cam.angularSensibilityX : 0.0015;
+            const rotScaleY = cam.angularSensibilityY ? 1 / cam.angularSensibilityY : 0.0015;
+            cam.inertialAlphaOffset -= moveDeltaX * rotScaleX;
+            cam.inertialBetaOffset -= moveDeltaY * rotScaleY;
+          }
+          this.ui.editor.invalidate();
+        };
+      } else if (!drawing && this.origMultiTouchPan) {
+        pointers._computeMultiTouchPanning = this.origMultiTouchPan;
+        this.origMultiTouchPan = null;
+      }
+    }
   }
 
 }

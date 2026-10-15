@@ -1,5 +1,7 @@
 import { ChevronLeft, ChevronRight, createElement } from 'lucide';
 import type { IconNode } from 'lucide';
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { tr } from '../core/i18n';
 
 type Child = Node | string | null | undefined | false;
@@ -30,7 +32,10 @@ export function iconButton(node: IconNode, title: string, onClick: () => void, o
       title,
       'aria-label': title,
       disabled: opts.disabled,
-      onClick,
+      onClick: () => {
+        haptic('light');
+        onClick();
+      },
     },
     icon(node),
     opts.label ? h('span', {}, opts.label) : null,
@@ -46,16 +51,33 @@ export function row(...children: Child[]) {
 }
 
 export function button(label: string, onClick: () => void, opts: { icon?: IconNode; cls?: string; active?: boolean } = {}) {
-  return h('button', { class: `btn ${opts.cls ?? ''} ${opts.active ? 'active' : ''}`, onClick }, opts.icon ? icon(opts.icon, 18) : null, h('span', {}, label));
+  return h(
+    'button',
+    {
+      class: `btn ${opts.cls ?? ''} ${opts.active ? 'active' : ''}`,
+      onClick: () => {
+        haptic('light');
+        onClick();
+      },
+    },
+    opts.icon ? icon(opts.icon, 18) : null,
+    h('span', {}, label),
+  );
 }
 
-/** Tactile micro-haptic on mobile (Android / PWA). */
+/** Tactile micro-haptic on mobile (Android Capacitor / PWA). */
 export function haptic(type: 'light' | 'selection' | 'medium' = 'light') {
   try {
+    if (Capacitor.isNativePlatform()) {
+      if (type === 'light') void Haptics.impact({ style: ImpactStyle.Light });
+      else if (type === 'selection') void Haptics.selectionChanged();
+      else if (type === 'medium') void Haptics.impact({ style: ImpactStyle.Medium });
+      return;
+    }
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      if (type === 'light') navigator.vibrate(6);
-      else if (type === 'selection') navigator.vibrate(10);
-      else if (type === 'medium') navigator.vibrate(15);
+      if (type === 'light') navigator.vibrate(25);
+      else if (type === 'selection') navigator.vibrate(35);
+      else if (type === 'medium') navigator.vibrate(50);
     }
   } catch { /* Ignore if device blocks vibration */ }
 }
@@ -101,6 +123,7 @@ export function slider(label: string, value: number, opts: SliderOpts, onInput: 
     max: String(opts.max),
     step: String(opts.step ?? (opts.max - opts.min) / 200),
     value: String(to(value)),
+    'aria-label': label,
   });
   const updateFill = () => {
     const min = parseFloat(input.min);
@@ -156,7 +179,7 @@ export function scrollFriendlyRange(track: HTMLElement, input: HTMLInputElement)
       }
       if (Math.abs(dx) < 8) return;
       drag.active = true;
-      track.setPointerCapture(e.pointerId);
+      try { track.setPointerCapture(e.pointerId); } catch { /* ignore if already released */ }
       track.classList.add('dragging');
       haptic('light');
     }
@@ -175,6 +198,9 @@ export function scrollFriendlyRange(track: HTMLElement, input: HTMLInputElement)
     if (!drag || e.pointerId !== drag.id) return;
     if (drag.active) input.dispatchEvent(new Event('change', { bubbles: true }));
     track.classList.remove('dragging');
+    if (track.hasPointerCapture(e.pointerId)) {
+      try { track.releasePointerCapture(e.pointerId); } catch { /* ignore if already released */ }
+    }
     drag = null;
   };
   track.addEventListener('pointerup', end);
@@ -245,7 +271,13 @@ export function scrollableSegmented(options: { id: string; label: string; icon?:
 export function menuItem(node: IconNode, label: string, run: () => void, opts: { kbd?: string; on?: boolean; description?: string } = {}) {
   return h(
     'button',
-    { class: `menu-item ${opts.on ? 'on' : ''} ${opts.description ? 'described' : ''}`, onClick: run },
+    {
+      class: `menu-item ${opts.on ? 'on' : ''} ${opts.description ? 'described' : ''}`,
+      onClick: () => {
+        haptic('light');
+        run();
+      },
+    },
     icon(node, 18),
     h('span', {}, label, opts.description ? h('small', {}, opts.description) : null),
     opts.kbd ? h('kbd', {}, opts.kbd) : opts.on !== undefined ? h('i', { class: 'menu-check' }) : null,
@@ -254,7 +286,19 @@ export function menuItem(node: IconNode, label: string, run: () => void, opts: {
 
 /** Big round camera shutter (photo mode and AR). */
 export function shutterButton(label: string, onClick: () => void) {
-  return h('button', { class: 'shutter', title: label, 'aria-label': label, onClick }, h('i', {}));
+  return h(
+    'button',
+    {
+      class: 'shutter',
+      title: label,
+      'aria-label': label,
+      onClick: () => {
+        haptic('medium');
+        onClick();
+      },
+    },
+    h('i', {}),
+  );
 }
 
 /** White flash over a container, as feedback for a photo. */
@@ -265,7 +309,7 @@ export function flashScreen(parent: HTMLElement) {
 }
 
 export function colorInput(label: string, value: string, onInput: (hex: string) => void, onCommit?: () => void) {
-  const input = h('input', { type: 'color', value });
+  const input = h('input', { type: 'color', value, 'aria-label': label });
   input.addEventListener('input', () => onInput(input.value));
   input.addEventListener('change', () => onCommit?.());
   return h('label', { class: 'color' }, h('span', {}, label), input);
@@ -281,7 +325,7 @@ export function toggle(label: string, value: boolean, onChange: (v: boolean) => 
 }
 
 export function select(label: string, options: { value: string; label: string }[], value: string, onChange: (v: string) => void) {
-  const sel = h('select', {}, ...options.map((o) => h('option', { value: o.value, selected: o.value === value }, o.label)));
+  const sel = h('select', { 'aria-label': label }, ...options.map((o) => h('option', { value: o.value, selected: o.value === value }, o.label)));
   sel.addEventListener('change', () => onChange(sel.value));
   return h('label', { class: 'select' }, h('span', {}, label), sel);
 }
@@ -293,8 +337,8 @@ export function hint(text: string) {
 /** Number field with quick decrement/increment stepper buttons. */
 export function numberInput(label: string, value: number, opts: { step?: number; suffix?: string }, onCommit: (v: number) => void) {
   const step = opts.step ?? 1;
-  const input = h('input', { type: 'number', value: String(+value.toFixed(4)), step: String(step), inputmode: 'decimal' });
-  const commit = (delta?: number) => {
+  const input = h('input', { type: 'number', value: String(+value.toFixed(4)), step: String(step), inputmode: 'decimal', 'aria-label': label });
+  const commit = (delta?: number, vibrate = true) => {
     let v = parseFloat(input.value.replace(',', '.'));
     if (delta !== undefined) {
       v = +(v + delta).toFixed(4);
@@ -302,13 +346,13 @@ export function numberInput(label: string, value: number, opts: { step?: number;
     }
     if (Number.isFinite(v)) {
       onCommit(v);
-      haptic('light');
+      if (vibrate) haptic('light');
     }
   };
-  input.addEventListener('change', () => commit());
+  input.addEventListener('change', () => commit(undefined, false));
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
-      commit();
+      commit(undefined, true);
       input.blur();
     }
   });
@@ -317,14 +361,14 @@ export function numberInput(label: string, value: number, opts: { step?: number;
     class: 'num-step minus',
     title: tr('Decrease'),
     'aria-label': tr('Decrease'),
-    onClick: (e: Event) => { e.preventDefault(); e.stopPropagation(); commit(-step); },
+    onClick: (e: Event) => { e.preventDefault(); e.stopPropagation(); commit(-step, true); },
   }, '−');
   const btnPlus = h('button', {
     type: 'button',
     class: 'num-step plus',
     title: tr('Increase'),
     'aria-label': tr('Increase'),
-    onClick: (e: Event) => { e.preventDefault(); e.stopPropagation(); commit(step); },
+    onClick: (e: Event) => { e.preventDefault(); e.stopPropagation(); commit(step, true); },
   }, '+');
   const lab = h('span', { class: 'num-label', title: tr('Drag to adjust, tap to edit') }, label);
   let scrub: { x: number; val: number; active: boolean } | null = null;
@@ -338,17 +382,21 @@ export function numberInput(label: string, value: number, opts: { step?: number;
     if (!scrub.active) {
       if (Math.abs(dx) < 6) return;
       scrub.active = true;
-      lab.setPointerCapture(e.pointerId);
+      try { lab.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      haptic('light');
     }
     const delta = dx * step * 0.05;
     const next = +(scrub.val + delta).toFixed(4);
     input.value = String(next);
-    commit();
+    commit(undefined, false);
   });
   const endScrub = (e: PointerEvent) => {
     if (!scrub) return;
-    if (scrub.active && lab.hasPointerCapture(e.pointerId)) {
-      lab.releasePointerCapture(e.pointerId);
+    if (scrub.active) {
+      if (lab.hasPointerCapture(e.pointerId)) {
+        try { lab.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+      }
+      haptic('light');
     }
     scrub = null;
   };

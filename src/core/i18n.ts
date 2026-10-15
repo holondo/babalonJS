@@ -101,7 +101,7 @@ const PT: Record<string, string> = {
   'Smooth': 'Suavizar',
   'Flatten': 'Achatar',
   'Only selected region': 'Só a região selecionada',
-  'One finger edits; two fingers move the view. Brushes change existing faces.': 'Um dedo edita; dois dedos movem a câmera. Os pincéis alteram faces existentes.',
+  'One finger edits; two fingers (or the right mouse button) rotate the view, pinch to zoom. Brushes change existing faces.': 'Um dedo edita; dois dedos (ou o botão direito do mouse) giram a câmera, pince para zoom. Os pincéis alteram faces existentes.',
 
   'Select faces next to exactly two open borders.': 'Selecione faces junto a exatamente duas bordas abertas.',
   'The borders overlap or create collapsed faces. Reposition them.': 'As bordas se sobrepõem ou criam faces colapsadas. Reposicione-as.',
@@ -402,6 +402,8 @@ const PT: Record<string, string> = {
   'Clear coat': 'Verniz (clear coat)',
   'Clear coat intensity': 'Intensidade do verniz',
   Unlit: 'Sem iluminação (unlit)',
+  'Unlit materials ignore lights and surface reflectance.': 'Materiais unlit ignoram luzes e reflexos da superfície.',
+  'An error occurred while displaying this panel.': 'Ocorreu um erro ao exibir este painel.',
   Emission: 'Brilho próprio',
   'Emissive color': 'Cor de emissão',
   Intensity: 'Intensidade',
@@ -879,8 +881,8 @@ const PT: Record<string, string> = {
   'Brush': 'Pincel',
   'Tap the model: selects the whole connected piece.': 'Toque no modelo: seleciona a peça conectada inteira.',
   'Tap the model: selects a region up to creases, texture seams and narrow parts.': 'Toque no modelo: seleciona uma região até dobras, costuras de textura e partes estreitas.',
-  'Draw around what you want with one finger. Two fingers (or the right mouse button) move the view.': 'Desenhe em volta do que você quer com um dedo. Dois dedos (ou o botão direito do mouse) movem a vista.',
-  'Paint over what you want with one finger. Two fingers (or the right mouse button) move the view.': 'Pinte sobre o que você quer com um dedo. Dois dedos (ou o botão direito do mouse) movem a vista.',
+  'Draw around what you want with one finger. Two fingers (or the right mouse button) rotate the view, pinch to zoom.': 'Desenhe em volta do que você quer com um dedo. Dois dedos (ou o botão direito do mouse) giram a vista, pince para zoom.',
+  'Paint over what you want with one finger. Two fingers (or the right mouse button) rotate the view, pinch to zoom.': 'Pinte sobre o que você quer com um dedo. Dois dedos (ou o botão direito do mouse) giram a vista, pince para zoom.',
   'Select': 'Selecionar',
   'Remove': 'Remover',
   'Tolerance': 'Tolerância',
@@ -1008,6 +1010,8 @@ const PT: Record<string, string> = {
   'Orbit': 'Orbitar',
   'Press back again to exit': 'Pressione voltar novamente para sair',
   'WebXR AR requires Chrome on Android. WebView does not support WebXR.': 'O WebXR AR requer o Chrome no Android. O WebView não suporta WebXR.',
+  'Drag to adjust, tap to edit': 'Arraste para ajustar, toque para editar',
+  'Failed to export 3D scene for AR': 'Falha ao exportar a cena 3D para AR',
 };
 
 const DICTS: Partial<Record<Lang, Record<string, string>>> = { pt: PT };
