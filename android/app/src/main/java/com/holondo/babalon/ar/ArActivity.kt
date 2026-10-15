@@ -63,6 +63,12 @@ import org.json.JSONObject
 
 class ArActivity : AppCompatActivity() {
 
+    private companion object {
+        /** Light intensity slider range in percent; SeekBar starts at 0 (android:min needs API 26). */
+        const val LIGHT_MIN_PERCENT = 20
+        const val LIGHT_MAX_PERCENT = 250
+    }
+
     private lateinit var binding: ActivityArBinding
     private var translations = JSONObject()
     private fun tr(text: String) = translations.optString(text, text)
@@ -94,6 +100,41 @@ class ArActivity : AppCompatActivity() {
     private var isOptionsOpen = false
     private var showFps = false
     private var shadowsEnabled = false
+    /** Opt-in: lets Filament lower the render resolution under load. Off keeps native resolution. */
+    private var performanceMode = false
+
+    /** Below Android 10 captures stay in the app cache (shared via FileProvider), not in the gallery. */
+    private fun captureSavedMessage(video: Boolean) = when {
+        android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q -> if (video) "Video ready to share" else "Photo ready to share"
+        video -> "Video saved to Gallery"
+        else -> "Photo saved to Gallery"
+    }
+
+    private fun applyPerformanceMode() {
+        binding.sceneView.view.dynamicResolutionOptions = FilamentView.DynamicResolutionOptions().apply {
+            enabled = performanceMode
+            homogeneousScaling = true
+            quality = FilamentView.QualityLevel.MEDIUM
+            minScale = 0.65f
+            maxScale = 1.0f
+            sharpness = 0.8f
+        }
+    }
+
+    /** Whether the GLB's JSON chunk declares KHR_materials_transmission (refraction needs screen-space refraction). */
+    private fun usesTransmission(glbPath: String): Boolean = runCatching {
+        java.io.RandomAccessFile(glbPath, "r").use { f ->
+            val header = ByteArray(20)
+            f.readFully(header)
+            val buf = java.nio.ByteBuffer.wrap(header).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            if (buf.getInt(0) != 0x46546C67) return@use false // "glTF"
+            val jsonLength = buf.getInt(12)
+            if (buf.getInt(16) != 0x4E4F534A || jsonLength <= 0 || jsonLength > 64 * 1024 * 1024) return@use false // "JSON"
+            val json = ByteArray(jsonLength)
+            f.readFully(json)
+            String(json, Charsets.UTF_8).contains("KHR_materials_transmission")
+        }
+    }.getOrDefault(false)
     private val fpsTimerHandler = Handler(Looper.getMainLooper())
     private var lastFpsTime = 0L
     private var lastFpsFrameCount = 0
@@ -251,7 +292,10 @@ class ArActivity : AppCompatActivity() {
         binding.tvLightIntensity.text = "${tr("Light intensity")}: ${(lightIntensityLevel * 100f).roundToInt()}%"
         binding.btnToggleShadows.text = tr("Shadows")
         binding.btnToggleFps.text = tr("Show FPS")
-        binding.sbLightIntensity.progress = (lightIntensityLevel * 100f).roundToInt().coerceIn(20, 250)
+        binding.btnTogglePerformance.text = tr("Performance mode")
+        binding.btnScale.text = "1:1"
+        binding.sbLightIntensity.max = LIGHT_MAX_PERCENT - LIGHT_MIN_PERCENT
+        binding.sbLightIntensity.progress = (lightIntensityLevel * 100f).roundToInt().coerceIn(LIGHT_MIN_PERCENT, LIGHT_MAX_PERCENT) - LIGHT_MIN_PERCENT
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setupFullscreenAndInsets()
@@ -309,18 +353,10 @@ class ArActivity : AppCompatActivity() {
         val placement = intent.getStringExtra("placement")?.let { runCatching { JSONObject(it) }.getOrNull() }
         baseYaw = placement?.optDouble("baseYaw", 0.0)?.toFloat() ?: 0f
 
-        // Performance optimizations: Dynamic resolution and medium quality HDR color buffer
+        // Full resolution and quality by default; Performance mode (AR options) opts into dynamic resolution.
         sceneView.view.apply {
-            dynamicResolutionOptions = FilamentView.DynamicResolutionOptions().apply {
-                enabled = true
-                homogeneousScaling = true
-                quality = FilamentView.QualityLevel.MEDIUM
-                minScale = 0.65f
-                maxScale = 1.0f
-                sharpness = 0.8f
-            }
             renderQuality = FilamentView.RenderQuality().apply {
-                hdrColorBuffer = FilamentView.QualityLevel.MEDIUM
+                hdrColorBuffer = FilamentView.QualityLevel.HIGH
             }
             antiAliasing = FilamentView.AntiAliasing.FXAA
             ambientOcclusionOptions = FilamentView.AmbientOcclusionOptions().apply {
@@ -329,8 +365,10 @@ class ArActivity : AppCompatActivity() {
             bloomOptions = FilamentView.BloomOptions().apply {
                 enabled = false
             }
-            setScreenSpaceRefractionEnabled(true)
+            // Screen-space refraction costs an extra pass: only for models with transmissive materials.
+            setScreenSpaceRefractionEnabled(usesTransmission(glbPath))
         }
+        applyPerformanceMode()
 
         sceneView.planeRenderer.apply {
             isEnabled = true
@@ -873,7 +911,7 @@ class ArActivity : AppCompatActivity() {
         binding.sbLightIntensity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    applyLightIntensity(progress / 100f)
+                    applyLightIntensity((progress + LIGHT_MIN_PERCENT) / 100f)
                 }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -891,6 +929,14 @@ class ArActivity : AppCompatActivity() {
             binding.btnToggleShadows.typeface = if (shadowsEnabled) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             applyLightingMode(currentLightingMode)
             applyLightIntensity(lightIntensityLevel)
+        }
+
+        binding.btnTogglePerformance.setOnClickListener {
+            performanceMode = !performanceMode
+            binding.btnTogglePerformance.setBackgroundResource(if (performanceMode) R.drawable.bg_ar_chip_active else R.drawable.bg_ar_chip_inactive)
+            binding.btnTogglePerformance.setTextColor(if (performanceMode) Color.parseColor("#120D1B") else Color.WHITE)
+            applyPerformanceMode()
+            if (performanceMode) Toast.makeText(this, tr("Performance mode lowers resolution when the phone is busy"), Toast.LENGTH_SHORT).show()
         }
 
         binding.btnToggleFps.setOnClickListener {
@@ -1043,7 +1089,7 @@ class ArActivity : AppCompatActivity() {
             activity = this,
             sceneView = binding.sceneView,
             onSaved = {
-                Toast.makeText(this, tr("Photo saved to Gallery"), Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, tr(captureSavedMessage(video = false)), Toast.LENGTH_SHORT).show()
             },
             onError = { error ->
                 Toast.makeText(this, "${tr("Photo failed")}: $error", Toast.LENGTH_SHORT).show()
@@ -1093,7 +1139,7 @@ class ArActivity : AppCompatActivity() {
             share = share,
             sceneView = binding.sceneView,
             onStopped = {
-                Toast.makeText(this, tr("Video saved to Gallery"), Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, tr(captureSavedMessage(video = true)), Toast.LENGTH_SHORT).show()
             },
             onError = { error ->
                 Toast.makeText(this, "${tr("Recording failed")}: $error", Toast.LENGTH_SHORT).show()
