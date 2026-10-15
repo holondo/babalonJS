@@ -330,7 +330,9 @@ export class SeparatePanel {
       const pointer = stroke?.id;
       stroke = null;
       passed.clear();
-      if (pointer !== undefined && canvas.hasPointerCapture(pointer)) canvas.releasePointerCapture(pointer);
+      if (pointer !== undefined) {
+        try { if (canvas.hasPointerCapture(pointer)) canvas.releasePointerCapture(pointer); } catch { /* ignore */ }
+      }
       draw();
     };
     const swallow = (ev: Event) => {
@@ -372,7 +374,7 @@ export class SeparatePanel {
       }
       swallow(ev);
       stroke = { id: ev.pointerId, points: [start], first: ev };
-      canvas.setPointerCapture?.(ev.pointerId);
+      try { canvas.setPointerCapture?.(ev.pointerId); } catch { /* ignore */ }
       draw();
     }, true);
     canvas.addEventListener('pointerleave', () => { this.cursor.style.display = 'none'; });

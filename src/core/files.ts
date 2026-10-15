@@ -13,6 +13,32 @@ async function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+// Chunk size for native base64 writes: multiple of 3 so no padding '=' is emitted on intermediate chunks.
+const NATIVE_WRITE_CHUNK = 3 * 512 * 1024; // 1.5 MB
+
+async function writeBlobNative(
+  Filesystem: typeof import('@capacitor/filesystem').Filesystem,
+  directory: import('@capacitor/filesystem').Directory,
+  path: string,
+  blob: Blob,
+): Promise<{ uri: string }> {
+  if (blob.size <= NATIVE_WRITE_CHUNK) {
+    const data = await blobToBase64(blob);
+    return Filesystem.writeFile({ directory, path, data, recursive: true });
+  }
+  let result: { uri: string } | null = null;
+  for (let offset = 0; offset < blob.size; offset += NATIVE_WRITE_CHUNK) {
+    const slice = blob.slice(offset, Math.min(offset + NATIVE_WRITE_CHUNK, blob.size));
+    const data = await blobToBase64(slice);
+    if (offset === 0) {
+      result = await Filesystem.writeFile({ directory, path, data, recursive: true });
+    } else {
+      await Filesystem.appendFile({ directory, path, data });
+    }
+  }
+  return result!;
+}
+
 function fallbackSaveFile(blob: Blob, name: string) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -22,24 +48,17 @@ function fallbackSaveFile(blob: Blob, name: string) {
 }
 
 /** Saves a file straight to the device (Documents on Android; the browser's download folder elsewhere). */
-export function saveFile(blob: Blob, name: string) {
+export async function saveFile(blob: Blob, name: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
-    void (async () => {
-      try {
-        const { Filesystem, Directory } = await import('@capacitor/filesystem');
-        const data = await blobToBase64(blob);
-        await Filesystem.writeFile({
-          directory: Directory.Documents,
-          path: name,
-          data,
-          recursive: true,
-        });
-      } catch (err) {
-        console.warn('Native save failed, falling back to browser download:', err);
-        fallbackSaveFile(blob, name);
-      }
-    })();
-    return;
+    try {
+      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      await writeBlobNative(Filesystem, Directory.Documents, name, blob);
+      return;
+    } catch (err) {
+      console.warn('Native save failed, falling back to browser download:', err);
+      fallbackSaveFile(blob, name);
+      return;
+    }
   }
   fallbackSaveFile(blob, name);
 }
@@ -47,31 +66,44 @@ export function saveFile(blob: Blob, name: string) {
 /** True when the system share sheet can take this file (phones, some desktops). */
 export function canShareFile(blob: Blob, name: string) {
   if (Capacitor.isNativePlatform()) return true;
-  return !!navigator.canShare?.({ files: [new File([blob], name, { type: blob.type })] });
+  if (typeof navigator === 'undefined' || typeof navigator.canShare !== 'function') return false;
+  try {
+    return navigator.canShare({ files: [new File([blob], name, { type: blob.type })] });
+  } catch {
+    return false;
+  }
 }
 
 /** Opens the system share sheet (send to an app, save to the gallery, etc.). */
-export async function shareFile(blob: Blob, name: string) {
+export async function shareFile(blob: Blob, name: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     try {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
       const { Share } = await import('@capacitor/share');
-      const data = await blobToBase64(blob);
-      const writeResult = await Filesystem.writeFile({
-        directory: Directory.Cache,
-        path: name,
-        data,
-      });
-      await Share.share({
-        title: name,
-        files: [writeResult.uri],
-      });
+      const writeResult = await writeBlobNative(Filesystem, Directory.Cache, name, blob);
+      try {
+        await Share.share({
+          title: name,
+          files: [writeResult.uri],
+        });
+      } finally {
+        // Start the grace period only after the share sheet closes.
+        setTimeout(() => {
+          Filesystem.deleteFile({ directory: Directory.Cache, path: name }).catch(() => {});
+        }, 60000);
+      }
       return;
     } catch (err) {
       console.warn('Native share failed:', err);
     }
   }
-  await navigator.share({ files: [new File([blob], name, { type: blob.type })] }).catch(() => {});
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ files: [new File([blob], name, { type: blob.type })] });
+    } catch {
+      // User dismissed share dialog or share was cancelled
+    }
+  }
 }
 
 /** Saves the file right away and returns how to share it (null when the device can't share files). */

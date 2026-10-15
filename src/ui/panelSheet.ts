@@ -26,7 +26,7 @@ export class PanelSheet {
       if ((event.target as HTMLElement)?.closest?.('button:not(.panel-grip)')) return;
       this.drag = { id: event.pointerId, y: event.clientY, height: panel.offsetHeight, heights: this.heights() };
       this.pendingHeight = this.drag.height;
-      this.handle.setPointerCapture(event.pointerId);
+      try { this.handle.setPointerCapture(event.pointerId); } catch { /* ignore */ }
       panel.classList.add('sheet-dragging');
     };
 
@@ -51,7 +51,9 @@ export class PanelSheet {
       cancelAnimationFrame(this.heightFrame); this.heightFrame = 0;
       this.drag = null;
       panel.classList.remove('sheet-dragging');
-      if (this.handle.hasPointerCapture(event.pointerId)) this.handle.releasePointerCapture(event.pointerId);
+      try {
+        if (this.handle.hasPointerCapture(event.pointerId)) this.handle.releasePointerCapture(event.pointerId);
+      } catch { /* ignore */ }
       if (moved) {
         const height = this.pendingHeight;
         // Swiped down past minimum threshold -> dismiss panel smoothly without height flick
