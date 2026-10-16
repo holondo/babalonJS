@@ -19,7 +19,7 @@ Repo: https://github.com/holondo/babalonJS.git
 Builds:
   - versionName: 1.0.1
     versionCode: 201
-    commit: 19c5bc1bda015118da7c52184e623cf1311bbf95
+    commit: 7ed081d967e12cc2d161c5455c46037e81747ff6
     subdir: android/app
     sudo:
       - apt-get update
@@ -30,7 +30,7 @@ Builds:
       - VITE_ANDROID_DISTRIBUTION=1 npm run build
       - npx cap telemetry off
       - npx cap sync android --deployment
-      - node scripts/prepare-android-distribution.mjs
+      - npm run android:prepare-distribution
     gradle:
       - distribution
     output: build/outputs/apk/distribution/release/babalon-1.0.1-distribution-armeabi-v7a.apk
@@ -39,7 +39,7 @@ Builds:
 
   - versionName: 1.0.1
     versionCode: 202
-    commit: 19c5bc1bda015118da7c52184e623cf1311bbf95
+    commit: 7ed081d967e12cc2d161c5455c46037e81747ff6
     subdir: android/app
     sudo:
       - apt-get update
@@ -50,7 +50,7 @@ Builds:
       - VITE_ANDROID_DISTRIBUTION=1 npm run build
       - npx cap telemetry off
       - npx cap sync android --deployment
-      - node scripts/prepare-android-distribution.mjs
+      - npm run android:prepare-distribution
     gradle:
       - distribution
     output: build/outputs/apk/distribution/release/babalon-1.0.1-distribution-arm64-v8a.apk
