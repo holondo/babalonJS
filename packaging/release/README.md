@@ -20,7 +20,7 @@ The regular production build keeps all optional models, animations, and environm
 ```sh
 VITE_ANDROID_DISTRIBUTION=1 npm run build
 npx cap sync android --deployment
-node scripts/prepare-android-distribution.mjs
+npm run android:prepare-distribution
 cd android
 ./gradlew assembleDistributionRelease
 cd ..
