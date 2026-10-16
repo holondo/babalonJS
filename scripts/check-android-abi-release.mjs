@@ -2,7 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const root = join('android', 'app', 'build', 'outputs', 'apk');
+const root = process.argv[2] || join('android', 'app', 'build', 'outputs', 'apk');
+const flatInput = Boolean(process.argv[2]);
 const maxDistributionBytes = 30_000_000;
 const expectedCertificate = '1bb33ae3c61f661b857b077f07b9990c301647b8f71c9814fb7179b09e99e01e';
 const variants = [
@@ -30,7 +31,8 @@ const signerCommand = process.platform === 'win32' ? 'java' : apksigner;
 const signerPrefix = process.platform === 'win32' ? ['-jar', apksigner] : [];
 
 for (const variant of variants) {
-  const file = join(root, variant.flavor, 'release', `babalon-1.0.1-${variant.flavor}-${variant.abi}.apk`);
+  const filename = `babalon-1.0.1-${variant.flavor}-${variant.abi}.apk`;
+  const file = flatInput ? join(root, filename) : join(root, variant.flavor, 'release', filename);
   if (!existsSync(file)) throw new Error(`Missing release APK: ${file}`);
 
   const bytes = statSync(file).size;
@@ -44,6 +46,9 @@ for (const variant of variants) {
   if (!badging.includes("versionName='1.0.1'")) throw new Error(`${file}: unexpected versionName.`);
   if (!badging.includes(`native-code: '${variant.abi}'`)) throw new Error(`${file}: unexpected native ABI.`);
   if (/application-debuggable|testOnly='true'/.test(badging)) throw new Error(`${file}: release must not be debuggable or test-only.`);
+  if (!badging.includes("uses-feature-not-required: name='android.hardware.camera.ar'")) {
+    throw new Error(`${file}: AR camera capability must remain optional.`);
+  }
 
   const signer = execFileSync(signerCommand, [...signerPrefix, 'verify', '--print-certs', file], { encoding: 'utf8' });
   const match = signer.match(/SHA-256 digest: ([0-9a-f]+)/i);
@@ -61,6 +66,12 @@ for (const variant of variants) {
     if (variant.flavor === 'offline' && !entries.includes(asset)) throw new Error(`${file}: offline variant is missing ${asset}.`);
     if (variant.flavor === 'distribution' && entries.includes(asset)) throw new Error(`${file}: distribution variant unexpectedly contains ${asset}.`);
   }
+}
+
+if (flatInput) {
+  const actual = readdirSync(root).filter((name) => name.endsWith('.apk')).sort();
+  const expected = variants.map(({ flavor, abi }) => `babalon-1.0.1-${flavor}-${abi}.apk`).sort();
+  if (actual.join('\n') !== expected.join('\n')) throw new Error(`Unexpected staged APK set: ${actual.join(', ') || 'none'}`);
 }
 
 console.log('Four signed Android variant/ABI APKs passed structural release checks.');
