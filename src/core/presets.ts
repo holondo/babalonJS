@@ -1,6 +1,7 @@
 import type { MaterialJSON } from './state';
 import type { HumanBone } from '../rigging/humanoid';
 import type { EnvSettings, LightType, PhotoSettings } from './editor';
+import { optionalAssetUrl } from './assetUrls';
 
 /**
  * Lighting presets, used by the editor (as real lights) and by AR (as temporary lights that move
@@ -239,7 +240,7 @@ export const ANIMATION_LIBRARY: LibraryClip[] = [
 ];
 
 export function libraryClipUrl(id: string) {
-  return `${import.meta.env.BASE_URL}animations/${id}.glb`;
+  return optionalAssetUrl(`animations/${id}.glb`);
 }
 
 /** Physical looks; base-color textures remain attached. Advanced effects are opt-in. */

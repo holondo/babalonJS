@@ -85,6 +85,7 @@ import { forgetHumanoid, jointNodes } from '../rigging/humanoid';
 import type { HumanBone } from '../rigging/humanoid';
 import { ClipManager } from '../animation/retarget';
 import type { AddedClip } from '../animation/retarget';
+import { optionalAssetUrl } from './assetUrls';
 
 registerBuiltInLoaders();
 
@@ -173,17 +174,17 @@ interface Command {
 
 export const ENV_PRESETS: Record<string, { label: string; url: string }> = {
   studio: { label: 'Studio', url: `${import.meta.env.BASE_URL}environments/studio.env` },
-  neutral: { label: 'Neutral', url: `${import.meta.env.BASE_URL}environments/neutral.env` },
-  room: { label: 'Room', url: `${import.meta.env.BASE_URL}environments/room.env` },
-  country: { label: 'Countryside', url: `${import.meta.env.BASE_URL}environments/country.env` },
-  parking: { label: 'Parking lot', url: `${import.meta.env.BASE_URL}environments/parking.env` },
-  night: { label: 'Night', url: `${import.meta.env.BASE_URL}environments/night.env` },
+  neutral: { label: 'Neutral', url: optionalAssetUrl('environments/neutral.env') },
+  room: { label: 'Room', url: optionalAssetUrl('environments/room.env') },
+  country: { label: 'Countryside', url: optionalAssetUrl('environments/country.env') },
+  parking: { label: 'Parking lot', url: optionalAssetUrl('environments/parking.env') },
+  night: { label: 'Night', url: optionalAssetUrl('environments/night.env') },
 };
 
 export const SAMPLE_MODELS = [
   // CC0 Mannequin (Quaternius), bundled: rigged (posing, animation library) and static (to try rigging)
-  { label: 'Mannequin', url: `${import.meta.env.BASE_URL}models/mannequin.glb` },
-  { label: 'Mannequin, no skeleton', url: `${import.meta.env.BASE_URL}models/mannequin-static.glb` },
+  { label: 'Mannequin', url: optionalAssetUrl('models/mannequin.glb') },
+  { label: 'Mannequin, no skeleton', url: optionalAssetUrl('models/mannequin-static.glb') },
   { label: 'Boombox', url: 'https://assets.babylonjs.com/meshes/boombox.glb' },
   { label: 'Helmet', url: 'https://assets.babylonjs.com/meshes/flightHelmet.glb' },
   { label: 'Character', url: 'https://assets.babylonjs.com/meshes/HVGirl.glb' },
