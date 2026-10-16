@@ -1,0 +1,4 @@
+• Added Offline and Distribution APK channels.
+• Offline keeps optional models, animations and environments bundled.
+• Distribution stays repository-sized and downloads optional content on first use.
+• Preserved the complete editor and native augmented reality.

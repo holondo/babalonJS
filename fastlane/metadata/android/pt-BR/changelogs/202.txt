@@ -1,0 +1,4 @@
+• Novos canais de APK Offline e Distribuição.
+• Offline mantém modelos, animações e ambientes opcionais incluídos.
+• Distribuição cabe nos repositórios e baixa conteúdo opcional no primeiro uso.
+• Editor completo e realidade aumentada nativa preservados.

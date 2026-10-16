@@ -1,0 +1,22 @@
+Categories:
+  - Graphics
+License: GPL-3.0-or-later
+AuthorName: Guilherme Holanda Sanches
+WebSite: https://holondo.github.io/babalonJS/
+SourceCode: https://github.com/holondo/babalonJS
+IssueTracker: https://github.com/holondo/babalonJS/issues
+Changelog: https://github.com/holondo/babalonJS/releases
+
+AutoName: babalon JS
+
+MaintainerNotes:
+  Method: github-release
+  ApkMatch: /^babalon-\d+\.\d+\.\d+-distribution-arm64-v8a\.apk$/
+  Fastlane: https://github.com/holondo/babalonJS/tree/main/fastlane/metadata/android
+  FastlaneFeatures: shortdesc,fulldesc,icon,featureGraphic,screenshots,changelogs
+  Note: The ARM64 distribution APK is selected to remain inside the repository's 30 MB per-app budget. Optional models, animations, and environments are fetched only when selected. Native AR optionally requires Google Play Services for AR.
+
+AllowedAPKSigningKeys: 1bb33ae3c61f661b857b077f07b9990c301647b8f71c9814fb7179b09e99e01e
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags

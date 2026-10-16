@@ -15,4 +15,6 @@ Recursos:
 Privacidade e Liberdade:
 • 100% Software Livre e de Código Aberto (GPL-3.0 ou posterior).
 • Sem anúncios, sem rastreadores, sem telemetria e sem necessidade de cadastro.
-• O editor principal e os recursos incluídos funcionam offline. Modelos opcionais da biblioteca online exigem um primeiro download.
+• Há dois canais de APK: Offline inclui modelos, animações e ambientes opcionais; Distribuição é menor e baixa esses recursos somente quando selecionados.
+• Os dois canais são o mesmo aplicativo e não podem ser instalados ao mesmo tempo. O editor principal funciona sem rede em ambos.
+• A RA nativa exige opcionalmente o Google Play Services para RA em um aparelho compatível.

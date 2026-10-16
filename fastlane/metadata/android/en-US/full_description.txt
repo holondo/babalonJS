@@ -15,4 +15,6 @@ Features:
 Privacy & Freedom:
 • 100% Free and Open Source (GPL-3.0-or-later).
 • No ads, no analytics, no user tracking, and no external account required.
-• The core editor and bundled assets work offline. Optional online library models require a first download.
+• Two APK channels are published: Offline includes the optional models, animations and environments; Distribution is smaller and downloads those resources only when selected.
+• Both APK channels are the same app and cannot be installed side by side. The core editor works without a network connection in either channel.
+• Native AR optionally requires Google Play Services for AR on a supported device.
