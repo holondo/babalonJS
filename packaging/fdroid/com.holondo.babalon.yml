@@ -34,8 +34,14 @@ Builds:
     gradle:
       - distribution
     output: build/outputs/apk/distribution/release/babalon-1.0.1-distribution-armeabi-v7a.apk
+    # Vite copies these two FOSS runtime modules into the WebView assets. Their
+    # sources and licenses are pinned by package-lock.json (MIT and Apache-2.0).
+    scanignore:
+      - android/app/src/main/assets/public/assets/basis_encoder-BU4uLNSp.wasm
+      - android/app/src/main/assets/public/assets/manifold-BE4c7gO-.wasm
     scandelete:
       - node_modules/
+      - dist/
 
   - versionName: 1.0.1
     versionCode: 202
@@ -54,8 +60,14 @@ Builds:
     gradle:
       - distribution
     output: build/outputs/apk/distribution/release/babalon-1.0.1-distribution-arm64-v8a.apk
+    # Vite copies these two FOSS runtime modules into the WebView assets. Their
+    # sources and licenses are pinned by package-lock.json (MIT and Apache-2.0).
+    scanignore:
+      - android/app/src/main/assets/public/assets/basis_encoder-BU4uLNSp.wasm
+      - android/app/src/main/assets/public/assets/manifold-BE4c7gO-.wasm
     scandelete:
       - node_modules/
+      - dist/
 
 AutoUpdateMode: Version v%v
 UpdateCheckMode: Tags ^v[\d.]+$
