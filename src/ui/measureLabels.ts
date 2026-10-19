@@ -1,4 +1,5 @@
 import { MoveHorizontal, MoveVertical, Spline, X } from 'lucide';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { tr } from '../core/i18n';
 import { h, icon, iconButton } from './dom';
 import type { Guide, Measurement } from '../tools/tools';
@@ -15,6 +16,7 @@ export class MeasureLabels {
   labelEls = new Map<Measurement, HTMLElement>();
 
   guideEls = new Map<Guide, HTMLElement>();
+  private angleEls = new Map<string, { label: HTMLElement; arc: SVGSVGElement; path: SVGPathElement; signature?: string }>();
 
   draggingGuide: Guide | null = null;
 
@@ -26,6 +28,7 @@ export class MeasureLabels {
     this.ui.labels.replaceChildren();
     this.labelEls.clear();
     this.guideEls.clear();
+    this.angleEls.clear();
     if (this.ui.editor.photoMode) return;
     // Guide handles only matter while editing guides: show them with the Tools tab open
     const guides = this.ui.tab === 'tools' ? tools.guides : [];
@@ -101,6 +104,49 @@ export class MeasureLabels {
   updateLabels() {
     const ed = this.ui.editor;
     const tools = ed.tools;
+    const angles = ed.photoMode || ed.cleanView || !tools.measurementsVisible || !tools.measurementDisplay.angles
+      ? [] : tools.measurementAngles().filter(angle => !tools.hiddenAngles.has(angle.key));
+    const keys = new Set(angles.map(a => a.key));
+    for (const [key, elements] of this.angleEls) if (!keys.has(key)) {
+      elements.label.remove(); elements.arc.remove(); this.angleEls.delete(key);
+    }
+    for (const angle of angles) {
+      let elements = this.angleEls.get(angle.key);
+      if (!elements) {
+        const label = h('div', { class: 'mlabel angle-label' });
+        const arc = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        arc.classList.add('measure-angle-arc');
+        const path = document.createElementNS(arc.namespaceURI, 'path') as SVGPathElement;
+        arc.append(path);
+        this.ui.labels.append(arc, label);
+        elements = { label, arc, path };
+        this.angleEls.set(angle.key, elements);
+      }
+      // Camera animation can render continuously; rebuild an arc only when its projection changes.
+      const signature = `${angle.degrees}:${angle.radius}:${angle.center}:${angle.u}:${angle.v}:${ed.scene.getTransformMatrix().updateFlag}:${ed.engine.getRenderWidth()}:${ed.engine.getRenderHeight()}`;
+      if (elements.signature === signature) continue;
+      elements.signature = signature;
+      const radians = angle.degrees * Math.PI / 180;
+      let tangent = angle.v.subtract(angle.u.scale(Vector3.Dot(angle.u, angle.v)));
+      if (tangent.lengthSquared() < 1e-12) {
+        tangent = Vector3.Cross(angle.u, Math.abs(angle.u.y) < 0.9 ? Vector3.Up() : Vector3.Right());
+      }
+      tangent.normalize();
+      const point = (t: number, radius: number) => ed.toScreen(angle.center.add(angle.u.scale(Math.cos(t) * radius)).add(tangent.scale(Math.sin(t) * radius)));
+      let path = '';
+      let visible = true;
+      for (let i = 0; i <= 16; i++) {
+        const p = point(radians * i / 16, angle.radius);
+        visible &&= p.visible;
+        path += `${i ? 'L' : 'M'}${p.x.toFixed(2)},${p.y.toFixed(2)} `;
+      }
+      const p = point(radians / 2, angle.radius + ed.worldPerPixel(angle.center) * 18);
+      elements.arc.style.display = elements.label.style.display = visible && p.visible ? '' : 'none';
+      if (elements.path.getAttribute('d') !== path) elements.path.setAttribute('d', path);
+      elements.label.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -50%)`;
+      const text = `${angle.degrees.toFixed(1)}°`;
+      if (elements.label.textContent !== text) elements.label.textContent = text;
+    }
     // Keep guide chips inside the free area of the screen (not under bars or the panel)
     const canvas = ed.engine.getRenderingCanvas()!;
     const panelOpen = this.ui.panel.classList.contains('show') && canvas.clientWidth > 760;
@@ -121,7 +167,7 @@ export class MeasureLabels {
     for (const [m, el] of this.labelEls) {
       const alive = (!m.a.entity || ed.entities.includes(m.a.entity)) && (!m.b.entity || ed.entities.includes(m.b.entity));
       const s = ed.toScreen(tools.labelPoint(m));
-      el.style.display = alive && s.visible ? '' : 'none';
+      el.style.display = tools.measurementsVisible && tools.measurementDisplay.distances && m.visible && alive && s.visible ? '' : 'none';
       el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -150%)`;
       const text = tools.format(m.length) + (m.surfaceFailed ? ` · ${tr('straight')}` : m.path ? ` · ${tr('surface')}` : '');
       const span = el.firstElementChild as HTMLElement;

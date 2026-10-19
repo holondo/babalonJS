@@ -9,6 +9,8 @@ import {
   AlignStartVertical,
   AlignVerticalDistributeCenter,
   Ruler,
+  Eye,
+  EyeOff,
   Spline,
   Trash2,
 } from 'lucide';
@@ -35,11 +37,18 @@ export class ToolsPanel {
     const out: (Node | null)[] = [
       section(
         tr('Measure'),
+        toggle(tr('Lines and points'), tools.measurementDisplay.lines, (v) => tools.setMeasurementDisplay('lines', v)),
+        toggle(tr('Distances'), tools.measurementDisplay.distances, (v) => tools.setMeasurementDisplay('distances', v)),
+        toggle(tr('Angles'), tools.measurementDisplay.angles, (v) => tools.setMeasurementDisplay('angles', v)),
+        button(tools.measurementsVisible ? tr('Hide all measurements') : tr('Restore measurement visibility'),
+          () => tools.setMeasurementsVisible(!tools.measurementsVisible), { icon: tools.measurementsVisible ? EyeOff : Eye, cls: 'small ghost' }),
+        !tools.measurementsVisible ? hint(tr('All measurements are hidden. Restore visibility to apply your choices.')) : null,
         button(tools.measureMode ? tr('Stop measuring') : tr('Measure distance'), () => tools.setMeasureMode(!tools.measureMode), {
           icon: Ruler,
           cls: `wide ${tools.measureMode ? 'primary' : ''}`,
         }),
         hint(tr('Tap two points: on a model they stick to its surface, elsewhere they land on the floor. Drag the points to adjust.')),
+        hint(tr('Tap an existing endpoint to reuse it. Angles appear automatically at shared endpoints, following the paths locally.')),
         toggle(tr('Follow the surface'), tools.surfaceDefault, (v) => tools.edit(() => (tools.surfaceDefault = v))),
         toggle(tr('Snap to vertices'), tools.snapVertices, (v) => tools.edit(() => (tools.snapVertices = v))),
         chips(units, tools.unit, (v) => tools.setUnit(v)),
@@ -47,6 +56,8 @@ export class ToolsPanel {
           ? h('ul', { class: 'outliner' }, ...tools.measurements.map((m, i) => this.measurementRow(m, i)))
           : null,
         tools.measurements.length ? row(button(tr('Clear measurements'), () => tools.clearMeasurements(), { icon: Trash2, cls: 'small ghost' })) : null,
+        tools.measurements.length ? hint(tr('Each eye controls one item. Hiding a measurement keeps its angles visible. Global switches preserve individual choices.')) : null,
+        ...this.angleRows(),
       ),
       section(
         tr('Guides'),
@@ -71,11 +82,29 @@ export class ToolsPanel {
       { class: m === tools.active ? 'active' : '', onClick: () => tools.setActive(m) },
       icon(m.path ? Spline : Ruler, 16),
       h('span', {}, `${i + 1}. ${tools.format(m.length)}${m.surfaceFailed ? ' · ' + tr('straight') : ''}`),
+      iconButton(m.visible ? Eye : EyeOff, tr(m.visible ? 'Hide measurement {number}' : 'Show measurement {number}', { number: i + 1 }),
+        () => tools.setMeasurementVisible(m, !m.visible), { cls: 'mini', active: m.visible }),
       iconButton(Spline, tr('Follow the surface'), () => tools.setSurface(m, !m.surface), { cls: 'mini', active: m.surface }),
       iconButton(Trash2, tr('Delete'), () => tools.removeMeasurement(m), { cls: 'mini' }),
     );
     row.querySelectorAll('.mini').forEach((b) => b.addEventListener('click', (ev) => ev.stopPropagation()));
     return row;
+  }
+
+  private angleRows() {
+    const tools = this.ui.editor.tools;
+    const angles = tools.measurementAngles();
+    if (!angles.length) return [];
+    return [h('h3', {}, tr('Angles')), h('ul', { class: 'outliner' }, ...angles.map(angle => {
+      const name = tr('Between {first} and {second}', {
+        first: tools.measurements.indexOf(angle.first) + 1,
+        second: tools.measurements.indexOf(angle.second) + 1,
+      });
+      const visible = !tools.hiddenAngles.has(angle.key);
+      return h('li', {}, h('span', {}, `${name} · ${angle.degrees.toFixed(1)}°`),
+        iconButton(visible ? Eye : EyeOff, tr(visible ? 'Hide angle: {name}' : 'Show angle: {name}', { name }),
+          () => tools.setAngleVisible(angle.key, !visible), { cls: 'mini', active: visible }));
+    }))];
   }
 
   guideRow(g: Guide) {

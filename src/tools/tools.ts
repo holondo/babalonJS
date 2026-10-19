@@ -44,6 +44,7 @@ export interface Anchor {
 
 export interface Measurement {
   id: number;
+  visible: boolean;
   a: Anchor;
   b: Anchor;
   surface: boolean;
@@ -66,10 +67,13 @@ export interface Guide {
 }
 
 export interface ToolsJSON {
+  measurementsVisible?: boolean;
+  measurementDisplay?: { lines: boolean; distances: boolean; angles: boolean };
+  hiddenAngles?: { a: number; aEnd: 'a' | 'b'; b: number; bEnd: 'a' | 'b' }[];
   unit: Unit;
   smartGuides: boolean;
   guides: { axis: Axis; value: number }[];
-  measurements: { a: AnchorJSON; b: AnchorJSON; surface: boolean }[];
+  measurements: { a: AnchorJSON; b: AnchorJSON; surface: boolean; visible?: boolean }[];
 }
 
 interface AnchorJSON {
@@ -81,6 +85,9 @@ interface AnchorJSON {
 export class Tools {
   readonly changed = new Observable<void>();
   measureMode = false;
+  measurementsVisible = true;
+  measurementDisplay = { lines: true, distances: true, angles: true };
+  readonly hiddenAngles = new Set<string>();
   private measurePaused = false;
   /** A measurement can stay open while another context receives scene input. */
   get measuring() { return this.measureMode && !this.measurePaused; }
@@ -108,7 +115,8 @@ export class Tools {
   private readonly markerMat: StandardMaterial;
   private readonly guideMat: StandardMaterial;
   private readonly pendingMarker: Mesh;
-  private dragging: { m: Measurement; end: 'a' | 'b' } | null = null;
+  private dragging: { m: Measurement; end: 'a' | 'b'; x: number; y: number; moved: boolean } | null = null;
+  private suppressMeasureTap = false;
   private smartLines: GreasedLineBaseMesh[] = [];
   private snapBounds: { entity: Entity; position: Vector3; own: ReturnType<Editor['boundsOf']>; others: ReturnType<Editor['boundsOf']>[] } | null = null;
   private guideDrag: { guide: Guide; candidates: number[]; bounds: ReturnType<Editor['sceneBounds']> } | null = null;
@@ -204,6 +212,41 @@ export class Tools {
     this.pendingMarker.setEnabled(false);
   }
 
+  setMeasurementsVisible(visible: boolean) {
+    if (this.measurementsVisible === visible) return;
+    this.edit(() => {
+      this.measurementsVisible = visible;
+      if (!visible) this.setMeasureMode(false);
+      this.applyVisibility();
+      this.editor.invalidate();
+      this.changed.notifyObservers();
+    });
+  }
+
+  private changeMeasurementDisplay(change: () => void) {
+    this.edit(() => {
+      change();
+      this.applyVisibility();
+      this.editor.invalidate();
+      this.changed.notifyObservers();
+    });
+  }
+
+  setMeasurementDisplay(part: keyof Tools['measurementDisplay'], visible: boolean) {
+    this.changeMeasurementDisplay(() => { this.measurementDisplay[part] = visible; });
+  }
+
+  setMeasurementVisible(m: Measurement, visible: boolean) {
+    this.changeMeasurementDisplay(() => { m.visible = visible; });
+  }
+
+  setAngleVisible(key: string, visible: boolean) {
+    this.changeMeasurementDisplay(() => {
+      if (visible) this.hiddenAngles.delete(key);
+      else this.hiddenAngles.add(key);
+    });
+  }
+
   /** Called by the editor for every pointer event. Returns true when the event was consumed. */
   handlePointer(info: PointerInfo): boolean {
     const scene = this.scene;
@@ -211,18 +254,23 @@ export class Tools {
     const y = scene.pointerY;
     switch (info.type) {
       case PointerEventTypes.POINTERDOWN: {
+        this.suppressMeasureTap = false;
         const hit = scene.pick(x, y, (m) => m.metadata?.measureId !== undefined && m.isEnabled());
         if (!hit?.pickedMesh) return false;
         const m = this.measurements.find((mm) => mm.id === hit.pickedMesh!.metadata.measureId);
         if (!m) return false;
-        this.beginEdit();
-        this.dragging = { m, end: hit.pickedMesh.metadata.end };
+        this.dragging = { m, end: hit.pickedMesh.metadata.end, x, y, moved: false };
         this.setActive(m);
         this.editor.camera.detachControl();
         return true;
       }
       case PointerEventTypes.POINTERMOVE: {
         if (!this.dragging) return false;
+        if (!this.dragging.moved) {
+          if (Math.hypot(x - this.dragging.x, y - this.dragging.y) < 8) return true;
+          this.beginEdit();
+          this.dragging.moved = true;
+        }
         const anchor = this.resolveAnchor(x, y);
         if (anchor) {
           this.dragging.m[this.dragging.end] = anchor;
@@ -232,20 +280,24 @@ export class Tools {
       }
       case PointerEventTypes.POINTERUP: {
         if (!this.dragging) return false;
-        const m = this.dragging.m;
+        const { m, moved } = this.dragging;
+        this.suppressMeasureTap = moved;
         this.dragging = null;
         this.editor.camera.attachControl(true);
-        this.computeSurface(m);
-        this.endEdit();
+        if (moved) {
+          this.computeSurface(m);
+          this.endEdit();
+        }
         this.changed.notifyObservers();
         return true;
       }
       case PointerEventTypes.POINTERTAP:
       case PointerEventTypes.POINTERDOUBLETAP: {
+        if (this.suppressMeasureTap) return true;
         // Two quick taps arrive as TAP + DOUBLETAP: in measure mode both must place points
         if (info.type === PointerEventTypes.POINTERDOUBLETAP && !this.measuring) return false;
         const hit = scene.pick(x, y, (m) => m.metadata?.measureId !== undefined && m.isEnabled());
-        if (hit?.pickedMesh) {
+        if (hit?.pickedMesh && !this.measuring) {
           this.setActive(this.measurements.find((mm) => mm.id === hit.pickedMesh!.metadata.measureId) ?? null);
           return true;
         }
@@ -258,12 +310,17 @@ export class Tools {
           }
           return false;
         }
-        const anchor = this.resolveAnchor(x, y);
+        const existing = hit?.pickedMesh && this.measurements.find(m => m.id === hit.pickedMesh!.metadata.measureId);
+        const endpoint: Anchor | undefined = existing ? existing[hit!.pickedMesh!.metadata.end as 'a' | 'b'] : undefined;
+        const anchor = endpoint
+          ? { entity: endpoint.entity, local: endpoint.local.clone(), normal: endpoint.normal.clone() }
+          : this.resolveAnchor(x, y);
         if (!anchor) return true;
         if (!this.pending) {
           this.pending = anchor;
           this.pendingMarker.setEnabled(!this.editor.cleanView);
         } else {
+          if (Vector3.DistanceSquared(this.worldOf(this.pending), this.worldOf(anchor)) < 1e-12) return true;
           const m = this.addMeasurement(this.pending, anchor, this.surfaceDefault);
           this.cancelPending();
           this.setActive(m);
@@ -345,7 +402,7 @@ export class Tools {
     const markers: [Mesh, Mesh] = [this.createMarker(), this.createMarker()];
     markers[0].metadata = { measureId: id, end: 'a' };
     markers[1].metadata = { measureId: id, end: 'b' };
-    const m: Measurement = { id, a, b, surface, path: null, surfaceFailed: false, length: 0, line, markers };
+    const m: Measurement = { id, visible: true, a, b, surface, path: null, surfaceFailed: false, length: 0, line, markers };
     return m;
   }
 
@@ -377,6 +434,10 @@ export class Tools {
     return this.edit(() => {
     this.disposeMeasurement(m);
     this.measurements = this.measurements.filter((x) => x !== m);
+    for (const key of this.hiddenAngles) {
+      const [first, , second] = key.split(':');
+      if (Number(first) === m.id || Number(second) === m.id) this.hiddenAngles.delete(key);
+    }
     if (this.active === m) this.active = null;
     this.changed.notifyObservers();
     });
@@ -455,23 +516,67 @@ export class Tools {
     return this.pending ? this.worldOf(this.pending) : null;
   }
 
+  /** Direction leaving an endpoint, using the first nonzero surface segment when present. */
+  private endpointDirection(m: Measurement, end: 'a' | 'b', center: Vector3) {
+    if (m.path && m.a.entity) {
+      const world = m.a.entity.root.computeWorldMatrix(true);
+      const step = end === 'a' ? 1 : -1;
+      for (let i = end === 'a' ? 0 : m.path.length - 1; i >= 0 && i < m.path.length; i += step) {
+        const direction = Vector3.TransformCoordinates(m.path[i], world).subtract(center);
+        if (direction.lengthSquared() > 1e-12) return direction;
+      }
+      return Vector3.Zero();
+    }
+    return this.worldOf(m[end === 'a' ? 'b' : 'a']).subtract(center);
+  }
+
+  /** Every pair contributes its shared-endpoint angle once, following each path locally. */
+  measurementAngles() {
+    const result: { key: string; first: Measurement; second: Measurement; degrees: number; center: Vector3; u: Vector3; v: Vector3; radius: number }[] = [];
+    const measurements = this.measurements.filter(m => this.alive(m.a) && this.alive(m.b));
+    for (let i = 0; i < measurements.length; i++) for (let j = i + 1; j < measurements.length; j++) {
+      const m = measurements[i];
+      const other = measurements[j];
+      for (const end of ['a', 'b'] as const) for (const otherEnd of ['a', 'b'] as const) {
+        const center = this.worldOf(m[end]);
+        if (!center.equalsWithEpsilon(this.worldOf(other[otherEnd]), 1e-6)) continue;
+        const u = this.endpointDirection(m, end, center);
+        const v = this.endpointDirection(other, otherEnd, center);
+        if (Math.min(u.lengthSquared(), v.lengthSquared()) < 1e-12) continue;
+        // Keep the arc readable even when a dense surface path has very short segments.
+        const length = Math.min(m.path ? m.length : u.length(), other.path ? other.length : v.length());
+        u.normalize(); v.normalize();
+        const degrees = Math.acos(Math.max(-1, Math.min(1, Vector3.Dot(u, v)))) * 180 / Math.PI;
+        result.push({ key: `${m.id}:${end}:${other.id}:${otherEnd}`, first: m, second: other, degrees, center, u, v,
+          radius: Math.min(length * 0.25, this.editor.worldPerPixel(center) * 36) });
+      }
+    }
+    return result;
+  }
+
   private alive(a: Anchor) {
     return !a.entity || this.editor.entities.includes(a.entity);
   }
 
   private update() {
     const visible = !this.editor.cleanView;
-    for (const m of this.measurements) this.updateMeasurement(m, visible);
+    for (const m of this.measurements) this.updateMeasurement(m, visible && this.measurementsVisible && this.measurementDisplay.lines && m.visible);
     for (const m of this.sessionMeasurements) this.updateMeasurement(m, this.editor.arMode, true);
-    if (this.pending && visible) this.placeMarker(this.pendingMarker, this.worldOf(this.pending), 14);
+    const showPending = visible && this.measurementsVisible && this.measurementDisplay.lines && !!this.pending;
+    this.pendingMarker.setEnabled(showPending);
+    if (this.pending && showPending) this.placeMarker(this.pendingMarker, this.worldOf(this.pending), 14);
   }
 
   private updateMeasurement(m: Measurement, visible: boolean, xr = false) {
       const on = visible && this.alive(m.a) && this.alive(m.b);
       m.line.setEnabled(on);
       m.markers.forEach((mk) => mk.setEnabled(on));
-      if (!on) return;
+      if (!this.alive(m.a) || !this.alive(m.b)) return;
       const pts = this.linePoints(m);
+      let length = 0;
+      for (let i = 1; i < pts.length; i++) length += Vector3.Distance(pts[i - 1], pts[i]);
+      m.length = length;
+      if (!on) return;
       if (m.line.metadata?.points !== pts.length) {
         // An updatable line can't change its point count: rebuild it
         this.editor.overlays.delete(m.line);
@@ -482,9 +587,6 @@ export class Tools {
         m.line.setPoints(pts);
         m.drawn = pts;
       }
-      let length = 0;
-      for (let i = 1; i < pts.length; i++) length += Vector3.Distance(pts[i - 1], pts[i]);
-      m.length = length;
       this.placeMarker(m.markers[0], this.worldOf(m.a), m === this.active ? 14 : 11, xr);
       this.placeMarker(m.markers[1], this.worldOf(m.b), m === this.active ? 14 : 11, xr);
   }
@@ -854,11 +956,22 @@ export class Tools {
 
   toJSON(entities: Entity[]): ToolsJSON {
     const anchor = (a: Anchor): AnchorJSON => ({ entity: a.entity ? entities.indexOf(a.entity) : null, p: a.local.asArray(), n: a.normal.asArray() });
+    const measurements = this.measurements.filter(m => this.alive(m.a) && this.alive(m.b));
+    const hiddenAngles: NonNullable<ToolsJSON['hiddenAngles']> = [];
+    for (const key of this.hiddenAngles) {
+      const [aId, aEnd, bId, bEnd] = key.split(':');
+      const a = measurements.findIndex(m => m.id === Number(aId));
+      const b = measurements.findIndex(m => m.id === Number(bId));
+      if (a >= 0 && b >= 0 && (aEnd === 'a' || aEnd === 'b') && (bEnd === 'a' || bEnd === 'b')) hiddenAngles.push({ a, aEnd, b, bEnd });
+    }
     return {
       unit: this.unit,
+      measurementsVisible: this.measurementsVisible,
+      measurementDisplay: { ...this.measurementDisplay },
+      hiddenAngles,
       smartGuides: this.smartGuides,
       guides: this.guides.map((g) => ({ axis: g.axis, value: g.value })),
-      measurements: this.measurements.filter((m) => this.alive(m.a) && this.alive(m.b)).map((m) => ({ a: anchor(m.a), b: anchor(m.b), surface: m.surface })),
+      measurements: measurements.map((m) => ({ a: anchor(m.a), b: anchor(m.b), surface: m.surface, visible: m.visible })),
     };
   }
 
@@ -869,6 +982,8 @@ export class Tools {
     this.clear();
     if (!json) return;
     this.unit = json.unit ?? 'm';
+    this.measurementsVisible = json.measurementsVisible ?? true;
+    this.measurementDisplay = { lines: true, distances: true, angles: true, ...json.measurementDisplay };
     this.smartGuides = json.smartGuides ?? true;
     for (const g of json.guides ?? []) this.addGuide(g.axis, g.value);
     const anchor = (a: AnchorJSON): Anchor | null => {
@@ -876,11 +991,19 @@ export class Tools {
       if (entity === undefined) return null;
       return { entity, local: Vector3.FromArray(a.p), normal: Vector3.FromArray(a.n) };
     };
+    const restored: (Measurement | null)[] = [];
     for (const m of json.measurements ?? []) {
       const a = anchor(m.a);
       const b = anchor(m.b);
-      if (a && b) this.addMeasurement(a, b, m.surface);
+      const measurement = a && b ? this.addMeasurement(a, b, m.surface) : null;
+      if (measurement) measurement.visible = m.visible ?? true;
+      restored.push(measurement);
     }
+    for (const angle of json.hiddenAngles ?? []) {
+      const a = restored[angle.a], b = restored[angle.b];
+      if (a && b) this.hiddenAngles.add(`${a.id}:${angle.aEnd}:${b.id}:${angle.bEnd}`);
+    }
+    this.applyVisibility();
     this.active = null;
     this.changed.notifyObservers();
     } finally { this.loading = wasLoading; }
@@ -896,6 +1019,9 @@ export class Tools {
     this.clearGuides();
     this.clearSmartLines();
     this.measureMode = false;
+    this.measurementsVisible = true;
+    this.measurementDisplay = { lines: true, distances: true, angles: true };
+    this.hiddenAngles.clear();
     } finally { this.loading = wasLoading; }
   }
 }
