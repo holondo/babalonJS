@@ -23,7 +23,7 @@ export function affineExport(scene: Scene) {
       if (!(original instanceof TransformNode) || original.getPivotMatrix().isIdentity()) return node;
       let local = original.computeWorldMatrix(true).clone();
       if (original.parent instanceof TransformNode) local = local.multiply(original.parent.computeWorldMatrix(true).clone().invert());
-      if (rightHanded) { const flip = Matrix.Scaling(1, 1, -1); local = flip.multiply(local).multiply(flip); }
+      if (rightHanded) { const flip = Matrix.Scaling(-1, 1, 1); local = flip.multiply(local).multiply(flip); }
       node.matrix = Array.from(local.asArray());
       // Babylon's glTF loader decomposes node.matrix into TRS; retain the exact matrix
       // as metadata so reopening our own export can restore its affine transform.

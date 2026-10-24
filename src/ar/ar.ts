@@ -29,6 +29,7 @@ import { createLight, createShadowGenerator } from '../core/editor';
 import type { Editor } from '../core/editor';
 import { PHOTO_FILTERS, filterToCanvas, findLightPreset, presetIntensity } from '../core/presets';
 import { Capacitor } from '@capacitor/core';
+import type { GaussianSplattingMaterial } from '@babylonjs/core/Materials/GaussianSplatting/gaussianSplattingMaterial.js';
 
 export type ARStatus = 'searching' | 'ready' | 'placed';
 /** "scene" = the editor's own lights; "room" = estimated by the phone; the rest are presets. */
@@ -121,7 +122,8 @@ export class ARMode {
 
   private rig: { light: ShadowLight; base: number; gen?: ShadowGenerator }[] = [];
   /** The editor's lights and their intensities, restored when AR ends. */
-  private sceneLights: { light: ShadowLight; base: number }[] = [];
+  private sceneLights: { light: ShadowLight; base: number; enabled: boolean }[] = [];
+  private shadowRefresh = new Map<ShadowGenerator, number>();
   private baseEnvIntensity = 1;
   /** Scene size in anchor space (for presets). */
   private local = { size: 2, height: 1 };
@@ -155,7 +157,7 @@ export class ARMode {
     }
     this.lighting = id;
     const sceneOn = this.sceneLightsOn();
-    for (const s of this.sceneLights) s.light.setEnabled(sceneOn);
+    for (const s of this.sceneLights) s.light.setEnabled(sceneOn && s.enabled);
     this.editor.setShadowsEnabled(this.shadows && sceneOn);
     this.baseEnvIntensity = this.editor.env.intensity;
     if (id !== 'scene' && id !== 'room') this.buildRig(id);
@@ -192,7 +194,7 @@ export class ARMode {
     this.baseEnvIntensity = preset.env.intensity ?? this.baseEnvIntensity;
     const k = Math.max(this.local.size, 0.5) / 2;
     const focus = new Vector3(0, this.local.height / 2, 0);
-    const casters = this.editor.entities.filter((e) => e.kind !== 'light' && !e.groupMembers && e.visible && e.root.isEnabled()).flatMap((e) => e.meshes);
+    const casters = this.editor.entities.filter((e) => e.kind !== 'light' && !e.groupMembers && e.castShadows && e.visible && e.root.isEnabled()).flatMap((e) => e.meshes);
     for (const def of preset.lights) {
       const pos = new Vector3(...def.pos).scale(k);
       const direction = focus.subtract(pos).normalize();
@@ -368,7 +370,8 @@ export class ARMode {
     anchor.setEnabled(false);
     this.anchor = anchor;
     this.local = { size: b ? Math.max(b.size.x, b.size.y, b.size.z) : 2, height: b ? b.size.y : 1 };
-    this.sceneLights = ed.entities.filter((e) => e.light && e.visible).map((e) => ({ light: e.light!, base: e.light!.intensity }));
+    this.sceneLights = ed.entities.filter((e) => e.light && e.visible).map((e) => ({ light: e.light!, base: e.light!.intensity, enabled: e.light!.isEnabled(false) }));
+    this.shadowRefresh = new Map(ed.entities.flatMap(e => e.shadowGen ? [[e.shadowGen, e.shadowGen.getShadowMap()!.refreshRate] as const] : []));
 
     // Keep the side the user was looking at in the editor facing them in AR
     const cam = ed.camera;
@@ -388,13 +391,14 @@ export class ARMode {
     this.clearRig();
     for (const s of this.sceneLights) {
       s.light.intensity = s.base;
-      s.light.setEnabled(true);
+      s.light.setEnabled(s.enabled);
     }
     this.sceneLights = [];
     for (const e of this.editor.entities) {
       const map = e.shadowGen?.getShadowMap();
-      if (map) map.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONEVERYFRAME;
+      if (map) map.refreshRate = this.shadowRefresh.get(e.shadowGen!) ?? map.refreshRate;
     }
+    this.shadowRefresh.clear();
     if (this.lighting === 'room') {
       try {
         this.xr?.baseExperience.featuresManager.detachFeature(WebXRFeatureName.LIGHT_ESTIMATION);
@@ -613,6 +617,9 @@ export class ARMode {
           if (existing) return existing;
           const clone = original.clone(`${original.name}-arDepth`);
           if (!clone) throw new Error(tr('Depth occlusion is unavailable for this material.'));
+          if (original.getClassName() === 'GaussianSplattingMaterial') {
+            (clone as GaussianSplattingMaterial).setSourceMesh((original as GaussianSplattingMaterial).getSourceMesh()!);
+          }
           clones.set(original, clone);
           this.depthClones.push(clone);
           if (original instanceof MultiMaterial && clone instanceof MultiMaterial) {

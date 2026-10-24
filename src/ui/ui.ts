@@ -1,6 +1,7 @@
 import type { LibraryAttribution, LibraryKind } from '../library/polyhaven';
 import type { LibraryPanel } from './panels/library';
 import { ProjectGallery } from './projectGallery';
+import { isSplat } from '../core/splats';
 import {
   Box,
   Bone,
@@ -457,6 +458,7 @@ export class UI {
       const nativeBridge = (window as unknown as { AndroidNative?: NativeBridge }).AndroidNative;
       try {
         if (!nativeBridge) throw new Error(tr('Native AR bridge unavailable'));
+        if (this.editor.entities.some(e => e.visible && e.meshes.some(isSplat))) this.toast(tr('Native AR uses a point-cloud preview for Gaussian splats. The editor keeps the original appearance.'), 'info', undefined, 9000);
         const restoreModels = await this.prepareLightAR();
         let blob: Blob | null;
         try {
@@ -649,7 +651,9 @@ export class UI {
     const cost = analyzeScene(ed);
     const budget = deviceBudget();
     if (!overBudget(cost, budget)) return null;
-    const models = ed.entities.filter((e) => e.kind === 'model' && e.visible && !e.optimization && !ed.optimizer.blocker(e));
+    // Session triangle reduction is not a splat LOD algorithm. Keep scans intact;
+    // their explicit tool compatibility is documented in docs/gaussian_splats.md.
+    const models = ed.entities.filter((e) => e.kind === 'model' && e.visible && !e.optimization && !e.meshes.some(isSplat) && !ed.optimizer.blocker(e));
     if (!models.length || !confirm(tr('This scene is heavy for this device and AR may stutter. Use a lighter copy in AR? Your project stays as it is.'))) return null;
     const ratio = Math.min(0.5, Math.max(0.02, (budget.triangles / Math.max(1, cost.triangles)) * 0.9));
     return ed.optimizer.applyForSession(models, { ...DEFAULT_OPTIMIZE, ratio });
@@ -842,6 +846,7 @@ export class UI {
     this.menu.classList.toggle('show', open);
     this.renderTopbar();
     if (!open) return;
+    const splats = this.editor.entities.some(e => e.visible && e.meshes.some(isSplat));
     const name = h('input', { type: 'text', class: 'name', value: this.projectName, 'aria-label': tr('Project name') });
     name.addEventListener('change', () => { this.projectName = name.value.trim() || tr('my-scene'); this.scheduleAutosave(); });
     const item = (node: IconNode, label: string, kbd: string, fn: () => void, description?: string) => menuItem(node, label, () => (this.toggleMenu(false), fn()), { kbd: kbd || undefined, description });
@@ -855,6 +860,7 @@ export class UI {
       item(Download, tr('Export scene .glb'), '', () => this.exportGLB(false), tr('Original geometry and textures, before optimization. Best for compatibility.')),
       item(Download, tr('Export compact .glb'), '', () => this.exportGLB(true), tr('Uses applied optimizations and compresses geometry. Smaller file; requires a compatible viewer.')),
       h('p', { class: 'hint' }, tr('Compact does not automatically reduce triangles or texture resolution. Apply Optimize first if you want those reductions.')),
+      ...(splats ? [h('p', { class: 'hint' }, tr('GLB preserves Gaussian splats in babalon. Other viewers display points. Compact export keeps the splat data unchanged.'))] : []),
       ...(this.installPrompt
         ? [
             item(MonitorDown, tr('Install app'), '', () => {

@@ -48,6 +48,14 @@ export function tr(key: string, vars?: Record<string, string | number>) {
 }
 
 const PT: Record<string, string> = {
+  'Gaussian splats': 'Gaussian splats',
+  'Triangle optimization does not reduce Gaussian splats.': 'A otimização de triângulos não reduz Gaussian splats.',
+  'Native AR uses a point-cloud preview for Gaussian splats. The editor keeps the original appearance.': 'O AR nativo usa uma prévia em nuvem de pontos para Gaussian splats. O editor mantém a aparência original.',
+  'GLB preserves Gaussian splats in babalon. Other viewers display points. Compact export keeps the splat data unchanged.': 'O GLB preserva Gaussian splats no babalon. Outros visualizadores exibem pontos. A exportação compacta mantém os dados dos splats inalterados.',
+  'Gaussian splat source data is unavailable. Reopen the original asset before exporting.': 'Os dados originais dos Gaussian splats estão indisponíveis. Reabra o arquivo original antes de exportar.',
+  'Unsupported splat payload version.': 'Versão dos dados de splats não suportada.',
+  'Invalid packed splat data.': 'Dados compactados de splats inválidos.',
+  'Invalid splat harmonics.': 'Harmônicos dos splats inválidos.',
   "Camera permission is required for AR": "A câmera precisa de permissão para usar AR",
   "3D model file not found": "Arquivo do modelo 3D não encontrado",
   "Loading 3D scene…": "Carregando cena 3D…",

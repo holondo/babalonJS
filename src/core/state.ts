@@ -1,4 +1,5 @@
 import { textureStates, applyTextureStates } from './materialTextures';
+import type { GaussianSplattingMaterial } from '@babylonjs/core/Materials/GaussianSplatting/gaussianSplattingMaterial.js';
 import type { TextureStates } from './materialTextures';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Material } from '@babylonjs/core/Materials/material.js';
@@ -34,6 +35,7 @@ export interface MaterialJSON {
   diffuse?: string;
   specular?: string;
   specularPower?: number;
+  splat?: { kernelSize: number; compensation: boolean; minPixelSize: number; shDegree?: number };
 }
 
 export function materialToJSON(m: Material): MaterialJSON {
@@ -72,10 +74,20 @@ export function materialToJSON(m: Material): MaterialJSON {
       emissive: m.emissiveColor ? m.emissiveColor.toHexString() : '#000000',
     };
   }
-  return { ...base, type: 'other' };
+  const splat = m.getClassName() === 'GaussianSplattingMaterial' ? m as GaussianSplattingMaterial : null;
+  return { ...base, type: 'other', ...(splat ? { splat: { kernelSize: splat.kernelSize, compensation: splat.compensation, minPixelSize: splat.minPixelSize, shDegree: splat.getSourceMesh()?.shDegree } } : {}) };
 }
 
 export function applyMaterial(m: Material, j: MaterialJSON) {
+  if (j.splat && m.getClassName() === 'GaussianSplattingMaterial') {
+    const splat = m as GaussianSplattingMaterial;
+    const { shDegree, kernelSize, compensation, minPixelSize } = j.splat;
+    if (Number.isFinite(kernelSize) && kernelSize >= 0) splat.kernelSize = kernelSize;
+    if (Number.isFinite(minPixelSize) && minPixelSize >= 0) splat.minPixelSize = minPixelSize;
+    if (typeof compensation === 'boolean') splat.compensation = compensation;
+    const source = splat.getSourceMesh();
+    if (source && Number.isInteger(shDegree) && shDegree! >= 0 && shDegree! <= 4) source.shDegree = shDegree!;
+  }
   if (j.textures) applyTextureStates(m, j.textures);
   m.alpha = j.alpha;
   m.transparencyMode = j.transparencyMode === undefined ? (j.alpha < 1 ? Material.MATERIAL_ALPHABLEND : null) : j.transparencyMode;

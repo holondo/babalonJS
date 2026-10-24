@@ -1,0 +1,70 @@
+<!doctype html>
+<!-- Run on a fresh dev-server port. Exercises real splat loading, cloning and shadow shaders. -->
+<html lang="en">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<body>
+<div id="app"><canvas id="scene"></canvas></div>
+<button id="test" style="position:fixed;top:70px;left:8px;z-index:9999">Test splat import</button>
+<pre id="result" style="position:fixed;top:110px;left:8px;z-index:9999;background:white;color:black;white-space:pre-wrap"></pre>
+<script type="module">
+import '/src/ui/style.css';
+import { Editor } from '/src/core/editor';
+import { UI } from '/src/ui/ui';
+import { ShaderStore } from '@babylonjs/core/Engines/shaderStore.js';
+import { Logger } from '@babylonjs/core/Misc/logger.js';
+import { LIGHT_PRESETS } from '/src/core/presets';
+
+const editor = new Editor(document.querySelector('canvas'));
+const ui = new UI(editor, document.querySelector('#app'));
+ui.scheduleAutosave = () => {};
+const result = document.querySelector('#result');
+document.querySelector('#test').onclick = async () => {
+  result.textContent = 'Running…';
+  try {
+    editor.newScene();
+    // Two packed splats with positions, scales, RGBA and wxyz rotations.
+    const data = new ArrayBuffer(64);
+    const floats = new Float32Array(data), bytes = new Uint8Array(data);
+    for (let i = 0; i < 2; i++) {
+      floats.set([i * 0.5, 0.5, 0, 0.1, 0.1, 0.1], i * 8);
+      bytes.set([255, 180, 80, 255, 255, 128, 128, 128], i * 32 + 24);
+    }
+    const started = performance.now();
+    const errorsBefore = Logger.errorsCount;
+    await editor.addFiles([new File([data], 'regression.splat')]);
+    for (const name of ['gaussianSplattingDepthVertexShader', 'gaussianSplattingDepthPixelShader']) {
+      if (!ShaderStore.ShadersStore[name]) throw new Error(`Missing shader: ${name}`);
+    }
+    const mesh = editor.selected.meshes[0];
+    const deadline = performance.now() + 15000;
+    while (!mesh._hasRenderedOnce && performance.now() < deadline) {
+      editor.invalidate();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    if (!mesh._hasRenderedOnce) throw new Error('Imported splats never rendered');
+    if (mesh.getTotalVertices() !== 2) throw new Error('Splat count changed during cloning');
+    const presets = [];
+    for (const preset of LIGHT_PRESETS) {
+      editor.applyLightPreset(preset.id);
+      const deadline = performance.now() + 10000;
+      let ready = false;
+      while (!ready && performance.now() < deadline) {
+        editor.invalidate();
+        await new Promise(resolve => setTimeout(resolve, 50));
+        ready = editor.entities.filter(e => e.shadowGen).every(e => {
+          const generator = e.shadowGen;
+          const pass = generator.getShadowMap().renderPassIds[0];
+          return !!mesh.material.shadowDepthWrapper.getEffect(mesh.subMeshes[0], generator, pass)?.effect?.isReady();
+        });
+        if (Logger.errorsCount !== errorsBefore) throw new Error(`Shader error in ${preset.id}`);
+      }
+      if (!ready) throw new Error(`Shadows never became ready in ${preset.id}`);
+      presets.push(preset.id);
+    }
+    result.textContent = JSON.stringify({ result: 'passed', splats: mesh.getTotalVertices(), rendered: true, presets, ms: Math.round(performance.now() - started) });
+  } catch (error) {
+    result.textContent = `failed: ${error.stack}`;
+  }
+};
+</script>
+</body></html>

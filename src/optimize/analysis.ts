@@ -1,6 +1,7 @@
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
 import type { Material } from '@babylonjs/core/Materials/material.js';
 import type { Editor, Entity } from '../core/editor';
+import { isSplat, splatTextures } from '../core/splats';
 
 /**
  * What a model costs to draw: triangles, vertices and texture memory on the GPU, and whether it
@@ -20,6 +21,7 @@ export interface TextureCost {
 export interface ModelCost {
   triangles: number;
   vertices: number;
+  splats: number;
   meshes: number;
   skinned: boolean;
   /** Meshes with morph targets (blend shapes): not simplified. */
@@ -83,32 +85,47 @@ export function analyzeEntity(editor: Editor, e: Entity): ModelCost {
   let vertices = 0;
   let morphMeshes = 0;
   let skinned = false;
+  let splats = 0;
   for (const m of e.meshes) {
+    if (isSplat(m)) { splats += m.getTotalVertices(); continue; }
     triangles += Math.floor(m.getTotalIndices() / 3);
     vertices += m.getTotalVertices();
     if (m.skeleton) skinned = true;
     if (m.morphTargetManager?.numTargets) morphMeshes++;
   }
-  const textures = e.kind === 'light' ? [] : texturesOf(editor.materialsOf(e)).map(textureCost);
-  return { triangles, vertices, meshes: e.meshes.length, skinned, morphMeshes, textures, textureBytes: textures.reduce((n, t) => n + t.bytes, 0) };
+  const splatSet = new Set(e.meshes.filter(isSplat).flatMap(splatTextures));
+  const textures = e.kind === 'light' ? [] : [...new Set([...texturesOf(editor.materialsOf(e)), ...splatSet])].map(texture => {
+    const cost = textureCost(texture);
+    if (splatSet.has(texture)) {
+      const internal = texture.getInternalTexture();
+      const channels = internal?.format === 6 ? 1 : internal?.format === 7 ? 2 : internal?.format === 4 ? 3 : 4;
+      const bytes = internal?.type === 2 || internal?.type === 5 || internal?.type === 4 ? 2 : internal?.type === 1 || internal?.type === 6 || internal?.type === 7 ? 4 : 1;
+      cost.bytes = cost.width * cost.height * channels * bytes;
+    }
+    return cost;
+  });
+  return { triangles, vertices, splats, meshes: e.meshes.length, skinned, morphMeshes, textures, textureBytes: textures.reduce((n, t) => n + t.bytes, 0) };
 }
 
 /** The whole scene (visible objects; textures shared between objects counted once). */
 export function analyzeScene(editor: Editor) {
   let triangles = 0;
+  let splats = 0;
   const textures = new Map<BaseTexture, TextureCost>();
   for (const e of editor.entities) {
     if (e.groupMembers) continue;
     if (e.kind === 'light' || !e.visible) continue;
     const c = analyzeEntity(editor, e);
     triangles += c.triangles;
+    splats += c.splats;
     for (const t of c.textures) textures.set(t.texture, t);
   }
-  return { triangles, textureBytes: [...textures.values()].reduce((n, t) => n + t.bytes, 0) };
+  return { triangles, splats, textureBytes: [...textures.values()].reduce((n, t) => n + t.bytes, 0) };
 }
 
-export function overBudget(cost: { triangles: number; textureBytes: number }, budget = deviceBudget()) {
-  return cost.triangles > budget.triangles || cost.textureBytes > budget.textureBytes;
+export function overBudget(cost: { triangles: number; splats?: number; textureBytes: number }, budget = deviceBudget()) {
+  // Splats have their own count; do not count Babylon's reusable billboard triangles.
+  return cost.triangles > budget.triangles || (cost.splats ?? 0) > budget.triangles || cost.textureBytes > budget.textureBytes;
 }
 
 export function formatBytes(bytes: number) {

@@ -1,4 +1,5 @@
 import { reparent, setAffineTransform } from '../edit/groups';
+import { isSplat, restoreSplatClone, SPLAT_GLTF_EXTENSION } from './splats';
 import { Fusion } from '../edit/fuse';
 import { Shrinkwrap } from '../edit/shrinkwrap';
 import type { LibraryAttribution } from '../library/polyhaven';
@@ -64,6 +65,7 @@ import { Viewport } from '@babylonjs/core/Maths/math.viewport.js';
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
 import type { Node } from '@babylonjs/core/node.js';
 import { registerBuiltInLoaders } from '@babylonjs/loaders/dynamic.js';
+import { registerGLTFExtension } from '@babylonjs/loaders/glTF/2.0/glTFLoaderExtensionRegistry.js';
 import { GridMaterial } from '@babylonjs/materials/grid/gridMaterial.js';
 import { ShadowOnlyMaterial } from '@babylonjs/materials/shadowOnly/shadowOnlyMaterial.js';
 import { tr } from './i18n';
@@ -88,6 +90,7 @@ import type { AddedClip } from '../animation/retarget';
 import { optionalAssetUrl } from './assetUrls';
 
 registerBuiltInLoaders();
+registerGLTFExtension(SPLAT_GLTF_EXTENSION, true, async loader => (await import('./splatGltfLoader')).createSplatExtension(loader));
 
 export const MODEL_EXTENSIONS = ['glb', 'gltf', 'obj', 'stl', 'fbx', 'ply', 'splat', 'spz', 'sog', 'usdz', 'babylon'];
 
@@ -295,6 +298,7 @@ export function createShadowGenerator(light: ShadowLight, type: LightType) {
   }
   gen.bias = 0.0008;
   gen.normalBias = 0.015;
+  gen.setTransparencyShadow(true);
   return gen;
 }
 const ACCENT = Color3.FromHexString('#e9a83b');
@@ -317,6 +321,7 @@ export class Editor {
   /** In an AR session: helpers hidden, no sky/background, floor becomes a shadow catcher. */
   arMode = false;
   private arSaved: EnvSettings | null = null;
+  private arLightState: { light: ShadowLight; enabled: boolean; shadows: boolean }[] = [];
 
   /** No editing helpers on screen (photo mode or AR). */
   private thumbnailMode = false;
@@ -902,15 +907,30 @@ export class Editor {
   /** Loads a model's data (without adding it to the scene). */
   async loadAsset(asset: AssetRef): Promise<AssetContainer> {
     this.loading.notifyObservers({ name: asset.name, progress: 0 });
+    const extension = ext(asset.main?.name ?? asset.url?.split(/[?#]/)[0] ?? '');
+    let splatTemplate: import('./splatMesh').EditorSplatMesh | undefined;
+    let keepSplatTemplate = false;
     try {
       if (asset.main) for (const f of [asset.main, ...(asset.deps ?? [])]) FilesInputStore.FilesToLoad[f.name.toLowerCase()] = f;
       // GLB scene exports can contain cameras; the loader needs their constructor registration.
       await import('@babylonjs/core/Cameras/universalCamera.js');
+      // The dynamic splat loader uses Babylon's pure modules, which omit the depth
+      // shaders required by splat shadows. Register them only when loading splats.
+      if (['spz', 'splat', 'ply', 'sog', 'babylon'].includes(extension)) {
+        await import('./splatSupport');
+        if (extension !== 'babylon') {
+          const { EditorSplatMesh } = await import('./splatMesh');
+          splatTemplate = this.scene._executeWithBlockedEntityCollection(true, () => new EditorSplatMesh(asset.name, this.scene));
+        }
+      }
       const container = await LoadAssetContainerAsync(asset.main ?? asset.url!, this.scene, {
         rootUrl: asset.main ? 'file:' : undefined,
         // Animations start on the instances placed in the scene, never on the hidden template
         // (which also keeps the template's joints in their rest pose, needed for retargeting)
-        pluginOptions: { gltf: { animationStartMode: 0 /* GLTFLoaderAnimationStartMode.NONE */ } },
+        pluginOptions: {
+          gltf: { animationStartMode: 0 /* GLTFLoaderAnimationStartMode.NONE */ },
+          splat: { keepInRam: true, gaussianSplattingMesh: splatTemplate },
+        },
         onProgress: (ev) => {
           if (ev.lengthComputable) this.loading.notifyObservers({ name: asset.name, progress: ev.loaded / ev.total });
         },
@@ -923,8 +943,13 @@ export class Editor {
         }
       }
       container.animationGroups.forEach((g) => g.stop());
+      for (const mesh of container.meshes) if (isSplat(mesh)) {
+        (mesh as import('./splatMesh').EditorSplatMesh).onSortReady = () => this.invalidate(33);
+      }
+      keepSplatTemplate = !!splatTemplate && container.meshes.includes(splatTemplate);
       return container;
     } finally {
+      if (!keepSplatTemplate) splatTemplate?.dispose();
       this.loading.notifyObservers(null);
     }
   }
@@ -961,6 +986,7 @@ export class Editor {
       }
     }
     const meshes = root.getChildMeshes(false).filter((m) => m.getTotalVertices() > 0 || m.getClassName().includes('Splat'));
+    for (const mesh of meshes) restoreSplatClone(mesh);
 
     if (!source) {
       // Normalize: center on XZ, rest on the floor and rescale models that are too big/small
@@ -1486,13 +1512,29 @@ export class Editor {
       this.extra = [];
       this.setPrimary(entity);
     }
-    this.outline.clearSelection();
-    for (const e of this.selection) {
-      const meshes = e.kind === 'light' ? e.root.getChildMeshes() : e.meshes;
-      if (meshes.length) this.outline.addSelection(meshes);
-    }
+    this.updateSelectionOutline();
     this.applyTool();
     this.emit('selection');
+  }
+
+  private updateSelectionOutline() {
+    this.outline.clearSelection();
+    for (const e of this.entities) for (const mesh of e.meshes) {
+      if (isSplat(mesh)) mesh.showBoundingBox = false;
+    }
+    for (const e of this.selection) {
+      const meshes = e.kind === 'light' ? e.root.getChildMeshes() : e.meshes;
+      const ordinary = meshes.filter(mesh => !isSplat(mesh));
+      if (ordinary.length) this.outline.addSelection(ordinary);
+      for (const mesh of meshes) if (isSplat(mesh)) {
+        // The generic outline shader expands every splat into an overlapping quad.
+        // Use twelve bounds edges until the mask pass supports Gaussian covariance/alpha.
+        mesh.showBoundingBox = !this.cleanView;
+        const renderer = this.scene.getBoundingBoxRenderer();
+        renderer.frontColor = ACCENT;
+        renderer.backColor = ACCENT;
+      }
+    }
   }
 
   private setPrimary(entity: Entity | null) {
@@ -2157,6 +2199,7 @@ export class Editor {
     for (const h of this.helpers) h.isVisible = !clean;
     this.grid.setEnabled(this.env.grid && !clean);
     this.outline.isEnabled = !clean;
+    this.updateSelectionOutline();
     this.applyTool();
   }
 
@@ -2191,6 +2234,7 @@ export class Editor {
     if (on) {
       this.select(null);
       this.arSaved = { ...this.env };
+      this.arLightState = this.entities.flatMap(e => e.light ? [{ light: e.light, enabled: e.light.isEnabled(false), shadows: e.light.shadowEnabled }] : []);
       this.arMode = true;
       // Real world as background; the floor only shows shadows on the real ground
       this.applyEnv({ skybox: false, ground: 'shadow', grid: false });
@@ -2199,7 +2243,12 @@ export class Editor {
       this.arMode = false;
       // Light estimation replaced the environment lighting during the session
       this.restoreEnvironmentTexture();
-      this.setShadowsEnabled(true);
+      for (const saved of this.arLightState) {
+        if (saved.light.isDisposed()) continue;
+        saved.light.setEnabled(saved.enabled);
+        saved.light.shadowEnabled = saved.shadows;
+      }
+      this.arLightState = [];
       if (this.arSaved) this.applyEnv(this.arSaved);
       this.arSaved = null;
     }
@@ -2208,14 +2257,16 @@ export class Editor {
   }
 
   async captureThumbnail(size = 240): Promise<Blob> {
-    const { CreateScreenshotUsingRenderTargetAsync } = await import('@babylonjs/core/Misc/screenshotTools.js');
+    const { CreateScreenshotAsync } = await import('@babylonjs/core/Misc/screenshotTools.js');
     this.thumbnailMode = true;
     this.applyCleanView();
     const overlays = [...this.overlays].map((mesh) => ({ mesh, enabled: mesh.isEnabled(false) }));
     overlays.forEach(({ mesh }) => mesh.setEnabled(false));
     try {
       this.invalidate();
-      const data = await CreateScreenshotUsingRenderTargetAsync(this.engine, this.camera, { width: size, height: Math.round(size * 2 / 3) }, 'image/png');
+      // Copy a clean on-screen frame; an RTT resizes the whole post-process pipeline
+      // for every autosave and can retain its previous render targets.
+      const data = await CreateScreenshotAsync(this.engine, this.camera, { width: size, height: Math.round(size * 2 / 3) }, 'image/png');
       return await (await fetch(data)).blob();
     } finally {
       overlays.forEach(({ mesh, enabled }) => mesh.setEnabled(enabled));
@@ -2259,6 +2310,8 @@ export class Editor {
    * meshopt-compressed (loaded on demand); otherwise the original models, as they were loaded.
    */
   async exportGLB(compact = false, forAR = false): Promise<Blob> {
+    const hasSplats = this.entities.some(e => e.visible && e.meshes.some(isSplat));
+    const splatExport = hasSplats ? await import('./splatGltf') : null;
     // Load dependencies before changing the scene: an offline chunk failure must
     // leave previews, textures and transforms untouched.
     const [{ affineExport }, { nativeAnimationName }, { GLTF2Export }] = await Promise.all([
@@ -2285,6 +2338,7 @@ export class Editor {
     const original = compact || forAR ? [] : this.entities.filter((e) => e.optimization);
     let textures: ReturnType<TextureOptimizer['forExport']> | undefined;
     let restoreAffineExport: (() => void) | undefined;
+    let restoreSplatExport: (() => void) | undefined;
     let glb: Blob;
     const groups = this.scene.animationGroups;
     const active = this.entities.filter(e => e.visible && this.anim.isPlaying(e))
@@ -2294,6 +2348,7 @@ export class Editor {
     try {
       for (const e of original) this.optimizer.preview(e, true);
       textures = this.textureOptimizer.forExport(compact || forAR);
+      restoreSplatExport = splatExport?.prepareSplatExport(this.scene);
       restoreAffineExport = affineExport(this.scene);
       if (forAR) {
         this.scene.animationGroups = active.map(({ group, name }) => { group.name = name; return group; });
@@ -2303,6 +2358,8 @@ export class Editor {
         // or quantizing skin weights for a different renderer.
         shouldExportAnimation: forAR ? animation => arAnimations.has(animation) : undefined,
         shouldExportNode: (node) => {
+          if (node.reservedDataStore?._gaussianSplattingSourceMesh) return false;
+          if (isSplat(node)) return false;
           if (exclude.has(node) || node.name === 'ambient') return false;
           return node.isEnabled();
         },
@@ -2314,7 +2371,7 @@ export class Editor {
         active.forEach(({ group }, i) => { group.name = groupNames[i]; });
       }
       try {
-        restoreAffineExport?.();
+        try { restoreAffineExport?.(); } finally { restoreSplatExport?.(); }
       } finally {
         try {
           textures?.restore();
@@ -2324,7 +2381,9 @@ export class Editor {
         }
       }
     }
-    if (!compact) return glb;
+    // glTF-Transform drops unregistered extension payloads, including their buffer views.
+    // Preserve the exact splats until that optimizer supports this extension.
+    if (!compact || hasSplats) return glb;
     const { compactGLB } = await import('../optimize/export');
     return new Blob([(await compactGLB(new Uint8Array(await glb.arrayBuffer()), textures.ktx2)) as Uint8Array<ArrayBuffer>], { type: 'model/gltf-binary' });
   }

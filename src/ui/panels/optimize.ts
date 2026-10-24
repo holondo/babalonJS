@@ -47,6 +47,7 @@ export class OptimizePanel {
         { class: 'readout' },
         line(tr('Triangles'), cost.triangles.toLocaleString()),
         line(tr('Vertices'), cost.vertices.toLocaleString()),
+        cost.splats ? line(tr('Gaussian splats'), cost.splats.toLocaleString()) : null,
         line(tr('Texture memory'), cost.textures.length ? `${formatBytes(cost.textureBytes)} · ${cost.textures.length}` : '—'),
       ),
       hint(
@@ -55,6 +56,7 @@ export class OptimizePanel {
           : tr('Fits this device.'),
       ),
       cost.morphMeshes ? hint(tr('Parts with blend shapes are kept as they are.')) : null,
+      cost.splats ? hint(tr('Triangle optimization does not reduce Gaussian splats.')) : null,
     );
   }
 
