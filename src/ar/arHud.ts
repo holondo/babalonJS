@@ -20,6 +20,7 @@ export class ARHud {
   private uiHidden = false;
   private showFps = false;
   private fpsTimer = 0;
+  private statsTime=0;
   /** Share action for the last photo, offered for a few seconds after it's saved. */
   private share: (() => void) | null = null;
   private messageTimer = 0;
@@ -111,6 +112,11 @@ export class ARHud {
   }
 
   private updateLabels() {
+    if(this.ar.active&&this.settingsOpen&&performance.now()-this.statsTime>500){
+      this.statsTime=performance.now();
+      const node=this.el.querySelector('.ar-splat-stats');
+      if(node)node.textContent=this.splatStatus();
+    }
     if (!this.ar.active || this.uiHidden || !this.labels.size) return;
     const width = this.el.clientWidth, height = this.el.clientHeight;
     for (const [measurement, label] of this.labels) {
@@ -120,6 +126,14 @@ export class ARHud {
       label.style.transform = `translate(${projected.x}px, ${projected.y}px) translate(-50%, -50%)`;
       label.textContent = projected.text;
     }
+  }
+
+  private splatStatus() {
+    if(this.ar.lodLoading)return tr('Preparing splat LOD…');
+    const stats=this.ar.splatStats;if(!stats?.ready)return '';
+    return this.ar.splatPerformance
+      ?tr('Active splats: {active} / {budget}',{active:stats.active.toLocaleString(),budget:this.ar.splatBudget.toLocaleString()})
+      :tr('Original detail: {count} splats',{count:stats.source.toLocaleString()});
   }
 
   /** Options panel: everything optional, cheapest settings by default. */
@@ -143,8 +157,15 @@ export class ARHud {
       toggle(tr('Camera background'), !ar.virtual, (v) => ar.setVirtual(!v)),
       ...(ar.hasSplats ? [
         toggle(tr('Faster splats'), ar.splatPerformance, (on: boolean) => ar.setSplatPerformance(on)),
-        h('p', { class: 'ar-note' }, tr('Enabled by default in AR: uses base color and skips splats smaller than 2 pixels. Turn off to restore full detail. Editor settings are restored when you exit.')),
+        h('p', { class: 'ar-note' }, tr('Enabled by default: spatial LOD, base color and small-splat culling. Turn off for original detail. The original is restored when you exit.')),
+        h('h4',{},tr('Active splat budget')),
+        chips([{value:'30000',label:'30k'},{value:'60000',label:'60k'},{value:'120000',label:'120k'}],String(ar.splatBudget),value=>ar.setSplatBudget(+value)),
+        h('p',{class:'ar-note ar-splat-stats'},this.splatStatus()),
+        !ar.splatPerformance?h('p',{class:'ar-note'},tr('Original detail does not use the LOD budget.')):null,
       ] : []),
+      h('h4',{},tr('AR resolution')),
+      chips([{value:'0.5',label:'50%'},{value:'0.75',label:'75%'},{value:'1',label:'100%'}],String(ar.resolutionScale),value=>ar.setResolutionScale(+value)),
+      h('p',{class:'ar-note'},tr('Resolution applies when entering AR. Exit and enter again to apply changes. Camera and interface resolution are unchanged.')),
       ar.virtual ? h('p', { class: 'ar-note' }, tr('Virtual AR: walk around the scene in its own environment.')) : null,
       h('h4', {}, tr('Lighting')),
       chips(lights, ar.lighting, (v) => ar.setLighting(v)),

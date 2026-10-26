@@ -33,6 +33,7 @@ import type { GaussianSplattingMaterial } from '@babylonjs/core/Materials/Gaussi
 import { isSplat } from '../core/splats';
 import type { GaussianSplattingMeshBase } from '@babylonjs/core/Meshes/GaussianSplatting/gaussianSplattingMeshBase.js';
 import { applyMaterial, materialToJSON } from '../core/state';
+import type { SplatLodController } from '../optimize/splatLod';
 
 export type ARStatus = 'searching' | 'ready' | 'placed';
 /** "scene" = the editor's own lights; "room" = estimated by the phone; the rest are presets. */
@@ -96,6 +97,7 @@ export class ARMode {
 
   constructor(editor: Editor) {
     this.editor = editor;
+    this.xrCanvasOptions.stencil=editor.engine.isStencilEnable;
   }
 
   async checkSupport() {
@@ -117,6 +119,13 @@ export class ARMode {
   /** Virtual AR: the scene's environment instead of the camera image. */
   virtual = false;
   splatPerformance = false;
+  splatBudget = 30000;
+  resolutionScale = 0.5;
+  appliedResolutionScale = 0.5;
+  lodLoading = false;
+  private splatLod:SplatLodController|null=null;
+  private xrCanvasOptions:XRWebGLLayerInit={antialias:false,depth:true,alpha:true,framebufferScaleFactor:0.5};
+  private shadowCasters=new Map<ShadowGenerator,AbstractMesh[]|null>();
   private splatSettings: { mesh: GaussianSplattingMeshBase; material: GaussianSplattingMaterial; degree: number; minPixelSize: number }[] = [];
 
   get hasSplats() { return this.editor.entities.some(e => e.visible && e.meshes.some(isSplat)); }
@@ -124,6 +133,8 @@ export class ARMode {
   /** Explicit, session-only quality tradeoff. Source bytes and project settings are restored. */
   setSplatPerformance(on: boolean) {
     if (on === this.splatPerformance) return;
+    const depth=this.occlusion;
+    if(depth)this.setOcclusion(false);
     if (on) {
       this.splatSettings = this.editor.entities.flatMap(e => e.meshes.filter(isSplat)).flatMap(mesh => {
         const material = mesh.material as GaussianSplattingMaterial | null;
@@ -132,9 +143,61 @@ export class ARMode {
     }
     this.splatPerformance = on;
     this.applySplatSettings();
+    this.splatLod?.setEnabled(on);
+    this.refreshSplatShadows();
     if (!on) this.splatSettings = [];
+    if(depth)this.setOcclusion(true);
     this.editor.invalidate();
     this.changed.notifyObservers();
+  }
+
+  get splatStats() { return this.splatLod?.stats ?? null; }
+
+  setSplatBudget(value:number) {
+    if(!Number.isFinite(value))return;
+    this.splatBudget=Math.max(1000,Math.min(200000,Math.round(value)));
+    this.splatLod?.setBudget(this.splatBudget);this.changed.notifyObservers();
+  }
+
+  setResolutionScale(value:number) {
+    if(![0.5,0.75,1].includes(value))return;
+    this.resolutionScale=value;this.xrCanvasOptions.framebufferScaleFactor=value;
+    this.changed.notifyObservers();
+  }
+
+  private async prepareSplatLod(generation:number) {
+    this.lodLoading=true;this.changed.notifyObservers();
+    try {
+      const {SplatLodController}=await import('../optimize/splatLod');
+      if(!this.active||generation!==this.sessionGeneration)return;
+      const lod=new SplatLodController(this.editor,()=>{
+        if(this.splatLod!==lod)return;
+        this.setOcclusion(false);lod.setEnabled(false);this.refreshSplatShadows();lod.dispose();this.splatLod=null;
+        this.reportError(tr('Splat LOD is unavailable. Original splats are still available.'));
+      });
+      this.splatLod=lod;lod.setBudget(this.splatBudget);
+      await lod.prepare();
+      if(!this.active||generation!==this.sessionGeneration){lod.dispose();return;}
+      const depth=this.occlusion;if(depth)this.setOcclusion(false);
+      lod.setEnabled(this.splatPerformance);this.refreshSplatShadows();
+      if(depth)this.setOcclusion(true);
+    } catch {
+      if(generation!==this.sessionGeneration)return;
+      this.splatLod?.dispose();this.splatLod=null;
+      if(this.active&&generation===this.sessionGeneration)this.reportError(tr('Splat LOD is unavailable. Original splats are still available.'));
+    } finally {
+      if(generation===this.sessionGeneration){this.lodLoading=false;this.changed.notifyObservers();}
+    }
+  }
+
+  private renderMesh(mesh:AbstractMesh) { return this.splatLod?.replacement(mesh)??mesh; }
+
+  private refreshSplatShadows() {
+    for(const gen of [...this.shadowCasters.keys(),...this.rig.flatMap(r=>r.gen?[r.gen]:[])]) {
+      const map=gen.getShadowMap();
+      if(map?.renderList)map.renderList=map.renderList.map(mesh=>this.renderMesh(mesh));
+      map?.resetRefreshCounter();
+    }
   }
 
   private applySplatSettings() {
@@ -228,7 +291,7 @@ export class ARMode {
     this.baseEnvIntensity = preset.env.intensity ?? this.baseEnvIntensity;
     const k = Math.max(this.local.size, 0.5) / 2;
     const focus = new Vector3(0, this.local.height / 2, 0);
-    const casters = this.editor.entities.filter((e) => e.kind !== 'light' && !e.groupMembers && e.castShadows && e.visible && e.root.isEnabled()).flatMap((e) => e.meshes);
+    const casters = this.editor.entities.filter((e) => e.kind !== 'light' && !e.groupMembers && e.castShadows && e.visible && e.root.isEnabled()).flatMap((e) => e.meshes.map(m=>this.renderMesh(m)));
     for (const def of preset.lights) {
       const pos = new Vector3(...def.pos).scale(k);
       const direction = focus.subtract(pos).normalize();
@@ -291,6 +354,7 @@ export class ARMode {
         disableNearInteraction: true,
         disableHandTracking: true,
         optionalFeatures: false,
+        outputCanvasOptions:{canvasOptions:this.xrCanvasOptions},
       });
       const fm = this.xr.baseExperience.featuresManager;
       // All optional: if the phone lacks one, the others still work
@@ -335,6 +399,8 @@ export class ARMode {
     }
 
     const fm = this.xr.baseExperience.featuresManager;
+    this.xrCanvasOptions.framebufferScaleFactor=this.resolutionScale;
+    this.appliedResolutionScale=this.resolutionScale;
     this.depthRequested = this.requestDepthOnNextSession;
     this.depthSupported = false;
     this.occlusion = false;
@@ -372,6 +438,7 @@ export class ARMode {
       const session = this.xr.baseExperience.sessionManager.session;
       this.depthSupported = !!this.depth && session.depthUsage === 'gpu-optimized' && !!session.depthDataFormat;
       this.setHitTest(true);
+      if(this.hasSplats)void this.prepareSplatLod(this.sessionGeneration);
       this.changed.notifyObservers();
     } catch (e) {
       this.cleanup();
@@ -407,6 +474,7 @@ export class ARMode {
     this.local = { size: b ? Math.max(b.size.x, b.size.y, b.size.z) : 2, height: b ? b.size.y : 1 };
     this.sceneLights = ed.entities.filter((e) => e.light && e.visible).map((e) => ({ light: e.light!, base: e.light!.intensity, enabled: e.light!.isEnabled(false) }));
     this.shadowRefresh = new Map(ed.entities.flatMap(e => e.shadowGen ? [[e.shadowGen, e.shadowGen.getShadowMap()!.refreshRate] as const] : []));
+    this.shadowCasters=new Map(ed.entities.flatMap(e=>e.shadowGen?[[e.shadowGen,e.shadowGen.getShadowMap()?.renderList??null] as const]:[]));
 
     // Keep the side the user was looking at in the editor facing them in AR
     const cam = ed.camera;
@@ -420,8 +488,9 @@ export class ARMode {
     this.sessionGeneration++;
     this.clearSceneAnchor();
     this.clearMeasurements();
-    this.setSplatPerformance(false);
     this.setOcclusion(false);
+    this.setSplatPerformance(false);
+    this.splatLod?.dispose();this.splatLod=null;this.lodLoading=false;
     this.measuring = false;
     this.depthSupported = false;
     this.clearRig();
@@ -435,6 +504,8 @@ export class ARMode {
       if (map) map.refreshRate = this.shadowRefresh.get(e.shadowGen!) ?? map.refreshRate;
     }
     this.shadowRefresh.clear();
+    for(const [gen,list]of this.shadowCasters){const map=gen.getShadowMap();if(map)map.renderList=list;}
+    this.shadowCasters.clear();
     if (this.lighting === 'room') {
       try {
         this.xr?.baseExperience.featuresManager.detachFeature(WebXRFeatureName.LIGHT_ESTIMATION);
@@ -664,7 +735,8 @@ export class ARMode {
           }
           return clone;
         };
-        for (const entity of this.editor.entities.filter(e => !e.groupMembers)) for (const mesh of entity.meshes) {
+        for (const entity of this.editor.entities.filter(e => !e.groupMembers)) for (const originalMesh of entity.meshes) {
+          const mesh=this.renderMesh(originalMesh);
           const original = mesh.material;
           if (!original) continue;
           const clone = cloneMaterial(original);

@@ -97,7 +97,7 @@ not claims that the existing triangle operations support splats:
 | Picking and measurements | Ray picking can hit bounds instead of visible scan content. Surface paths and vertex snap require triangle topology. | Use explicit GPU picking/depth for visible splat hits. Use a user-chosen reconstructed proxy surface for geodesics and normals. Do not measure billboard triangles. |
 | Lasso, brush, sculpt and separate | Separate already has its own triangle-model guard. Other tools may accept auxiliary buffers. | Select splat centers/ellipsoids using rendered visibility; edit packed centers/scales/rotations/opacity with copy-on-write and undo; partition splat records and harmonics together. |
 | Boolean, fuse, connect, shrinkwrap | Splats do not define a watertight surface. | Offer explicit surface reconstruction (density field/isosurface, cleanup, normals and color baking), then reuse mesh operations. For splat-domain clipping, test covariance/opacity against the chosen volume and preserve undo. |
-| Triangle optimization and LOD | Triangle decimation does not reduce Gaussian count. | Add explicit spatial clustering/pruning or a splat-aware LOD hierarchy; retain covariance, opacity and SH; compare rendered error before applying. |
+| Triangle optimization and LOD | Triangle decimation does not reduce Gaussian count. WebXR AR now uses a disposable spatial Gaussian hierarchy with a global active budget. | Persistent editor LOD/streaming and SH-aware higher-quality aggregates remain separate work. Keep the original data for full detail. |
 | Rigging and posing | Billboard indices are not a character's skin surface. | Rig an explicit reconstructed proxy, transfer weights to splat centers, and deform centers plus covariance/orientations; specify how SH rotates with the deformation. |
 | Materials and relighting | Objects → Material exposes Gaussian kernel, opacity compensation, minimum pixel size and harmonic degree with undo/persistence. Existing wireframe/double-sided controls remain available with an explanation. PBR controls do not have equivalent scan semantics. | Implement relighting with normals or an explicit proxy, without replacing the splat material with PBR. |
 | Multiple overlapping splat objects | Independent objects sort their own splats; overlap can be order-dependent. | Use Babylon compound splats with global sorting and maintain per-part transforms, selection, undo and serialization. |
@@ -123,15 +123,61 @@ existing invalidation. The optimization does not change resolution, harmonic deg
 or source records. The legacy comparison-sort path remains untouched.
 
 AR options include **Faster splats**, enabled by default for splat scenes at the user's
-request. This selects degree-0
-color and discards projected splats smaller than two pixels (or the object's existing
-larger threshold). It trades view-dependent color and tiny details for GPU work.
+request. It prepares a spatial Gaussian LOD hierarchy and selects degree-0 color,
+discarding projected splats smaller than two pixels (or the object's existing larger
+threshold). It trades view-dependent color and tiny details for GPU work.
 Turning it off or exiting restores original degrees and material thresholds, including
 when depth occlusion swaps temporary materials in either direction. No source bytes
 or saved project quality settings are changed. Full detail remains an explicit session
 choice by switching this option off. Shadows and room lighting remain opt-in.
 AR label layout reads are also skipped
 when there are no measurements to project.
+
+### AR LOD, active budget and resolution
+
+The initial **global budget is 30,000 active splats**, with 60,000 and 120,000 choices
+in AR options. It caps the combined selected count across all splat objects, not each
+object separately. Source records, harmonics and project files remain untouched.
+
+`optimize/splatLodMath.ts` builds a Morton-ordered binary hierarchy in a dedicated
+worker. Gaussian representatives combine area/opacity-weighted centers and colors;
+covariance includes each input covariance and the spread of its center. A symmetric
+eigendecomposition yields the representative's oriented scales/quaternion. Opacity
+approximately conserves integrated projected coverage. This is an approximation,
+not a claim of exact radiance or view-dependent SH preservation.
+
+The temporary atlas has at most 131,072 fine representatives and their ancestors
+(262,143 nodes). Larger sources are spatially aggregated at that fine level; smaller
+sources retain their individual records there. The original remains available through
+the full-detail toggle. This bounds temporary atlas growth but does **not** reduce
+the memory already occupied by the original asset or stream its initial load.
+
+A worker max-heap refines nodes by projected bounds under the shared budget. It
+conservatively culls offscreen bounds with an asynchronous-motion margin, and sends
+coalesced active ranges to Babylon's sort worker. Parent/child nodes are never drawn
+together. Traversal runs at most about seven times per second, outside the render
+thread; only selected ranges are depth-sorted and drawn. The source-buffer copy,
+hierarchy and temporary GPU atlas are disposable session resources. Two instances
+with the same source reuse the build, while retaining independent GPU state. A shared
+budget does not solve cross-object transparency sorting: compound/global sorting
+remains separate work.
+
+Original meshes stay in their hierarchy and carry their transforms/animations; an
+identity LOD child renders instead. Depth occlusion and shadow caster lists target
+the active representation. Cleanup restores original visibility, quality, material
+objects, shadow lists and transforms, and terminates traversal/sort workers. Cancelling
+preparation also restores the source. A failed LOD build falls back to original data
+with an error notice rather than marking the source corrupt.
+
+WebXR starts with **50% width/height** and **no layer multisampling**: approximately a
+quarter of the virtual-layer pixels at 100% scale. 75% and 100% are available in AR
+options. The scale is passed to `XRWebGLLayer` through Babylon's managed output canvas,
+not the editor's hardware scaling. Changing it applies on the next AR entry; the HUD
+says so explicitly. Passthrough-camera and DOM-overlay resolution are not reduced.
+The runtime can constrain the actual framebuffer size. No physical Android FPS gain
+is claimed from the headless tests; validate the actual layer resolution and frame
+time on the phone. AR photos use the currently selected representation; turn off
+Faster splats for original Gaussian detail.
 
 WebXR retains Babylon's Gaussian renderer. It needs per-camera sort state, so test
 camera changes and returning to the editor. Optional depth occlusion clones materials:
@@ -195,6 +241,20 @@ It checks new-camera/transform invalidation, the real HUD toggle and quality res
 across depth toggles and session exit. This is CPU/upload-work evidence, not a physical
 phone FPS benchmark: the headless desktop already reaches its refresh-rate cap in
 both cases. Measure actual Android PWA FPS with the option off and on after deployment.
+
+`node scripts/check-splat-lod.mjs` checks hierarchy coverage, aggregation, culling,
+distance refinement and a budget shared across instances. `check-splat-ar-lod.mjs`
+uses the real scan and actual build/traversal/sort workers: 370,018 source splats become
+30,000 active near the camera and approximately 114 far away in the test pose. It also
+checks lowering/raising the cap, source/SH hashes, depth materials, cancellation,
+visibility, worker/texture cleanup, HUD controls and the managed-canvas layer options.
+Set `BABALON_LOD_DUPLICATE=1` to verify that two copies (740,036 source splats) still
+share the same 30,000 active cap. Set `BABALON_TEST_PHONE=1` for a 375×812 viewport.
+
+After a production build, run `check-splat-lod-production.mjs` against Vite preview
+(`BABALON_PREVIEW_URL`), including the deployed `/babalonJS/` base path. This script
+loads only built application chunks and workers, without `/src` imports. It simulates
+the hardware XR boundary but exercises the actual application entry and LOD path.
 
 The browser regression also exercises a Gaussian material slider through DOM events
 with undo/redo, exports the standard attributes and opens the file with both the

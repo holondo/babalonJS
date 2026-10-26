@@ -48,8 +48,16 @@ export function tr(key: string, vars?: Record<string, string | number>) {
 }
 
 const PT: Record<string, string> = {
+  'Active splat budget': 'Orçamento de splats ativos',
+  'Original detail: {count} splats': 'Detalhes originais: {count} splats',
+  'Active splats: {active} / {budget}': 'Splats ativos: {active} / {budget}',
+  'Preparing splat LOD…': 'Preparando LOD dos splats…',
+  'Original detail does not use the LOD budget.': 'Os detalhes originais não usam o orçamento de LOD.',
+  'AR resolution': 'Resolução do AR',
+  'Resolution applies when entering AR. Exit and enter again to apply changes. Camera and interface resolution are unchanged.': 'A resolução é aplicada ao entrar no AR. Saia e entre novamente para aplicar alterações. A resolução da câmera e da interface não muda.',
+  'Enabled by default: spatial LOD, base color and small-splat culling. Turn off for original detail. The original is restored when you exit.': 'Ativado por padrão: LOD espacial, cor base e descarte de splats pequenos. Desligue para usar os detalhes originais. O original é restaurado ao sair.',
+  'Splat LOD is unavailable. Original splats are still available.': 'O LOD dos splats está indisponível. Os splats originais continuam disponíveis.',
   'Faster splats': 'Splats mais rápidos',
-  'Enabled by default in AR: uses base color and skips splats smaller than 2 pixels. Turn off to restore full detail. Editor settings are restored when you exit.': 'Ativado por padrão no AR: usa a cor base e ignora splats menores que 2 pixels. Desligue para restaurar todos os detalhes. Os ajustes do editor são restaurados ao sair.',
   'Unsupported Gaussian kernel or color space.': 'Kernel ou espaço de cor Gaussian não suportado.',
   'Harmonic degree': 'Grau harmônico',
   'Kernel size': 'Tamanho do kernel',

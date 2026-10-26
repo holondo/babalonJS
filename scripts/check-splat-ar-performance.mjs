@@ -43,6 +43,9 @@ try {
     const start = camera.position.clone();
     const baseline = snapshot(ed, 'AR').json;
     const ar = new ARMode(ed);
+    // This check isolates sort reuse/material fallbacks; check-splat-ar-lod exercises
+    // the complete real LOD preparation and budget path independently.
+    ar.prepareSplatLod = async () => {};
     // Run the real entry path; only the platform XR session is simulated.
     ar.xr = { baseExperience: {
       featuresManager: { attachFeature() {}, detachFeature() {} },
