@@ -5,6 +5,9 @@ const { chromium } = await import(process.env.BABALON_PLAYWRIGHT_PATH ? pathToFi
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 try {
   const page = await browser.newPage({ viewport: process.env.BABALON_TEST_PHONE ? { width: 375, height: 812 } : { width: 640, height: 480 } });
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   page.on('console', m => { if (m.text().startsWith('LIFECYCLE ')) console.log(m.text()); });
   await page.addInitScript(() => {
     const Original = Worker;
@@ -22,6 +25,11 @@ try {
   await page.getByRole('button', { name: 'Choose files', exact: true }).click();
   await (await chooser).setFiles(process.env.BABALON_TEST_SPZ);
   await page.waitForFunction(() => window.editor.entities.some(e => e.kind === 'model'), null, { timeout: 60000 });
+  if (process.env.BABALON_TEST_STANDARD) await page.evaluate(async () => {
+    const ed = window.editor;
+    const file = new File([await ed.exportGLB(false, false, true)], 'standard.glb');
+    ed.newScene(); await ed.addFiles([file]);
+  });
   const results = await page.evaluate(async () => {
     const ed = window.editor, ui = window.ui;
     clearTimeout(ui.autosaveTimer); ui.autosaveTimer = 0;
@@ -45,7 +53,7 @@ try {
       ed.select(entity); ed.setTool('move'); await ed.gizmoLoad;
       if (!mesh().showBoundingBox || ed.outline.hasMesh(mesh())) throw new Error('Splat selection uses the incompatible generic outline');
       ed.photoMode = true; ed.applyCleanView();
-      if (mesh().showBoundingBox) throw new Error('Selection bounds leaked into clean view');
+      if (mesh().showBoundingBox || ed.outline.isEnabled) throw new Error('Selection leaked into clean view');
       ed.photoMode = false; ed.applyCleanView();
       ed.beginTransform(); ed.startFollow();
       const times = []; let last = performance.now();
@@ -81,6 +89,12 @@ try {
     return runs;
   });
   const baseline = results[0];
+  assert.deepEqual(errors, []);
+  if (process.env.BABALON_SELECTION_IMAGE) {
+    await page.evaluate(() => { const ed = window.editor; ed.focus(ed.selected); ed.setTool('none'); document.body.classList.add('ui-hidden'); });
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: process.env.BABALON_SELECTION_IMAGE });
+  }
   for (const run of results) {
     assert.equal(run.textures, baseline.textures, `GPU texture leak after ${run.stage}`);
     assert.equal(run.cameraObservers, baseline.cameraObservers, `Camera observer leak after ${run.stage}`);

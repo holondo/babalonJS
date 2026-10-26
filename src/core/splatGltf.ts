@@ -7,11 +7,13 @@ import type { Node } from '@babylonjs/core/node.js';
 import type { Scene } from '@babylonjs/core/scene.js';
 import type { GaussianSplattingMeshBase } from '@babylonjs/core/Meshes/GaussianSplatting/gaussianSplattingMeshBase.js';
 import { tr } from './i18n';
+import { STANDARD_SPLAT_EXTENSION, standardSplatAttributes } from './splatStandard';
 
 const sources = new WeakMap<Node, GaussianSplattingMeshBase>();
+const standardProxies = new WeakSet<Node>();
 
 /** Keep Babylon's triangle exporter away from splat counts and billboard buffers. */
-export function prepareSplatExport(scene: Scene) {
+export function prepareSplatExport(scene: Scene, standard = false) {
   const proxies = scene.meshes.filter(isSplat).filter(mesh => mesh.isEnabled() && mesh.isVisible).map(mesh => {
     const proxy = new TransformNode(mesh.name, scene);
     proxy.parent = mesh.parent;
@@ -21,19 +23,20 @@ export function prepareSplatExport(scene: Scene) {
     proxy.rotationQuaternion = mesh.rotationQuaternion?.clone() ?? null;
     proxy.setPreTransformMatrix(mesh.getPivotMatrix().clone());
     sources.set(proxy, mesh);
+    if (standard) standardProxies.add(proxy);
     return proxy;
   });
   return () => proxies.forEach(proxy => proxy.dispose());
 }
 
 /** Lossless app round-trip, with an ordinary colored point cloud for other viewers. */
-GLTFExporter.RegisterExtension(SPLAT_EXTENSION, exporter => {
+for (const standard of [false, true]) GLTFExporter.RegisterExtension(standard ? STANDARD_SPLAT_EXTENSION : SPLAT_EXTENSION, exporter => {
  const shared = new WeakMap<ArrayBuffer, Map<string, number>>();
  return {
-  name: SPLAT_EXTENSION, enabled: true, required: false, wasUsed: false, dispose() {},
+  name: standard ? STANDARD_SPLAT_EXTENSION : SPLAT_EXTENSION, enabled: true, required: false, wasUsed: false, dispose() {},
   async postExportNodeAsync(_context, node, original, _map, rightHanded, buffers) {
     const mesh = sources.get(original);
-    if (!mesh) return node;
+    if (!mesh || standardProxies.has(original) !== standard) return node;
     const data = mesh.splatsData;
     if (!data) throw new Error(tr('Gaussian splat source data is unavailable. Reopen the original asset before exporting.'));
     const appearance = mesh.material ? materialToJSON(mesh.material) : undefined;
@@ -56,10 +59,23 @@ GLTFExporter.RegisterExtension(SPLAT_EXTENSION, exporter => {
       colors[i * 4 + 3] = b[i * 32 + 27] / 255 * (mesh.material?.alpha ?? 1);
       if (i && i % 32768 === 0) await new Promise(resolve => setTimeout(resolve, 0));
     }
-    const attribute = (data: Float32Array, type: 'VEC3' | 'VEC4', bounds?: { min: number[]; max: number[] }) => {
+    const attribute = (data: Float32Array, type: 'SCALAR' | 'VEC3' | 'VEC4', bounds?: { min: number[]; max: number[] }) => {
       const accessor = buffers.createAccessor(buffers.createBufferView(data), type as AccessorType, 5126, count, 0, bounds);
       return exporter._accessors.push(accessor) - 1;
     };
+    if (standard) {
+      const attributes: Record<string, number> = { POSITION: attribute(positions, 'VEC3', { min, max }), COLOR_0: attribute(colors, 'VEC4') };
+      for (const [name, value] of Object.entries(await standardSplatAttributes(mesh, rightHanded))) attributes[name] = attribute(value.data, value.type);
+      const primitive: IMeshPrimitive = {
+        mode: 0, attributes,
+        extensions: { [STANDARD_SPLAT_EXTENSION]: { kernel: 'ellipse', colorSpace: 'srgb_rec709_display', projection: 'perspective', sortingMethod: 'cameraDistance' } },
+      };
+      node.mesh = exporter._meshes.push({ name: mesh.name, primitives: [primitive] }) - 1;
+      if (!shared.has(data)) shared.set(data, new Map());
+      shared.get(data)!.set(key, node.mesh);
+      this.wasUsed = true;
+      return node;
+    }
     const extension = {
       version: 1, bufferView: -1, shDegree: Reflect.get(mesh, '_maxShDegree'),
       flipY, rightHanded, appearance,

@@ -111,7 +111,7 @@ export class ARHud {
   }
 
   private updateLabels() {
-    if (!this.ar.active || this.uiHidden) return;
+    if (!this.ar.active || this.uiHidden || !this.labels.size) return;
     const width = this.el.clientWidth, height = this.el.clientHeight;
     for (const [measurement, label] of this.labels) {
       const projected = this.ar.measurementLabel(measurement, width, height);
@@ -141,6 +141,10 @@ export class ARHud {
       ar.depthSupported ? toggle(tr('Real objects hide the scene'), ar.occlusion, (on) => ar.setOcclusion(on)) : null,
       ar.depthRequested && !ar.depthSupported ? h('p', { class: 'ar-note' }, tr('Depth occlusion is unavailable in this session.')) : null,
       toggle(tr('Camera background'), !ar.virtual, (v) => ar.setVirtual(!v)),
+      ...(ar.hasSplats ? [
+        toggle(tr('Faster splats'), ar.splatPerformance, (on: boolean) => ar.setSplatPerformance(on)),
+        h('p', { class: 'ar-note' }, tr('Uses base color and skips splats smaller than 2 pixels. Changes appearance only in this AR session; turn off to restore full detail.')),
+      ] : []),
       ar.virtual ? h('p', { class: 'ar-note' }, tr('Virtual AR: walk around the scene in its own environment.')) : null,
       h('h4', {}, tr('Lighting')),
       chips(lights, ar.lighting, (v) => ar.setLighting(v)),

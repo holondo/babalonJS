@@ -91,6 +91,11 @@ import { optionalAssetUrl } from './assetUrls';
 
 registerBuiltInLoaders();
 registerGLTFExtension(SPLAT_GLTF_EXTENSION, true, async loader => (await import('./splatGltfLoader')).createSplatExtension(loader));
+// Built-in glTF registration runs lazily and replaces factories with standard names.
+// A nonstandard loader hook can take precedence without eagerly importing splat code.
+registerGLTFExtension('BABALON_standard_gaussian_loader', false, async loader => loader.isExtensionUsed('KHR_gaussian_splatting')
+  ? (await import('./splatStandardLoader')).createStandardSplatExtension(loader)
+  : { name: 'BABALON_standard_gaussian_loader', enabled: false, dispose() {} });
 
 export const MODEL_EXTENSIONS = ['glb', 'gltf', 'obj', 'stl', 'fbx', 'ply', 'splat', 'spz', 'sog', 'usdz', 'babylon'];
 
@@ -2309,7 +2314,7 @@ export class Editor {
    * The scene as a GLB. Compact: optimized geometry and textures where the user optimized,
    * meshopt-compressed (loaded on demand); otherwise the original models, as they were loaded.
    */
-  async exportGLB(compact = false, forAR = false): Promise<Blob> {
+  async exportGLB(compact = false, forAR = false, standardSplats = false): Promise<Blob> {
     const hasSplats = this.entities.some(e => e.visible && e.meshes.some(isSplat));
     const splatExport = hasSplats ? await import('./splatGltf') : null;
     // Load dependencies before changing the scene: an offline chunk failure must
@@ -2348,7 +2353,7 @@ export class Editor {
     try {
       for (const e of original) this.optimizer.preview(e, true);
       textures = this.textureOptimizer.forExport(compact || forAR);
-      restoreSplatExport = splatExport?.prepareSplatExport(this.scene);
+      restoreSplatExport = splatExport?.prepareSplatExport(this.scene, standardSplats);
       restoreAffineExport = affineExport(this.scene);
       if (forAR) {
         this.scene.animationGroups = active.map(({ group, name }) => { group.name = name; return group; });

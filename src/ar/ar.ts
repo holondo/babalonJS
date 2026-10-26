@@ -30,6 +30,9 @@ import type { Editor } from '../core/editor';
 import { PHOTO_FILTERS, filterToCanvas, findLightPreset, presetIntensity } from '../core/presets';
 import { Capacitor } from '@capacitor/core';
 import type { GaussianSplattingMaterial } from '@babylonjs/core/Materials/GaussianSplatting/gaussianSplattingMaterial.js';
+import { isSplat } from '../core/splats';
+import type { GaussianSplattingMeshBase } from '@babylonjs/core/Meshes/GaussianSplatting/gaussianSplattingMeshBase.js';
+import { applyMaterial, materialToJSON } from '../core/state';
 
 export type ARStatus = 'searching' | 'ready' | 'placed';
 /** "scene" = the editor's own lights; "room" = estimated by the phone; the rest are presets. */
@@ -113,6 +116,37 @@ export class ARMode {
   filter = 'none';
   /** Virtual AR: the scene's environment instead of the camera image. */
   virtual = false;
+  splatPerformance = false;
+  private splatSettings: { mesh: GaussianSplattingMeshBase; material: GaussianSplattingMaterial; degree: number; minPixelSize: number }[] = [];
+
+  get hasSplats() { return this.editor.entities.some(e => e.visible && e.meshes.some(isSplat)); }
+
+  /** Explicit, session-only quality tradeoff. Source bytes and project settings are restored. */
+  setSplatPerformance(on: boolean) {
+    if (on === this.splatPerformance) return;
+    if (on) {
+      this.splatSettings = this.editor.entities.flatMap(e => e.meshes.filter(isSplat)).flatMap(mesh => {
+        const material = mesh.material as GaussianSplattingMaterial | null;
+        return material?.getClassName() === 'GaussianSplattingMaterial' ? [{ mesh, material, degree: mesh.shDegree, minPixelSize: material.minPixelSize }] : [];
+      });
+    }
+    this.splatPerformance = on;
+    this.applySplatSettings();
+    if (!on) this.splatSettings = [];
+    this.editor.invalidate();
+    this.changed.notifyObservers();
+  }
+
+  private applySplatSettings() {
+    for (const { mesh, material, degree, minPixelSize } of this.splatSettings) {
+      if (mesh.isDisposed()) continue;
+      mesh.shDegree = this.splatPerformance ? 0 : degree;
+      // Depth may swap the active material in either direction during the session.
+      for (const target of [material, mesh.material as GaussianSplattingMaterial | null]) {
+        if (target?.getClassName() === 'GaussianSplattingMaterial') target.minPixelSize = this.splatPerformance ? Math.max(2, minPixelSize) : minPixelSize;
+      }
+    }
+  }
 
   setVirtual(on: boolean) {
     this.virtual = on;
@@ -385,6 +419,7 @@ export class ARMode {
     this.sessionGeneration++;
     this.clearSceneAnchor();
     this.clearMeasurements();
+    this.setSplatPerformance(false);
     this.setOcclusion(false);
     this.measuring = false;
     this.depthSupported = false;
@@ -619,6 +654,7 @@ export class ARMode {
           if (!clone) throw new Error(tr('Depth occlusion is unavailable for this material.'));
           if (original.getClassName() === 'GaussianSplattingMaterial') {
             (clone as GaussianSplattingMaterial).setSourceMesh((original as GaussianSplattingMaterial).getSourceMesh()!);
+            applyMaterial(clone, materialToJSON(original));
           }
           clones.set(original, clone);
           this.depthClones.push(clone);
@@ -651,6 +687,7 @@ export class ARMode {
 
   private restoreDepthMaterials() {
     for (const { mesh, original } of this.depthMaterials) if (!mesh.isDisposed()) mesh.material = original;
+    if (this.splatPerformance) this.applySplatSettings();
     this.depthMaterials = [];
     for (const clone of this.depthClones) clone.dispose(false, false);
     this.depthClones = [];

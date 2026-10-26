@@ -1,6 +1,7 @@
 import { USER_TEXTURE_SLOTS, textureStates, applyTextureStates, slotTexture, textureImage } from '../../core/materialTextures';
 import type { TextureSlot } from '../../core/materialTextures';
 import type { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture.js';
+import type { GaussianSplattingMaterial } from '@babylonjs/core/Materials/GaussianSplatting/gaussianSplattingMaterial.js';
 import { Download, Layers, Upload, X } from 'lucide';
 import { saveAndOfferShare } from '../../core/files';
 import { MATERIAL_PRESETS } from '../../core/presets';
@@ -126,6 +127,27 @@ export class MaterialPanel {
       toggle(tr('Double-sided'), !mat.backFaceCulling, (v, mat) => (mat.backFaceCulling = !v)),
       toggle(tr('Wireframe'), mat.wireframe, (v, mat) => (mat.wireframe = v)),
     ];
+    if (mat.getClassName() === 'GaussianSplattingMaterial') {
+      const gs = mat as GaussianSplattingMaterial;
+      const { slider, toggle, chips } = forMaterials((m): m is GaussianSplattingMaterial => m.getClassName() === 'GaussianSplattingMaterial');
+      const source = gs.getSourceMesh();
+      const maximum = source ? (Reflect.get(source, '_maxShDegree') as number) : 0;
+      return [
+        section(tr('Gaussian splats'),
+          slider(tr('Kernel size'), gs.kernelSize, { min: 0, max: 2, step: 0.01 }, (v, m) => { m.kernelSize = v; }),
+          toggle(tr('Opacity compensation'), gs.compensation, (v, m) => { m.compensation = v; }),
+          slider(tr('Minimum pixel size'), gs.minPixelSize, { min: 0, max: 10, step: 0.1 }, (v, m) => { m.minPixelSize = v; }),
+          h('div', { class: 'field' }, h('label', {}, tr('Harmonic degree')), chips(Array.from({ length: maximum + 1 }, (_, degree) => ({ value: String(degree), label: String(degree) })), String(source?.shDegree ?? 0), (v, m) => {
+            const source = m.getSourceMesh();
+            if (source) source.shDegree = Math.min(+v, Reflect.get(source, '_maxShDegree'));
+          })),
+          hint(tr('Harmonic degree controls view-dependent color. Lower degrees reduce cost without deleting source data.')),
+          hint(tr('Kernel size smooths splats. Compensation preserves opacity when smoothing. Minimum pixel size changes small-splat visibility.')),
+        ),
+        section(tr('General'), ...common),
+        hint(tr('Wireframe and double-sided settings describe triangle meshes. Gaussian surfaces need reconstruction for mesh materials and geometry tools.')),
+      ];
+    }
     if (mat instanceof PBRMaterial) {
       const { slider, toggle, colorInput, chips } = forMaterials((m): m is PBRMaterial => m instanceof PBRMaterial);
       const meta = (mat.metadata ??= {});

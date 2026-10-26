@@ -859,6 +859,7 @@ export class UI {
       item(Save, tr('Save project'), 'Ctrl+S', () => this.saveProject()),
       item(Download, tr('Export scene .glb'), '', () => this.exportGLB(false), tr('Original geometry and textures, before optimization. Best for compatibility.')),
       item(Download, tr('Export compact .glb'), '', () => this.exportGLB(true), tr('Uses applied optimizations and compresses geometry. Smaller file; requires a compatible viewer.')),
+      ...(splats ? [item(Download, tr('Export Gaussian .glb'), '', () => this.exportGLB(false, true), tr('Gaussian data for compatible viewers (degrees 0–3). Larger files; save the project for full source data and editor settings.'))] : []),
       h('p', { class: 'hint' }, tr('Compact does not automatically reduce triangles or texture resolution. Apply Optimize first if you want those reductions.')),
       ...(splats ? [h('p', { class: 'hint' }, tr('GLB preserves Gaussian splats in babalon. Other viewers display points. Compact export keeps the splat data unchanged.'))] : []),
       ...(this.installPrompt
@@ -1074,13 +1075,13 @@ export class UI {
   }
 
   /** Compact: optimized models, compressed geometry and textures (smaller file, same look). */
-  private async exportGLB(compact: boolean) {
+  private async exportGLB(compact: boolean, standardSplats = false) {
     await this.run(async () => {
       const activity = this.beginActivity(tr(compact ? 'Preparing compact GLB' : 'Preparing scene GLB'));
       try {
         // Let the browser paint the activity before serialization starts.
         await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
-        const blob = await this.editor.exportGLB(compact);
+        const blob = await this.editor.exportGLB(compact, false, standardSplats);
         const name = timestampedName(compact ? 'scene-compact' : 'scene', 'glb');
         this.deliver(blob, name, tr('Scene exported as {name} ({size})', { name, size: formatBytes(blob.size) }));
       } finally { activity.finish(); }

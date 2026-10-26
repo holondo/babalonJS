@@ -37,6 +37,16 @@ try {
     const ed = window.editor;
     const splat = () => ed.entities.flatMap(e => e.meshes).find(m => m.getClassName().includes('GaussianSplatting'));
     const m = splat();
+    const ui = window.ui;
+    ui.segment.objects = 'material'; ui.openTab('objects');
+    const kernelControl = [...ui.panel.querySelectorAll('.slider')].find(e => e.querySelector('label')?.textContent === 'Kernel size')?.querySelector('input');
+    if (!kernelControl) throw new Error('Gaussian material controls missing');
+    const initialKernel = m.material.kernelSize;
+    kernelControl.value = '0.47'; kernelControl.dispatchEvent(new Event('input', {bubbles:true})); kernelControl.dispatchEvent(new Event('change',{bubbles:true}));
+    if (m.material.kernelSize !== 0.47) throw new Error('Kernel control did not edit the Gaussian material');
+    ed.undo(); if (m.material.kernelSize !== initialKernel) throw new Error('Gaussian control undo failed');
+    ed.redo(); if (m.material.kernelSize !== 0.47) throw new Error('Gaussian control redo failed');
+    ed.undo(); ui.openTab(null);
     const digest = async m => {
       const buffers = [m.splatsData, ...(m.shData ?? []).map(a => a.subarray(0, m.getTotalVertices() * 16))];
       return Promise.all(buffers.map(async data => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', data))).join(',')));
@@ -119,7 +129,42 @@ try {
     while (!reimported._cameraViewInfos.get(camera.uniqueId)?.splatIndexBufferSet && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
     if (!reimported._cameraViewInfos.get(camera.uniqueId)?.splatIndexBufferSet) throw new Error('Splats did not sort for the new AR camera');
     ed.scene.activeCamera = ed.camera; camera.dispose(); ed.invalidate();
-    return { before, after, cost: { splats: cost.splats, triangles: cost.triangles, textureBytes: cost.textureBytes }, zipBytes: zip.size, glbBytes: glb.size, models: models.length, arRestored: true };
+    const standard = await ed.exportGLB(false, false, true);
+    const standardBytes = await standard.arrayBuffer(), view = new DataView(standardBytes);
+    const json = JSON.parse(new TextDecoder().decode(new Uint8Array(standardBytes, 20, view.getUint32(12, true))));
+    if (!json.extensionsUsed.includes('KHR_gaussian_splatting') || json.extensionsUsed.includes('BABALON_gaussian_splatting')) throw new Error('Standard export contains app-specific splat payload');
+    const primitives = json.meshes.flatMap(m => m.primitives).filter(p => p.extensions?.KHR_gaussian_splatting);
+    for (const p of primitives) {
+      const attributes = p.attributes;
+      for (const suffix of ['ROTATION', 'SCALE', 'OPACITY', 'SH_DEGREE_0_COEF_0']) if (attributes[`KHR_gaussian_splatting:${suffix}`] === undefined) throw new Error(`Missing standard ${suffix}`);
+      for (const index of Object.values(attributes)) if (json.accessors[index].count !== before.count) throw new Error('Standard attribute count changed');
+    }
+    const standardFile = new File([standard], 'standard.glb');
+    const expectedStandardPoints = points(ed.entities.flatMap(e => e.meshes));
+    const standardContainer = await ed.loadAsset({id: 1000, name:'Standard GLB', main:standardFile});
+    const actualStandardPoints = points(standardContainer.meshes);
+    if (actualStandardPoints.length !== expectedStandardPoints.length || actualStandardPoints.some((p,i)=>p.some((n,c)=>Math.abs(n-expectedStandardPoints[i][c])>1e-4))) throw new Error('Standard GLB changed world positions');
+    const standardMesh = standardContainer.meshes.find(m => m.getClassName().includes('GaussianSplatting'));
+    if (!standardMesh?.splatsData || standardMesh._maxShDegree !== Math.min(3,before.maxDegree)) throw new Error('Standard import lost retained data or harmonics');
+    // Vite may serve timestamped and direct module URLs as separate class identities.
+    if (standardMesh.constructor.name !== 'EditorSplatMesh') throw new Error('Standard importer bypassed managed lifecycle');
+    standardContainer.dispose();
+    const { registerGLTFExtension } = await import('/node_modules/@babylonjs/loaders/glTF/2.0/glTFLoaderExtensionRegistry.js');
+    const { KHR_gaussian_splatting } = await import('/node_modules/@babylonjs/loaders/glTF/2.0/Extensions/KHR_gaussian_splatting.pure.js');
+    const { createStandardSplatExtension } = await import('/src/core/splatStandardLoader.ts');
+    const observers = new Set(ed.scene.onCameraRemovedObservable.observers);
+    registerGLTFExtension('BABALON_standard_gaussian_loader',false,()=>({name:'BABALON_standard_gaussian_loader',enabled:false,dispose(){}}));
+    registerGLTFExtension('KHR_gaussian_splatting',true,loader=>new KHR_gaussian_splatting(loader));
+    try {
+      const independent = await ed.loadAsset({id:1001,name:'Upstream loader',main:standardFile});
+      const loaded = independent.meshes.filter(m=>m.getClassName().includes('GaussianSplatting'));
+      if (loaded.length !== expectedStandardPoints.length || loaded.some(m=>m.getTotalVertices()!==before.count)) throw new Error('Upstream Gaussian loader could not read the exported file');
+      independent.dispose();
+    } finally {
+      registerGLTFExtension('BABALON_standard_gaussian_loader',false,createStandardSplatExtension);
+      ed.scene.onCameraRemovedObservable.observers.filter(o=>!observers.has(o)).forEach(o=>ed.scene.onCameraRemovedObservable.remove(o));
+    }
+    return { before, after, cost: { splats: cost.splats, triangles: cost.triangles, textureBytes: cost.textureBytes }, zipBytes: zip.size, glbBytes: glb.size, standardGlbBytes:standard.size, models: models.length, arRestored: true };
   });
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ ...result, viewport }));

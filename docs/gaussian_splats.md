@@ -56,12 +56,35 @@ its payload. Consequently compact export may have the same size. It never discar
 harmonics or silently replaces the editor's splats with a reduced representation.
 GLB can be substantially larger than SPZ because SPZ is compressed.
 
-For interoperable Gaussian GLB, implement the ratified
+The separate **Export Gaussian .glb** menu item writes the ratified
 [KHR_gaussian_splatting specification](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_gaussian_splatting):
-export POINTS plus position, normalized quaternion, linear scale, opacity and full SH
-attributes; convert their coordinate/color conventions together; implement its loader;
-then register a glTF-Transform extension that owns every accessor and buffer view.
-Validate with an independent renderer before advertising cross-viewer compatibility.
+POINTS with position, normalized xyzw quaternion, positive linear scale, opacity and
+complete SH bands through degree 3 in `srgb_rec709_display`. X reflections transform
+centers, quaternion and odd-in-X harmonic coefficients together. The exporter retains
+COLOR_0 for viewers that do not implement Gaussian rendering. Standard export is an
+explicit exchange conversion, not the default project archive: opacity incorporates
+the material alpha; editor-specific smoothing settings and any degree-4 source band
+remain in the project/original asset. Compact export is not offered for this path.
+
+Standard attributes use uncompressed floats and can be substantially larger: the
+two-instance real-scan regression exports approximately 187 MB versus 40 MB using the
+app extension. Identical in-memory source references share attributes; separately
+decoded buffers are separate payloads. No extra standard payload is added to ordinary
+scene/compact exports or native AR transfers.
+
+The standard importer uses the managed mesh lifecycle and validates required
+attributes, finite values, counts, opacity, scale and complete harmonic bands. It
+currently supports the ellipse/sRGB variant, not the linear color-space variant.
+Babylon's retained representation quantizes color/quaternions/SH to bytes, so external
+float data can lose precision and SH outside its representable range is clamped.
+The original GLB remains the source asset in projects. A higher-precision GPU/CPU path
+is needed for exact floating-point interchange.
+
+The specification leaves negative-scale/sheared node transforms undefined; the file
+retains such transforms but cannot promise their appearance in other renderers.
+Interchange for those scenes needs covariance decomposition and transformed SH before
+flattening to positive TRS. The regression checks both app and upstream Babylon
+importers and compares rendered pixels with the SPZ, not a second rendering engine.
 
 ## Tools: keep available, implement the correct representation
 
@@ -76,13 +99,36 @@ not claims that the existing triangle operations support splats:
 | Boolean, fuse, connect, shrinkwrap | Splats do not define a watertight surface. | Offer explicit surface reconstruction (density field/isosurface, cleanup, normals and color baking), then reuse mesh operations. For splat-domain clipping, test covariance/opacity against the chosen volume and preserve undo. |
 | Triangle optimization and LOD | Triangle decimation does not reduce Gaussian count. | Add explicit spatial clustering/pruning or a splat-aware LOD hierarchy; retain covariance, opacity and SH; compare rendered error before applying. |
 | Rigging and posing | Billboard indices are not a character's skin surface. | Rig an explicit reconstructed proxy, transfer weights to splat centers, and deform centers plus covariance/orientations; specify how SH rotates with the deformation. |
-| Materials and relighting | PBR textures, roughness, wireframe and double-sided controls do not have equivalent scan semantics. | Expose Gaussian kernel/opacity/compensation/SH controls; implement relighting with normals or an explicit proxy, without replacing the splat material with PBR. |
+| Materials and relighting | Objects → Material exposes Gaussian kernel, opacity compensation, minimum pixel size and harmonic degree with undo/persistence. Existing wireframe/double-sided controls remain available with an explanation. PBR controls do not have equivalent scan semantics. | Implement relighting with normals or an explicit proxy, without replacing the splat material with PBR. |
 | Multiple overlapping splat objects | Independent objects sort their own splats; overlap can be order-dependent. | Use Babylon compound splats with global sorting and maintain per-part transforms, selection, undo and serialization. |
 | Performance | GPU textures and splat counts are reported separately from real mesh triangles. Counts are a coarse budget estimate. | Add calibrated device budgets, CPU/worker memory estimates and shared GPU data where supported. Keep quality reduction opt-in. |
 
 ## AR
 
 ### Browser WebXR
+
+Splats are typically more expensive than an opaque GLB surface in mobile AR: the
+camera moves continuously, sorting feeds new index buffers to the GPU, overlapping
+transparent ellipses repeatedly shade/blend the same pixels, and higher harmonic
+degrees add view-dependent color work. ARCore tracking and camera composition share
+the device's frame budget. This does not mean every GLB is cheaper than every scan.
+
+`EditorSplatMesh` reuses the current depth order during pure camera translation in
+Babylon 9.30's counting-sort path. Its worker computes
+`dot(cameraForward, worldPoint - cameraPosition)`: translating the camera adds one
+constant to every depth, leaving their relative order unchanged. Only the stored
+camera-translation dirty marker is advanced. Rotation, object/part transforms,
+active-range changes, forced requests and a new camera's first sort retain their
+existing invalidation. The optimization does not change resolution, harmonic degree
+or source records. The legacy comparison-sort path remains untouched.
+
+AR options include **Faster splats**, off by default. This explicitly selects degree-0
+color and discards projected splats smaller than two pixels (or the object's existing
+larger threshold). It trades view-dependent color and tiny details for GPU work.
+Turning it off or exiting restores original degrees and material thresholds, including
+when depth occlusion swaps temporary materials in either direction. No source bytes
+or saved project quality settings are changed. AR label layout reads are also skipped
+when there are no measurements to project.
 
 WebXR retains Babylon's Gaussian renderer. It needs per-camera sort state, so test
 camera changes and returning to the editor. Optional depth occlusion clones materials:
@@ -112,6 +158,14 @@ an independent tracking session. Alternatively, use a WebXR-capable browser on a
 device that supports it. Surface reconstruction is an explicit visual conversion,
 not an automatic replacement for the scan.
 
+SceneView's newer source now includes an anisotropic
+[SplatNode](https://github.com/sceneview/sceneview/blob/main/sceneview/src/main/java/io/github/sceneview/node/SplatNode.kt)
+and [Filament material](https://github.com/sceneview/sceneview/blob/main/sceneview/src/main/materials/splat.mat).
+These are a possible porting foundation, not part of the pinned 2.2.1 dependency.
+Porting needs a material compiled for the exact Filament runtime, full harmonic
+handling and the existing anchor/depth/capture/lifecycle integration. An upgrade to
+the newer SceneView API is a separate migration, not a drop-in import.
+
 ## Verification
 
 Run `npm run build`, `node scripts/check-lazy-cache.mjs` and
@@ -130,6 +184,19 @@ transforms, mixed scenes, compact preservation, cost reporting and simulated AR
 material/state restoration. `scripts/fixtures/splat-import.html` checks shader
 registration and all lighting presets without requiring a scan file.
 
+`node scripts/check-splat-ar-performance.mjs` simulates tracked camera poses through
+the real renderer and sort worker. With the supplied 370,018-splat scan, 45 translation
+frames trigger 44 sorts before reuse versus zero after; 44 rotation sorts still run.
+The rendered translation comparison differs by 0.0002 on the 0–255 channel scale.
+It checks new-camera/transform invalidation, the real HUD toggle and quality restoration
+across depth toggles and session exit. This is CPU/upload-work evidence, not a physical
+phone FPS benchmark: the headless desktop already reaches its refresh-rate cap in
+both cases. Measure actual Android PWA FPS with the option off and on after deployment.
+
+The browser regression also exercises a Gaussian material slider through DOM events
+with undo/redo, exports the standard attributes and opens the file with both the
+managed importer and Babylon's separate upstream extension implementation.
+
 Selection uses gold bounding-box edges for Gaussian splats. Babylon 9.30's generic
 selection-mask shader does not decode Gaussian centers/covariance/opacity: it draws
 hundreds of thousands of overlapping billboard quads and stalls the GPU. Ordinary
@@ -143,6 +210,10 @@ billboard geometry with a triangle-mesh selection shader.
 reopen/orbit/select/move cycles, asserting stable GPU texture, camera-observer and worker counts,
 selection/clean-view behavior and movement below 50 ms/frame on the test desktop.
 Set `BABALON_TEST_PHONE=1` for the 375×812 viewport (not physical device performance).
+Set `BABALON_TEST_STANDARD=1` to run these reopen/movement checks on an exported
+standard Gaussian GLB. The same flag makes the appearance comparison use standard
+GLB versus the live original; the 370,018-splat scan differs by less than 0.07 on the
+0–255 channel scale across the five tested angles.
 It delays a real sort submission by 1.8 seconds and checks that its result wakes the
 idle renderer. The supplied 370,018-splat scan stays at 21 cached textures and two
 camera observers through these cycles (previously 26→71 textures and 2→8 observers).

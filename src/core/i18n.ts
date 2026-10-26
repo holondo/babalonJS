@@ -48,6 +48,19 @@ export function tr(key: string, vars?: Record<string, string | number>) {
 }
 
 const PT: Record<string, string> = {
+  'Faster splats': 'Splats mais rápidos',
+  'Uses base color and skips splats smaller than 2 pixels. Changes appearance only in this AR session; turn off to restore full detail.': 'Usa a cor base e ignora splats menores que 2 pixels. Altera a aparência apenas nesta sessão de AR; desligue para restaurar todos os detalhes.',
+  'Unsupported Gaussian kernel or color space.': 'Kernel ou espaço de cor Gaussian não suportado.',
+  'Harmonic degree': 'Grau harmônico',
+  'Kernel size': 'Tamanho do kernel',
+  'Opacity compensation': 'Compensação de opacidade',
+  'Minimum pixel size': 'Tamanho mínimo em pixels',
+  'Harmonic degree controls view-dependent color. Lower degrees reduce cost without deleting source data.': 'O grau harmônico controla a cor dependente da visão. Graus menores reduzem o custo sem excluir os dados originais.',
+  'Kernel size smooths splats. Compensation preserves opacity when smoothing. Minimum pixel size changes small-splat visibility.': 'O tamanho do kernel suaviza os splats. A compensação preserva a opacidade na suavização. O tamanho mínimo em pixels altera a visibilidade de splats pequenos.',
+  'Wireframe and double-sided settings describe triangle meshes. Gaussian surfaces need reconstruction for mesh materials and geometry tools.': 'Aramado e dupla face descrevem malhas triangulares. Superfícies Gaussian precisam de reconstrução para materiais de malha e ferramentas geométricas.',
+  'Export Gaussian .glb': 'Exportar Gaussian .glb',
+  'Gaussian data for compatible viewers (degrees 0–3). Larger files; save the project for full source data and editor settings.': 'Dados Gaussian para visualizadores compatíveis (graus 0–3). Arquivos maiores; salve o projeto para preservar todos os dados originais e ajustes do editor.',
+  'Invalid Gaussian data. Check attributes and harmonic bands.': 'Dados Gaussian inválidos. Verifique os atributos e as bandas harmônicas.',
   'Gaussian splats': 'Gaussian splats',
   'Triangle optimization does not reduce Gaussian splats.': 'A otimização de triângulos não reduz Gaussian splats.',
   'Native AR uses a point-cloud preview for Gaussian splats. The editor keeps the original appearance.': 'O AR nativo usa uma prévia em nuvem de pontos para Gaussian splats. O editor mantém a aparência original.',

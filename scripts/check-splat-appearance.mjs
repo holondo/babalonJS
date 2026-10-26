@@ -23,19 +23,27 @@ try {
     await ui.loadSnapshot(await loadProject(ui.projectId), ui.projectId);
     window.editor.select(window.editor.entities.find(e => e.kind === 'model'));
   });
-  await page.evaluate(async () => {
+  await page.evaluate(async (standard) => {
     const ed = window.editor, entity = ed.selected;
-    const original = entity.source.container.meshes.find(m => m.getClassName().includes('GaussianSplatting'));
+    let original = entity.source.container.meshes.find(m => m.getClassName().includes('GaussianSplatting'));
     const instance = entity.meshes[0];
-    entity.source.container.addAllToScene();
-    original.parent = instance.parent;
+    if (standard) {
+      const file = new File([await ed.exportGLB(false, false, true)], 'standard.glb');
+      const container = await ed.loadAsset({ id: 1000, name: 'Standard comparison', main: file });
+      container.addAllToScene();
+      original = container.meshes.find(m => m.getClassName().includes('GaussianSplatting'));
+      window.standardComparisonContainer = container;
+    } else {
+      entity.source.container.addAllToScene();
+      original.parent = instance.parent;
+    }
     original.setEnabled(false);
     window.splatComparison = { original, instance };
     document.body.classList.add('ui-hidden');
     ed.setPhotoMode(true); ed.setShadowsEnabled(false);
     ed.cameraTween = null;
     await ed.scene.whenReadyAsync();
-  });
+  }, !!process.env.BABALON_TEST_STANDARD);
   const comparisons = [], images = [];
   for (const angle of [-2.4, -1.2, 0, 1.2, 2.4]) {
     const pair = [];
