@@ -364,6 +364,7 @@ export class ARMode {
     this.virtual = false;
     this.baseEnvIntensity = this.editor.env.intensity;
     this.editor.setShadowsEnabled(false);
+    this.setSplatPerformance(this.hasSplats);
     this.active = true;
     this.changed.notifyObservers();
     try {

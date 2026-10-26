@@ -143,7 +143,7 @@ export class ARHud {
       toggle(tr('Camera background'), !ar.virtual, (v) => ar.setVirtual(!v)),
       ...(ar.hasSplats ? [
         toggle(tr('Faster splats'), ar.splatPerformance, (on: boolean) => ar.setSplatPerformance(on)),
-        h('p', { class: 'ar-note' }, tr('Uses base color and skips splats smaller than 2 pixels. Changes appearance only in this AR session; turn off to restore full detail.')),
+        h('p', { class: 'ar-note' }, tr('Enabled by default in AR: uses base color and skips splats smaller than 2 pixels. Turn off to restore full detail. Editor settings are restored when you exit.')),
       ] : []),
       ar.virtual ? h('p', { class: 'ar-note' }, tr('Virtual AR: walk around the scene in its own environment.')) : null,
       h('h4', {}, tr('Lighting')),

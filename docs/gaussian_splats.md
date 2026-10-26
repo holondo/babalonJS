@@ -122,12 +122,15 @@ active-range changes, forced requests and a new camera's first sort retain their
 existing invalidation. The optimization does not change resolution, harmonic degree
 or source records. The legacy comparison-sort path remains untouched.
 
-AR options include **Faster splats**, off by default. This explicitly selects degree-0
+AR options include **Faster splats**, enabled by default for splat scenes at the user's
+request. This selects degree-0
 color and discards projected splats smaller than two pixels (or the object's existing
 larger threshold). It trades view-dependent color and tiny details for GPU work.
 Turning it off or exiting restores original degrees and material thresholds, including
 when depth occlusion swaps temporary materials in either direction. No source bytes
-or saved project quality settings are changed. AR label layout reads are also skipped
+or saved project quality settings are changed. Full detail remains an explicit session
+choice by switching this option off. Shadows and room lighting remain opt-in.
+AR label layout reads are also skipped
 when there are no measurements to project.
 
 WebXR retains Babylon's Gaussian renderer. It needs per-camera sort state, so test

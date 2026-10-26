@@ -49,7 +49,7 @@ export function tr(key: string, vars?: Record<string, string | number>) {
 
 const PT: Record<string, string> = {
   'Faster splats': 'Splats mais rápidos',
-  'Uses base color and skips splats smaller than 2 pixels. Changes appearance only in this AR session; turn off to restore full detail.': 'Usa a cor base e ignora splats menores que 2 pixels. Altera a aparência apenas nesta sessão de AR; desligue para restaurar todos os detalhes.',
+  'Enabled by default in AR: uses base color and skips splats smaller than 2 pixels. Turn off to restore full detail. Editor settings are restored when you exit.': 'Ativado por padrão no AR: usa a cor base e ignora splats menores que 2 pixels. Desligue para restaurar todos os detalhes. Os ajustes do editor são restaurados ao sair.',
   'Unsupported Gaussian kernel or color space.': 'Kernel ou espaço de cor Gaussian não suportado.',
   'Harmonic degree': 'Grau harmônico',
   'Kernel size': 'Tamanho do kernel',

@@ -43,7 +43,14 @@ try {
     const start = camera.position.clone();
     const baseline = snapshot(ed, 'AR').json;
     const ar = new ARMode(ed);
-    ed.setARMode(true); ar.wrapScene(); ar.active = true; ar.anchor.setEnabled(true);
+    // Run the real entry path; only the platform XR session is simulated.
+    ar.xr = { baseExperience: {
+      featuresManager: { attachFeature() {}, detachFeature() {} },
+      sessionManager: { session: {} }, enterXRAsync: async () => {},
+    } };
+    await ar.enter(document.createElement('div'));
+    if (!ar.splatPerformance || mesh.shDegree !== 0 || mesh.material.minPixelSize < 2 || ar.shadows || ar.occlusion || ar.depthRequested) throw new Error('AR did not start with the cheapest splat settings');
+    ar.setSplatPerformance(false); ar.anchor.setEnabled(true);
     ed.scene.activeCamera = camera;
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const settle = async () => {
@@ -119,7 +126,7 @@ try {
     if (ar.splatPerformance || mesh.material !== originalMaterial || mesh.shDegree !== originalDegree || originalMaterial.minPixelSize !== originalMin) throw new Error('Exit changed Gaussian quality');
     const final = snapshot(ed, 'AR').json;
     if (JSON.stringify(baseline.entities) !== JSON.stringify(final.entities) || JSON.stringify(baseline.env) !== JSON.stringify(final.env)) throw new Error('AR performance settings changed the project');
-    return { splats: mesh.getTotalVertices(), before, after, rotation, meanPixelDifference: +difference.toFixed(4), qualityRestored: true };
+    return { splats: mesh.getTotalVertices(), fastDefault: true, before, after, rotation, meanPixelDifference: +difference.toFixed(4), qualityRestored: true };
   });
   assert.deepEqual(errors, []);
   console.log(JSON.stringify(result));
