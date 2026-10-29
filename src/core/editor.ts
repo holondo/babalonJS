@@ -2314,9 +2314,9 @@ export class Editor {
    * The scene as a GLB. Compact: optimized geometry and textures where the user optimized,
    * meshopt-compressed (loaded on demand); otherwise the original models, as they were loaded.
    */
-  async exportGLB(compact = false, forAR = false, standardSplats = false): Promise<Blob> {
+  async exportGLB(compact = false, forAR = false, standardSplats = false, omitSplats = false): Promise<Blob> {
     const hasSplats = this.entities.some(e => e.visible && e.meshes.some(isSplat));
-    const splatExport = hasSplats ? await import('./splatGltf') : null;
+    const splatExport = hasSplats && !omitSplats ? await import('./splatGltf') : null;
     // Load dependencies before changing the scene: an offline chunk failure must
     // leave previews, textures and transforms untouched.
     const [{ affineExport }, { nativeAnimationName }, { GLTF2Export }] = await Promise.all([

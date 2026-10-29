@@ -283,19 +283,6 @@
                         android:textSize="13sp" />
 
                     <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/btnTogglePerformance"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:layout_marginEnd="8dp"
-                        android:background="@drawable/bg_ar_chip_inactive"
-                        android:minWidth="0dp"
-                        android:minHeight="0dp"
-                        tools:text="Performance mode"
-                        android:textAllCaps="false"
-                        android:textColor="#FFFFFF"
-                        android:textSize="13sp" />
-
-                    <androidx.appcompat.widget.AppCompatButton
                         android:id="@+id/btnToggleFps"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
@@ -307,6 +294,29 @@
                         android:textColor="#FFFFFF"
                         android:textSize="13sp" />
                 </LinearLayout>
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/btnTogglePerformance"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_ar_chip_inactive"
+                    android:minHeight="36dp"
+                    tools:text="AR resolution: 50%"
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp" />
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/btnSplatBudget"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_ar_chip_inactive"
+                    android:minHeight="36dp"
+                    tools:text="Active splat budget: 30k"
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <!-- Centered Hint Pill (Cleanly separated below header buttons) -->

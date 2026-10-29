@@ -59,6 +59,8 @@ import kotlin.math.sqrt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 class ArActivity : AppCompatActivity() {
@@ -74,6 +76,11 @@ class ArActivity : AppCompatActivity() {
     private fun tr(text: String) = translations.optString(text, text)
 
     private var modelNode: ModelNode? = null
+    private var splatNode: NativeSplatNode? = null
+    private var splatBudget = 30000
+    private var resolutionScale = 0.5f
+    private val cameraView = FloatArray(16)
+    private val cameraProjection = FloatArray(16)
     private var modelLoad: Job? = null
     private var anchorNode: AnchorNode? = null
     private var isPlaced = false
@@ -100,8 +107,6 @@ class ArActivity : AppCompatActivity() {
     private var isOptionsOpen = false
     private var showFps = false
     private var shadowsEnabled = false
-    /** Opt-in: lets Filament lower the render resolution under load. Off keeps native resolution. */
-    private var performanceMode = false
 
     /** Below Android 10 captures stay in the app cache (shared via FileProvider), not in the gallery. */
     private fun captureSavedMessage(video: Boolean) = when {
@@ -112,13 +117,18 @@ class ArActivity : AppCompatActivity() {
 
     private fun applyPerformanceMode() {
         binding.sceneView.view.dynamicResolutionOptions = FilamentView.DynamicResolutionOptions().apply {
-            enabled = performanceMode
+            enabled = resolutionScale < 1f
             homogeneousScaling = true
             quality = FilamentView.QualityLevel.MEDIUM
-            minScale = 0.65f
-            maxScale = 1.0f
+            minScale = resolutionScale
+            maxScale = resolutionScale
             sharpness = 0.8f
         }
+    }
+
+    private fun updateSplatOptions() {
+        binding.btnTogglePerformance.text = "${tr("AR resolution")}: ${(resolutionScale * 100).toInt()}%"
+        binding.btnSplatBudget.text = "${tr("Active splat budget")}: ${splatBudget / 1000}k"
     }
 
     /** Whether the GLB's JSON chunk declares KHR_materials_transmission (refraction needs screen-space refraction). */
@@ -267,7 +277,7 @@ class ArActivity : AppCompatActivity() {
         } ?: JSONObject()
 
         val placementObj = intent.getStringExtra("placement")?.let { runCatching { JSONObject(it) }.getOrNull() }
-        currentLightingMode = placementObj?.optString("lighting", "room") ?: "room"
+        currentLightingMode = placementObj?.optString("lighting", "studio") ?: "studio"
         lightIntensityLevel = placementObj?.optDouble("lightLevel", 1.0)?.toFloat() ?: 1.0f
 
         binding.btnExit.contentDescription = tr("Exit AR")
@@ -292,7 +302,7 @@ class ArActivity : AppCompatActivity() {
         binding.tvLightIntensity.text = "${tr("Light intensity")}: ${(lightIntensityLevel * 100f).roundToInt()}%"
         binding.btnToggleShadows.text = tr("Shadows")
         binding.btnToggleFps.text = tr("Show FPS")
-        binding.btnTogglePerformance.text = tr("Performance mode")
+        updateSplatOptions()
         binding.btnScale.text = "1:1"
         binding.sbLightIntensity.max = LIGHT_MAX_PERCENT - LIGHT_MIN_PERCENT
         binding.sbLightIntensity.progress = (lightIntensityLevel * 100f).roundToInt().coerceIn(LIGHT_MIN_PERCENT, LIGHT_MAX_PERCENT) - LIGHT_MIN_PERCENT
@@ -353,12 +363,12 @@ class ArActivity : AppCompatActivity() {
         val placement = intent.getStringExtra("placement")?.let { runCatching { JSONObject(it) }.getOrNull() }
         baseYaw = placement?.optDouble("baseYaw", 0.0)?.toFloat() ?: 0f
 
-        // Full resolution and quality by default; Performance mode (AR options) opts into dynamic resolution.
+        // Explicit native AR defaults: half resolution, no AA, shadows/depth/room estimation opt-in.
         sceneView.view.apply {
             renderQuality = FilamentView.RenderQuality().apply {
-                hdrColorBuffer = FilamentView.QualityLevel.HIGH
+                hdrColorBuffer = FilamentView.QualityLevel.LOW
             }
-            antiAliasing = FilamentView.AntiAliasing.FXAA
+            antiAliasing = FilamentView.AntiAliasing.NONE
             ambientOcclusionOptions = FilamentView.AmbientOcclusionOptions().apply {
                 enabled = false
             }
@@ -377,7 +387,7 @@ class ArActivity : AppCompatActivity() {
             planeRendererMode = PlaneRenderer.PlaneRendererMode.RENDER_CENTER
         }
 
-        // Configure session with Environmental HDR and target 60 FPS camera capture
+        // Room estimation is opt-in. Prefer 60 FPS capture when the device supports it.
         sceneView.sessionConfiguration = { session, config ->
             runCatching {
                 val filter = com.google.ar.core.CameraConfigFilter(session).apply {
@@ -421,8 +431,14 @@ class ArActivity : AppCompatActivity() {
         modelLoad = lifecycleScope.launch {
             val started = SystemClock.elapsedRealtime()
             try {
-                val instance = sceneView.loadScene(File(glbPath))
-                    ?: error(tr("Could not load 3D scene"))
+                val gaussianData = withContext(Dispatchers.Default) { NativeSplatData.load(File(glbPath)) }
+                var meshFile: File? = null
+                val instance = try {
+                    withContext(Dispatchers.Default) { meshFile = NativeSplatData.meshFile(File(glbPath)) }
+                    sceneView.loadScene(meshFile!!) ?: error(tr("Could not load 3D scene"))
+                } finally {
+                    if (meshFile?.absolutePath != glbPath) meshFile?.delete()
+                }
                 val model = ModelNode(instance, autoAnimate = false, scaleToUnits = null, centerOrigin = null)
                 data class Clip(val index: Int, val speed: Float, val loop: Boolean, val duration: Float)
                 val clips = mutableListOf<Clip>()
@@ -460,6 +476,14 @@ class ArActivity : AppCompatActivity() {
                     addChildNode(model)
                     isVisible = false
                     sceneView.addChildNode(this)
+                }
+                gaussianData?.let { data ->
+                    val splats = NativeSplatNode(this@ArActivity, sceneView.engine, data)
+                    splatNode = splats
+                    splats.position = model.position
+                    splats.budget = splatBudget
+                    sceneNode!!.addChildNode(splats)
+                    binding.btnSplatBudget.visibility = View.VISIBLE
                 }
                 // Apply lighting mode once model is loaded
                 applyLightingMode(currentLightingMode)
@@ -526,6 +550,13 @@ class ArActivity : AppCompatActivity() {
                 binding.tvHint.text = if (anchorNode?.trackingState == TrackingState.TRACKING) tr("Drag to turn · pinch to resize") else tr("Recovering the scene position…")
             }
             updateMeasurementLabels()
+            splatNode?.let { splats ->
+                if (tracking == TrackingState.TRACKING) {
+                    frame.camera.getViewMatrix(cameraView, 0)
+                    frame.camera.getProjectionMatrix(cameraProjection, 0, 0.01f, 100f)
+                    splats.update(cameraView, cameraProjection, (sceneView.height * resolutionScale).toInt())
+                }
+            }
         }
 
         // Handle gestures on the composition.
@@ -932,11 +963,15 @@ class ArActivity : AppCompatActivity() {
         }
 
         binding.btnTogglePerformance.setOnClickListener {
-            performanceMode = !performanceMode
-            binding.btnTogglePerformance.setBackgroundResource(if (performanceMode) R.drawable.bg_ar_chip_active else R.drawable.bg_ar_chip_inactive)
-            binding.btnTogglePerformance.setTextColor(if (performanceMode) Color.parseColor("#120D1B") else Color.WHITE)
+            resolutionScale = when (resolutionScale) { 0.5f -> 0.75f; 0.75f -> 1f; else -> 0.5f }
             applyPerformanceMode()
-            if (performanceMode) Toast.makeText(this, tr("Performance mode lowers resolution when the phone is busy"), Toast.LENGTH_SHORT).show()
+            updateSplatOptions()
+        }
+
+        binding.btnSplatBudget.setOnClickListener {
+            splatBudget = when (splatBudget) { 30000 -> 60000; 60000 -> 120000; else -> 30000 }
+            splatNode?.budget = splatBudget
+            updateSplatOptions()
         }
 
         binding.btnToggleFps.setOnClickListener {
@@ -1153,6 +1188,11 @@ class ArActivity : AppCompatActivity() {
     }
 
     private fun releaseSceneContent() {
+        splatNode?.let { node ->
+            sceneNode?.removeChildNode(node)
+            runCatching { node.destroy() }
+        }
+        splatNode = null
         fpsTimerHandler.removeCallbacks(fpsRunnable)
         timerHandler.removeCallbacks(timerRunnable)
         modelLoad?.cancel()

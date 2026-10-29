@@ -3,6 +3,8 @@ import { tr } from '../core/i18n';
 /** Native controls use the same language and dictionary as the editor. */
 export function nativeARStrings() {
   return Object.fromEntries([
+    'AR resolution',
+    'Active splat budget',
     "Camera permission is required for AR",
     "3D model file not found",
     "Loading 3D scene…",

@@ -1,0 +1,77 @@
+// Babalon Gaussian covariance projection. Compile with Filament 1.52.0 matc.
+// Standard 3DGS perspective Jacobian and premultiplied alpha compositing.
+material {
+    name : BabalonGaussian,
+    shadingModel : unlit,
+    blending : transparent,
+    doubleSided : true,
+    depthWrite : false,
+    depthCulling : true,
+    requires : [ position ],
+    variables : [ gaussianUv, gaussianColor ],
+    parameters : [
+        { type : sampler2d, name : centers, precision : high },
+        { type : sampler2d, name : covarianceA, precision : high },
+        { type : sampler2d, name : covarianceB, precision : high },
+        { type : sampler2d, name : colors },
+        { type : sampler2d, name : drawOrder, format : uint, precision : high },
+        { type : int, name : textureWidth }
+    ]
+}
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        int width = materialParams.textureWidth;
+        int slot = int(getPosition().z);
+        int index = int(texelFetch(materialParams_drawOrder, ivec2(slot % width, slot / width), 0).r);
+        ivec2 texel = ivec2(index % width, index / width);
+        highp vec3 local = texelFetch(materialParams_centers, texel, 0).xyz;
+        highp vec4 ca = texelFetch(materialParams_covarianceA, texel, 0);
+        highp vec2 cb = texelFetch(materialParams_covarianceB, texel, 0).xy;
+        vec4 color = texelFetch(materialParams_colors, texel, 0);
+        highp mat3 covariance = mat3(vec3(ca.x, ca.y, ca.z), vec3(ca.y, ca.w, cb.x), vec3(ca.z, cb.x, cb.y));
+        highp vec3 world = mulMat4x4Float3(getWorldFromModelMatrix(), local).xyz;
+        highp mat4 view = getViewFromWorldMatrix();
+        highp mat4 projection = getClipFromViewMatrix();
+        highp vec3 v = mulMat4x4Float3(view, world).xyz;
+        highp float depth = -v.z;
+        highp vec2 focal = vec2(projection[0][0], projection[1][1]) * getResolution().xy * 0.5;
+        vec2 corner = getPosition().xy;
+        vec2 uv = vec2(0.0);
+        highp vec2 pixelOffset = vec2(0.0);
+        if (depth > 0.0001 && color.a > 1.0 / 255.0) {
+            highp mat3 basis = mat3(view) * mat3(getWorldFromModelMatrix());
+            highp vec2 ratio = clamp(v.xy / depth, -1.3 / vec2(projection[0][0], projection[1][1]), 1.3 / vec2(projection[0][0], projection[1][1]));
+            highp vec3 jx = transpose(basis) * vec3(focal.x / depth, 0.0, focal.x * ratio.x / depth);
+            highp vec3 jy = transpose(basis) * vec3(0.0, focal.y / depth, focal.y * ratio.y / depth);
+            highp float a = dot(jx, covariance * jx) + 0.3;
+            highp float b = dot(jx, covariance * jy);
+            highp float c = dot(jy, covariance * jy) + 0.3;
+            highp float mid = (a + c) * 0.5;
+            highp float delta = length(vec2((a - c) * 0.5, b));
+            highp vec2 sigma = sqrt(max(vec2(mid + delta, mid - delta), vec2(0.1)));
+            highp vec2 axis = abs(b) > 1e-9 * (a + c) ? normalize(vec2(b, mid + delta - a)) : (a >= c ? vec2(1.0, 0.0) : vec2(0.0, 1.0));
+            float reach = min(3.0, sqrt(2.0 * log(255.0 * color.a)));
+            uv = corner * min(vec2(reach), 1024.0 / sigma);
+            pixelOffset = uv.x * sigma.x * axis + uv.y * sigma.y * vec2(-axis.y, axis.x);
+        }
+        highp vec2 offset = pixelOffset * max(depth, 0.0001) / focal;
+        highp vec3 right = vec3(view[0][0], view[1][0], view[2][0]);
+        highp vec3 up = vec3(view[0][1], view[1][1], view[2][1]);
+        material.worldPosition = vec4(world + right * offset.x + up * offset.y, 1.0);
+        material.gaussianUv = vec4(uv, 0.0, 0.0);
+        // Gaussian colors are display referred. Undo ARView's Filmic + sRGB curve.
+        vec3 srgb = clamp(color.rgb, 0.0, 1.0);
+        vec3 linear = mix(srgb / 12.92, pow((srgb + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), srgb));
+        vec3 scene = (0.03 - 0.59 * linear - sqrt(0.0009 + 1.3702 * linear - 1.0127 * linear * linear)) / (-5.02 + 4.86 * linear);
+        material.gaussianColor = vec4(scene, color.a);
+    }
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec2 uv = variable_gaussianUv.xy;
+        float alpha = variable_gaussianColor.a * exp(-0.5 * dot(uv, uv));
+        if (alpha < 1.0 / 255.0) discard;
+        material.baseColor = vec4(variable_gaussianColor.rgb * alpha, alpha);
+    }
+}

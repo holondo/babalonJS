@@ -16,7 +16,9 @@ the APK. Do not replace anchored AR with a camera overlay.
 The native path is:
 
 1. `UI.enterAR` suspends Photo's camera, blocks duplicate entry/autosave and exports
-   the visible composition through `Editor.exportGLB(false, true)`.
+   the visible composition through `exportNativeAR`. Ordinary meshes use
+   `Editor.exportGLB(false, true, false, true)`; visible Gaussians get a disposable
+   worker-generated LOD hierarchy in a session-only GLB extension.
 2. It sends the GLB and placement metadata to `AndroidNative.launchArWithData`.
    Metadata includes the bottom-center origin, initial yaw, active animation names,
    playback settings and translated HUD strings.
@@ -28,6 +30,62 @@ The native path is:
    session copy; native manipulation does not write transforms back to the editor.
 5. Returning emits the closing bridge event, removes the cache file and restores
    the editor's camera ownership and autosave scheduling.
+
+## Gaussian rendering and fast defaults
+
+`NativeSplatData` decodes the temporary hierarchy on a background dispatcher and
+bakes each object's affine transform into composition-space centers and covariance.
+`NativeSplatNode` renders Gaussian ellipses on the same Filament surface as models
+and the AR camera. It follows the composition anchor and origin offset; there is no
+second WebView/camera overlay. Existing PixelCopy photos and mirrored videos include
+this draw without a separate composition step (physical capture acceptance pending).
+
+The session defaults to 30k globally active splats and fixed 0.5 render scale.
+Options cycle 30k/60k/120k and 0.5/0.75/1.0 immediately. Filament dynamic-resolution
+min/max are equal to the chosen scale; Android UI and the camera input remain
+independent. FXAA, ambient occlusion, bloom, shadows, depth and environmental HDR
+estimation are off by default. Studio lighting is the initial ordinary-mesh preset;
+Gaussian base color is unlit. Original project assets and transforms are unchanged.
+
+`SplatLod` traverses all roots under one budget, conservatively culls the camera
+frustum and sorts selected representatives by view-space depth, off the UI thread.
+Traversal/sort workspace is reused and updates are throttled to 150 ms. Only changed
+selected-index rows are uploaded to the GPU. Source attributes stay in static float
+textures. Cancellation/generation guards prevent uploads after teardown or a budget
+change; app-owned renderables, materials and textures are destroyed before the engine.
+
+The material is checked in with its source, compiled for the pinned Filament ABI 52.
+To regenerate, download the official **Filament 1.52.0** desktop tools, set
+`FILAMENT_MATC` to that `matc` executable and run:
+
+```sh
+node scripts/build-native-splat-material.mjs
+```
+
+Do not replace it with a material compiled by a newer Filament version. Native fast
+rendering intentionally uses SH0; see `gaussian_splats.md` for remaining fidelity and
+mixed-transparency limitations. Generic point-cloud GLB export is separate from this
+session renderer.
+
+Focused checks:
+
+```sh
+node scripts/check-native-splat-browser.mjs
+cd android
+./gradlew :app:testDistributionDebugUnitTest
+./gradlew :app:assembleDistributionDebug :app:assembleDistributionDebugAndroidTest -PnativeTestAbi=x86_64
+```
+
+The JavaScript check accepts `BABALON_TEST_SPZ`, `BABALON_TEST_URL`,
+`BABALON_PLAYWRIGHT_PATH` and optional output `BABALON_NATIVE_GLB`. For mixed-scene
+checks also set `BABALON_NATIVE_MIXED=1`. Push the resulting GLB to a readable device
+path and run `NativeSplatRenderTest` with instrumentation argument `glbPath`.
+The x86_64 Gradle option is for local emulator checks; omit it for ARM phone APKs.
+The local SwiftShader emulator renders raw Gaussian targets correctly, but stock
+SceneView post processing produces white even before Gaussian material creation.
+That surface acceptance test is skipped on this failing emulator baseline; it must
+pass on a physical device before claiming photo/color parity. No mobile FPS claim
+is made from emulator results.
 
 The integration uses Kotlin 2.0.21 and Java/Kotlin JVM target 17. SceneView 2.2.1
 resolves ARCore SDK 1.43.0; the device's Google Play Services for AR is a separate

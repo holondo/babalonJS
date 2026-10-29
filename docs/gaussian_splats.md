@@ -193,27 +193,39 @@ tracking, live environment depth, camera permissions or device performance.
 
 ### Installed Android application
 
-The installed app uses ARCore + SceneView/Filament, not Babylon's WebXR renderer.
-Its GLB path now receives actual point data instead of invalid billboard geometry,
-but **Filament does not gain a Gaussian renderer from the app extension**. The generic
-fallback is a point cloud; actual device rendering still needs verification. Installing
-the JavaScript changes alone does not enable full Gaussian appearance in native AR.
+The installed app uses ARCore + SceneView 2.2.1 / Filament 1.52.0, with an app-owned
+anisotropic Gaussian renderer. It draws projected covariance ellipses with Gaussian
+falloff, premultiplied transparency, and one globally sorted draw alongside ordinary
+glTF meshes. It uses the existing ARCore camera, scene anchor and capture surface.
 
-For full native fidelity, implement a Filament Gaussian renderer or a dedicated
-transparent Babylon rendering surface synchronized with the ARCore camera projection,
-pose, anchors and depth. Preserve shared tracking coordinates, global splat sorting,
-context lifecycle and capture composition. Avoid creating a second camera capture or
-an independent tracking session. Alternatively, use a WebXR-capable browser on a
-device that supports it. Surface reconstruction is an explicit visual conversion,
-not an automatic replacement for the scan.
+`exportNativeAR` builds a disposable hierarchy in a JavaScript worker and appends a
+`BABALON_ar_gaussian_lod` session extension to the mesh-only GLB. The original SPZ,
+packed records, harmonics and saved editor state remain unchanged. Positions and
+covariance are transformed into glTF coordinates, including reflection and affine
+object transforms. Around 131,072 fine representatives are shared across visible
+instances, bounding atlas memory as well as draw count. The native glTF loader gets
+a separate mesh-only cache file so it does not retain a redundant Gaussian atlas.
 
-SceneView's newer source now includes an anisotropic
-[SplatNode](https://github.com/sceneview/sceneview/blob/main/sceneview/src/main/java/io/github/sceneview/node/SplatNode.kt)
-and [Filament material](https://github.com/sceneview/sceneview/blob/main/sceneview/src/main/materials/splat.mat).
-These are a possible porting foundation, not part of the pinned 2.2.1 dependency.
-Porting needs a material compiled for the exact Filament runtime, full harmonic
-handling and the existing anchor/depth/capture/lifecycle integration. An upgrade to
-the newer SceneView API is a separate migration, not a drop-in import.
+Native defaults: spatial LOD, a **30,000 global active budget**, **50% linear render
+resolution**, no FXAA, and shadows, depth and room-light estimation off. AR options
+cycle budgets 30k/60k/120k and resolutions 50%/75%/100% immediately; Android controls
+retain their resolution. Camera-dependent traversal and depth sorting run at most
+every 150 ms on a background dispatcher, reusing scratch arrays. Only changed draw
+indices are uploaded; static covariance/position/color textures stay resident.
+
+Native fast rendering uses base color (SH degree zero) and the current Gaussian
+pose. Original higher harmonics, material kernel controls and Gaussian motion are
+preserved in the editor but are not evaluated by the native session renderer.
+Increasing the budget/resolution does not enable those missing features. Their
+solution is SH texture evaluation, native material parameters and animated instance
+transforms; ordinary glTF skeletal animations retain their existing path. Transparent
+glTF meshes and Gaussians do not share a per-primitive interleaved sort. Gaussian
+shadow casting also needs a dedicated opacity-aware shadow pass; enabling mesh
+shadows does not make Gaussians cast shadows.
+
+Rebuild and install the APK to update native code. A PWA update cannot install a
+Filament material or Android renderer. See [native AR](android_ar.md) for checks and
+the exact material compilation command.
 
 ## Verification
 
@@ -291,4 +303,9 @@ discard harmonics to hide sparse or incomplete regions of a scan.
 
 On a physical Android device, test native AR entry/exit, placement, scale, every
 lighting preset, optional shadows/depth, background/resume, photo/video and repeated
-sessions. Confirm both the fallback's appearance and the editor's restoration.
+sessions. Confirm Gaussian appearance and the editor's restoration. The emulator
+checks verify real SPZ session decoding, traversal, sorting, anisotropic GLES draws
+and resource release. They do not establish physical tracking, depth, capture color
+or FPS; the stock SceneView post-process baseline is white on the local SwiftShader
+emulator, so its surface/color acceptance test is skipped there before creating any
+Gaussian material.

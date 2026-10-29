@@ -42,7 +42,14 @@ android {
         abi {
             enable true
             reset()
-            include 'armeabi-v7a', 'arm64-v8a'
+            // A local emulator check may opt into x86_64; phone/release builds keep ARM splits.
+            def testAbi = providers.gradleProperty('nativeTestAbi').orNull
+            if (testAbi != null) {
+                if (testAbi != 'x86_64') throw new GradleException('nativeTestAbi must be x86_64')
+                include testAbi
+            } else {
+                include 'armeabi-v7a', 'arm64-v8a'
+            }
             universalApk false
         }
     }
@@ -77,7 +84,7 @@ android {
     }
 }
 
-def abiVersionCodes = ['armeabi-v7a': 1, 'arm64-v8a': 2]
+def abiVersionCodes = ['armeabi-v7a': 1, 'arm64-v8a': 2, 'x86_64': 3]
 android.applicationVariants.all { variant ->
     variant.outputs.each { output ->
         def abi = output.getFilter(com.android.build.OutputFile.ABI)

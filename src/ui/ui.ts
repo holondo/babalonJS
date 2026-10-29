@@ -458,11 +458,11 @@ export class UI {
       const nativeBridge = (window as unknown as { AndroidNative?: NativeBridge }).AndroidNative;
       try {
         if (!nativeBridge) throw new Error(tr('Native AR bridge unavailable'));
-        if (this.editor.entities.some(e => e.visible && e.meshes.some(isSplat))) this.toast(tr('Native AR uses a point-cloud preview for Gaussian splats. The editor keeps the original appearance.'), 'info', undefined, 9000);
         const restoreModels = await this.prepareLightAR();
         let blob: Blob | null;
         try {
-          blob = await this.editor.exportGLB(false, true);
+          const { exportNativeAR } = await import('../ar/nativeSplats');
+          blob = await exportNativeAR(this.editor);
         } finally {
           // Native AR uses the exported copy; restore the editor immediately,
           // including when export fails.
@@ -485,7 +485,7 @@ export class UI {
             const clip = this.editor.anim.current(e)!;
             return { name: nativeAnimationName(e), speed: clip.speedRatio, loop: clip.loopAnimation };
           }),
-          lighting: 'room',
+          lighting: 'studio',
           lightLevel: this.editor.env.intensity || 1.0,
         });
 

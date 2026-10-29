@@ -10,6 +10,12 @@
   <a href="https://holondo.github.io/babalonJS/">
     <img src="https://img.shields.io/badge/Abrir%20Web%20App-BabalonJS-F3C239?style=for-the-badge&logo=googlechrome&logoColor=120D1B&labelColor=120D1B" alt="Abrir Web App" />
   </a>
+  <a href="https://github.com/sponsors/holondo">
+    <img src="https://img.shields.io/badge/Apoiar-GitHub%20Sponsors-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white&labelColor=120D1B" alt="GitHub Sponsors" />
+  </a>
+  <a href="https://buymeacoffee.com/holondo">
+    <img src="https://img.shields.io/badge/Apoiar-Buy%20Me%20a%20Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=120D1B&labelColor=120D1B" alt="Buy Me a Coffee" />
+  </a>
 </p>
 
 Editor de cenas 3D simples e amigável ao toque, feito com [Babylon.js](https://www.babylonjs.com/).
