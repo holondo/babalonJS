@@ -35,6 +35,13 @@ export function shapeMuscle(meshes: AnatomyMesh[], id: MuscleId, shape: MuscleSh
       const sample = Math.max(0, Math.min(1, u - (shape.fullness + (shape.peakOffset ?? 0)) * w));
       const profile = Math.sqrt(Math.max(.08, priorityProfile(template, sample)));
       const factor = (1 + shape.profile * (profile - .8) * .6 + shape.activation * .25 * Math.sin(Math.PI * u) ** 2) * Math.exp(shape.fullness * (u - .5));
+      let bellyFactor = 1;
+      if (shape.bellySpan) {
+        const t = Math.max(0, Math.min(1, (u - shape.bellySpan[0]) / (shape.bellySpan[1] - shape.bellySpan[0])));
+        const neutral = .35 + .65 * Math.sin(Math.PI * u) ** .7;
+        const desired = .35 + .65 * Math.sin(Math.PI * t) ** .7;
+        bellyFactor = Math.max(.6, Math.min(1.45, Math.sqrt(desired / neutral)));
+      }
       const portion = mesh.anatomicalName?.includes('_stern_') ? 1 + shape.balance * .3 : mesh.anatomicalName?.includes('_cost_') ? 1 - shape.balance * .3 : 1;
       // Rectus width grows laterally from each row's medial edge. Separation
       // belongs to rectGap, not to the centroid or the genetic volume solve.
@@ -43,8 +50,8 @@ export function shapeMuscle(meshes: AnatomyMesh[], id: MuscleId, shape: MuscleSh
         const cols = mesh.surfaceGrid.cols + 1, row = Math.floor((i / 3 % mesh.shellPairs) / cols), a = row * cols * 3, b = (row * cols + mesh.shellPairs) * 3;
         widthCenter = (source[a] + source[b]) * .5;
       }
-      mesh.positions[i] = widthCenter + (source[i] - widthCenter) * (1 + w * (shape.width * factor - 1));
-      mesh.positions[i + 2] = cz + (source[i + 2] - cz) * (1 + w * (axialDepth / factor * portion - 1));
+      mesh.positions[i] = widthCenter + (source[i] - widthCenter) * (1 + w * (shape.width * factor * bellyFactor - 1));
+      mesh.positions[i + 2] = cz + (source[i + 2] - cz) * (1 + w * (axialDepth / factor * portion * bellyFactor - 1));
     }
     shapeSections(mesh, shape, template === 'rectus_abdominis',
       p.abdominalModel === 1 ? shape.fittedWidthProfile : undefined, low, length);

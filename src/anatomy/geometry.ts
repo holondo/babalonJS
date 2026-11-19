@@ -13,7 +13,7 @@ import { backMeshTemplate, posteriorMuscles } from './muscleGroups';
 import { anatomySupportCache, supportParameterKey, supportMeshBytes } from './supportCache';
 const PI = Math.PI;
 const HUMAN_REST = defaults;
-let LEGACY_SKIN_CACHE = null, HUMAN_BIND_ROWS = null, HUMAN_BIND_PROFILE = null;
+let LEGACY_SKIN_CACHE = null, HUMAN_BIND_ROWS = null, HUMAN_UNBIND_ROWS = null, HUMAN_BIND_PROFILE = null;
 const HUMAN_INGUINAL_CACHE = new WeakMap();
 function pelvicLoftDistance(section, x, z) { let center = mix(section.centerBack, section.centerFront, smooth(-.35, .55, z)), eps = .0001 + .025 * smooth(.05, .25, center), c = Math.hypot(center, eps), rx = Math.max(.18, Math.hypot(section.outer, eps) - c), rz = z >= section.z ? section.front : section.back, qx = (Math.hypot(x, eps) - c) / rx, qz = (z - section.z) / rz; return (Math.hypot(qx, qz) - 1) * Math.min(rx, rz); }
 function buildLegacySurface(p) { let ignored = ['roughness', 'shine', 'texture', 'skinTone', 'azimuth', 'elevation', 'intensity', 'fill', 'rim', 'exposure', 'height'], key = JSON.stringify(Object.fromEntries(Object.entries(p).filter(([k]) => !k.endsWith('Opacity') && !ignored.includes(k)))); if (!LEGACY_SKIN_CACHE || LEGACY_SKIN_CACHE.key !== key)
@@ -329,13 +329,17 @@ function customIntersections(p, side) {
 }
 // The rectus rises to the xiphoid medially and the fifth costal cartilage laterally (u: 0 medial, 1 lateral).
 function rectusTop(u) { return 12.62 + .28 * u; }
-function fittedRectusBelly(p, side, y) {
+function rectusSegmentShape(p, side, y, x = side * .4) {
     const shape = p.definition?.muscles?.['rectus_abdominis.' + (side < 0 ? 'L' : 'R')];
-    const profiles = p.abdominalModel === 1 ? shape?.fittedBellies : undefined;
+    const profiles = shape?.bellies ?? (p.abdominalModel === 1 ? shape?.fittedBellies : undefined);
     const divisions = customIntersections(p, side);
     // One belly above each fitted intersection and one below the last.
-    if (!profiles || !divisions?.length || profiles.length !== divisions.length + 1) return;
-    const levels = [rectusTop(.5), ...divisions.map(item => intersectionY(p, item, side * .4)), anatomy(p).pubis + .045];
+    if (!profiles || !divisions || profiles.length !== divisions.length + 1) return;
+    // Authored bellies follow angled/arched inscriptions at the sampled lateral
+    // position. Keep the established fitted-chart path unchanged.
+    const sampleX = shape?.bellies ? x : side * .4;
+    const u = shape?.bellies ? clamp((Math.abs(x) - abdominalLayout(p, y).inner) / Math.max(.01, abdominalLayout(p, y).width), 0, 1) : .5;
+    const levels = [rectusTop(u), ...divisions.map(item => intersectionY(p, item, sampleX)), anatomy(p).pubis + .045];
     const i = levels.findIndex((top, i) => i < profiles.length && y <= top && y >= levels[i+1]);
     if (i < 0) return;
     const t = clamp((y-levels[i+1])/Math.max(.01,levels[i]-levels[i+1]),0,1);
@@ -367,7 +371,7 @@ export function fittedRectusTendonChart(p, side, index, across, strip) {
     const offset = (strip - .5) * .045 * (.45 + .6 * p.tendon) * item.width;
     let y = rectusChartY(p, u, item.position);
     for (let step = 0; step < 3; step++) {
-        const layout = abdominalLayout(p, y), belly = fittedRectusBelly(p, side, y);
+        const layout = abdominalLayout(p, y), belly = rectusSegmentShape(p, side, y);
         const width = layout.width * (belly ? 1 + (belly.width - 1) * belly.weight : 1);
         y = intersectionY(p, item, side * (layout.inner + u * width)) + offset;
     }
@@ -1068,6 +1072,13 @@ function humanBindY(y) { if (!HUMAN_BIND_ROWS) {
     let L = HUMAN_DATA.landmarks;
     HUMAN_BIND_ROWS = [[0, 0], [.93, L.ankle[1]], [4.95, L.knee[1]], [8.85, L.hip[1]], [10.25, L.navel[1]], [13.95, L.shoulder[1]], [15.3, 15.3], [17.5, 17.5]];
 } return interpolate(HUMAN_BIND_ROWS, y)[0]; }
+function humanUnbindY(y) {
+    if (!HUMAN_UNBIND_ROWS) {
+        humanBindY(0);
+        HUMAN_UNBIND_ROWS = HUMAN_BIND_ROWS.map(([source, target]) => [target, source]);
+    }
+    return interpolate(HUMAN_UNBIND_ROWS, y)[0];
+}
 function humanRestSection(y) { if (!HUMAN_BIND_PROFILE)
     HUMAN_BIND_PROFILE = Array.from({ length: 301 }, (_, i) => { let y = 7.5 + i * .025, pr = profile(HUMAN_REST, y), a = anatomy(HUMAN_REST), lo = a.pubis - 1.3, hi = a.crest + .38; if (y > lo && y < hi) {
         let q = pelvicLoftProfile(HUMAN_REST, y), w = smooth(lo, lo + .4, y) * (1 - smooth(hi - .42, hi, y));
@@ -1242,7 +1253,18 @@ function humanShape(p, x, y, z, owner = null) {
     for (let center of centers)
         bands += G(y - center, .24);
     let intersections = levels.reduce((sum, level) => sum + G(y - level, .075), 0);
-    dz += cover * abdomen * (.115 * p.rectus * rectusAbdominis * (.35 + .65 * clamp(bands, 0, 1)) - .045 * p.tendon * rectusAbdominis * intersections);
+    const authoredShape = p.definition?.muscles?.['rectus_abdominis.' + (x < 0 ? 'L' : 'R')];
+    if (authoredShape?.bellies) {
+        // The skin and the muscle use the same intervals and per-belly shape.
+        // Do not superimpose a fixed six-pack on a different authored architecture.
+        const belly = rectusSegmentShape(p, x < 0 ? -1 : 1, humanUnbindY(y), x);
+        if (belly) {
+            const bellyWidth = width * (1 + (belly.width - 1) * belly.weight);
+            const u = clamp((ax - gap) / Math.max(.01, bellyWidth), 0, 1);
+            const phase = u < belly.peak ? .5 * u / belly.peak : .5 + .5 * (u - belly.peak) / (1 - belly.peak);
+            dz += cover * abdomen * (.08 * Math.sqrt(p.rectus) + .75 * belly.projection / 100) * belly.weight * Math.sin(PI * phase) ** 2;
+        }
+    } else dz += cover * abdomen * (.115 * p.rectus * rectusAbdominis * (.35 + .65 * clamp(bands, 0, 1)) - .045 * p.tendon * rectusAbdominis * intersections);
     dz += cover * .13 * (p.oblique - 1 + .45 * p.obliqueFlesh) * G(ax - (wall.eoInner + .27), .34) * G(y - 10.55, 1.05) * front * (1 - arm);
     dx += Math.sign(x) * .05 * p.obliqueFlesh * G(y - 10.4, .9) * smooth(.7, 1.3, ax) * (1 - arm);
     dz += humanInguinalRelief(p, x, y) * front * (1 - arm);
@@ -1612,6 +1634,13 @@ function humanArmRestOffset(y) {
     return interpolate(ARM_REST_OFFSETS, y);
 }
 function humanReferenceVertex(p, i) { let x = HUMAN_DATA.positions[i], y = HUMAN_DATA.positions[i + 1], z = HUMAN_DATA.positions[i + 2], r = humanRigRegion(i), mu = humanMuscle(p, x, y, z, r), fa = humanFat(p, x, y, z, r), a = [x, y, z].map((v, k) => v + mu * HUMAN_DATA.muscle[i + k] + fa * HUMAN_DATA.fat[i + k]);
+    if (p.definition?.muscles?.['rectus_abdominis.' + (x < 0 ? 'L' : 'R')]?.bellies) {
+        const navel = HUMAN_DATA.navel * 3;
+        const preserveNavel = 1 - G(x - HUMAN_DATA.positions[navel], .18) * G(y - HUMAN_DATA.positions[navel + 1], .18);
+        const abdomen = smooth(8.9, 9.45, y) * (1 - smooth(12.65, 13.1, y)) *
+            (1 - smooth(.95, 1.25, Math.abs(x))) * smooth(.15, .65, z) * (1 - r.arm - r.head) * preserveNavel;
+        a[2] -= mu * HUMAN_DATA.muscle[i + 2] * abdomen;
+    }
     const offset = humanArmRestOffset(y);
     a[0] += Math.sign(x) * offset[0] * r.arm;
     a[2] += offset[1] * r.arm;
@@ -1821,7 +1850,7 @@ function buildHumanVolumeLayers(p, wanted, deferredGrowth?: { deltoid: boolean; 
     for (const m of out.otherMuscles)
         if (/^(gluteus_|tensor_fasciae)/.test(m.anatomicalName ?? ''))
             relaxShell(m, 12);
-    const support = [...cage.bones, ...cage.aponeuroses, ...cage.rectusAbdominis, ...cage.externalOblique], skinCage = p.definition?.interaction?.skinFollows ? null : cachedHumanSkinCage(p);
+    const support = [...cage.bones, ...cage.aponeuroses, ...cage.rectusAbdominis, ...cage.externalOblique], skinCage = p.definition?.interaction?.skinFollows && !p.definition?.genetics ? null : cachedHumanSkinCage(p);
     const deep = out.otherMuscles.filter(m => /^erector_/.test(m.anatomicalName ?? ''));
     // A part may release its own skin limit, never a neighbour's authored thickness.
     const backKeys = Object.keys(p.individualGrowth ?? {}).filter(key => p.individualGrowth[key] !== 1 && atlas.legacy[key]?.some(id => posteriorMuscles.has(id)));
@@ -2048,7 +2077,7 @@ function pubicSheath(p, side) {
 // forms the inguinal ligament. The measured fans and the abdominal aponeurosis share this one border.
 function eoMuscleBorder(p, y, side) {
     const a = anatomy(p), wall = abdominalLayout(p, y), bellyV = clamp((y - (a.crest - .24)) / (12.81 - (a.crest - .24)), 0, 1), asis = inguinalPathPoint(p, 1, 1);
-    const belly = fittedRectusBelly(p, side, y);
+    const belly = rectusSegmentShape(p, side, y);
     const shift = belly ? wall.width * (belly.width - 1) * belly.weight : 0;
     const base = torsoAngle(p, y, wall.eoInner + shift) + .09 * (1 - bellyV) ** 2;
     return mix(base, Math.max(base, torsoAngle(p, asis[1], asis[0])), 1 - smooth(asis[1], asis[1] + .90, y));
@@ -2129,12 +2158,12 @@ function anatomicalRectusMeshes(p, side) {
     if (custom) {
         const a = anatomy(p), lower = a.pubis + .045;
         const m = shell((v, u) => {
-            const y = mix(lower, rectusTop(u), v), w = abdominalLayout(p, y), belly = fittedRectusBelly(p, side, y), x = side * (w.inner + u * w.width * (1 + (belly ? (belly.width - 1) * belly.weight : 0))), r = torsoSurface(p, y, torsoAngle(p, y, x), a.f + .052 + rectusTuck(y)), anchor = rectusOrigin(p, side, u);
+            const y = mix(lower, rectusTop(u), v), w = abdominalLayout(p, y), belly = rectusSegmentShape(p, side, y, side * (w.inner + u * w.width)), x = side * (w.inner + u * w.width * (1 + (belly ? (belly.width - 1) * belly.weight : 0))), r = torsoSurface(p, y, torsoAngle(p, y, x), a.f + .052 + rectusTuck(y)), anchor = rectusOrigin(p, side, u);
             r.point = r.point.map((val, i) => mix(anchor[i], val, w.lower));
             if (belly) r.point = add(r.point, mul(r.normal, rectusBellyProjection(belly, u) * .5));
             return r;
         }, (v, u) => {
-            const y = mix(lower, rectusTop(u), v), w = abdominalLayout(p, y), belly = fittedRectusBelly(p, side, y), x = side * (w.inner + u * w.width * (1 + (belly ? (belly.width - 1) * belly.weight : 0)));
+            const y = mix(lower, rectusTop(u), v), w = abdominalLayout(p, y), belly = rectusSegmentShape(p, side, y, side * (w.inner + u * w.width)), x = side * (w.inner + u * w.width * (1 + (belly ? (belly.width - 1) * belly.weight : 0)));
             let groove = 0;
             for (const item of custom) {
                 const lateral = 1 - smooth(item.extent * .5 - .1, item.extent * .5, Math.abs(u - .5));
@@ -2449,7 +2478,17 @@ const restRectus = new WeakMap();
 /** Default band layout of the same body. Other fields read through to the live parameters. */
 function restRectusParameters(p) {
     let rest = restRectus.get(p);
-    if (!rest) restRectus.set(p, rest = Object.assign(Object.create(p), { rectusSegmentCount: 6, rectusIntersectionShift: 0, rectPattern: 0 }));
+    if (!rest) {
+        rest = Object.assign(Object.create(p), { rectusSegmentCount: 6, rectusIntersectionShift: 0, rectPattern: 0 });
+        if (Object.values(p.definition?.muscles ?? {}).some(shape => shape?.bellies)) {
+            rest.definition = { ...p.definition, muscles: { ...p.definition.muscles } };
+            for (const side of ['L', 'R']) {
+                const key = 'rectus_abdominis.' + side;
+                rest.definition.muscles[key] = { ...rest.definition.muscles[key], intersections: undefined, fittedIntersections: undefined, bellies: undefined, fittedBellies: undefined };
+            }
+        }
+        restRectus.set(p, rest);
+    }
     return rest;
 }
 function regionalEnvelopeDelta(p, x, y, z, rectusInfluence = 1, pectoralInfluence = 1) {
@@ -2467,7 +2506,7 @@ function regionalEnvelopeDelta(p, x, y, z, rectusInfluence = 1, pectoralInfluenc
     const bandMask = smooth(9.05, 9.42, y) * (1 - smooth(12.75, 13.05, y));
     // The band terms are costly per vertex and vanish exactly outside the abdominal front.
     const rectusGate = rectusInfluence * on * bandMask;
-    if (rectusGate !== 0) {
+    if (rectusGate !== 0 && !p.definition?.muscles?.['rectus_abdominis.' + (x < 0 ? 'L' : 'R')]?.bellies) {
         const rg = p.rectGap / 20 + .04, rw = p.rectWidth / 10, rc = rg + rw * .47;
         let seg = 0;
         const bands = rectusBands(p, x), top = 12.95;

@@ -1052,10 +1052,6 @@ export class Editor {
 
   readonly pendingAnatomy = new Set<Entity>();
 
-  async addAnatomyAlgorithmDemo() {
-    await (await import('../anatomy/algorithmDemo')).addAnatomyAlgorithmDemo(this);
-  }
-
   async addAnatomy(state?: Partial<import('../anatomy/parameters').AnatomyState>, opts: AddOptions = {}) {
     return (await import('../anatomy/body')).addAnatomyBody(this, state, opts);
   }
@@ -1271,7 +1267,12 @@ export class Editor {
   }
 
   refreshShadows() {
-    const casters = [...new Set(this.entities.filter((e) => e.kind !== 'light' && !e.groupMembers && e.castShadows && e.visible && e.root.isEnabled()).flatMap((e) => e.meshes))];
+    const casters = [...new Set(this.entities.filter((e) => e.kind !== 'light' && !e.groupMembers && e.castShadows && e.visible && e.root.isEnabled()).flatMap((e) => {
+      // Opaque anatomical skin encloses the internal layers. Their offset shadow
+      // maps can otherwise leak through the covering, especially after reload.
+      const skin = e.anatomyBody ? e.meshes.filter(m => m.metadata?.anatomyLayer === 'skin' && m.isEnabled()) : [];
+      return skin.length && skin.every(m => m.material?.alpha === 1) ? skin : e.meshes;
+    }))];
     const shadowLights = this.entities.filter((e) => e.shadowGen);
     for (const l of shadowLights) {
       const map = l.shadowGen!.getShadowMap();

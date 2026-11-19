@@ -5,7 +5,7 @@ export interface AnatomyControl {
   key: AnatomyKey; label: string; min: number; max: number; step: number;
   unitLabel: string; kind: 'geometry' | 'material' | 'light';
 }
-interface Profile { label: string; values: Partial<AnatomyParameters>; }
+interface Profile { label: string; description?: string; abdomen?: string; genetics?: string; geneticSeed?: number; values: Partial<AnatomyParameters>; }
 interface AnatomyCatalogue {
   controls: AnatomyControl[];
   layers: [AnatomyKey, string, string][];

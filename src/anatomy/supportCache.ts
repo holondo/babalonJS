@@ -20,6 +20,8 @@ export function supportParameterKey(parameters: AnatomyParameters): string {
     fittedRight: parameters.definition?.muscles?.['rectus_abdominis.R']?.fittedIntersections,
     belliesLeft: parameters.definition?.muscles?.['rectus_abdominis.L']?.fittedBellies,
     belliesRight: parameters.definition?.muscles?.['rectus_abdominis.R']?.fittedBellies,
+    authoredBelliesLeft: parameters.definition?.muscles?.['rectus_abdominis.L']?.bellies,
+    authoredBelliesRight: parameters.definition?.muscles?.['rectus_abdominis.R']?.bellies,
     supportDetail: parameters.definition?.interaction?.supportDetail === 2 ? 2 : 1,
   };
   return JSON.stringify(canonical(recipe));

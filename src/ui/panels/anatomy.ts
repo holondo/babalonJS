@@ -24,6 +24,8 @@ import { muscleDefaults, boneDefaults, muscleRanges, boneRanges } from '../../an
 import { interactionDefaults } from '../../anatomy/definition';
 import type { MuscleTemplate, MuscleId, BoneId, AnatomySide } from '../../anatomy/definition';
 import { bodyLayout } from '../../anatomy/bodyLayout';
+import { abdominalGenetics, abdominalGeneticsParameters, selectedAbdominalGenetics } from '../../anatomy/abdominalGenetics';
+import { bodyGenetics, bodyGeneticsFrame, bodyGeneticsParameters, physiquePresetParameters } from '../../anatomy/bodyGenetics';
 import type { BodyRegion, RegionPart, ControlGroup } from '../../anatomy/bodyLayout';
 
 /** Anatomy uses the ordinary panel shell, controls and contextual taskbar. */
@@ -251,6 +253,13 @@ export class AnatomyPanel {
       .map(([id, label]) => ({ id, label: tr(label) }));
     if (!parts.some(p => p.id === this.regionPart)) this.regionPart = parts[0].id;
     const nodes: Node[] = [regions];
+    if (region === 'abdomen') nodes.push(select(tr('Abdominal genetics'),
+      [{ value: '', label: tr('Current custom layout') }, ...Object.entries(abdominalGenetics).map(([value, recipe]) => ({ value, label: tr(recipe.label) }))],
+      selectedAbdominalGenetics(body.parameters), value => {
+        if (!value) return;
+        body.patch(abdominalGeneticsParameters(body.parameters, value));
+        this.refresh();
+      }), hint(tr('Change the abdominal architecture independently of muscle size and fat thickness.')));
     if (parts.length > 1) nodes.push(segmented(parts, this.regionPart, id => { this.regionPart = id as RegionPart; this.refresh(); }));
     if (this.regionPart === 'shape') {
       if (region === 'fat') nodes.push(section(tr('Fat brush'),
@@ -289,6 +298,8 @@ export class AnatomyPanel {
           const preset = catalogue.inguinalPresets[value];
           body.patch(Object.fromEntries(catalogue.inguinalPresetFields.map(key => [key, preset[key] ?? defaults[key]])));
         }));
+      if (group.label && group.keys.some(key => key.startsWith('nipple') || key.startsWith('navel')))
+        return h('details', { class: 'sec' }, h('summary', {}, tr(group.label)), ...controls);
       return group.label ? section(tr(group.label), ...controls) : h('div', { class: 'stack' }, ...controls);
     });
   }
@@ -297,13 +308,28 @@ export class AnatomyPanel {
   private overview(body: AnatomyBody): Node[] {
     const collapse = (node: HTMLElement, label: string) => h('details', { class: 'sec' }, h('summary', {}, label), ...Array.from(node.childNodes).slice(1));
     // Skin source and fitting live on the Skin page; quick layer switches live in the context bubble.
-    return [...this.groups(body, bodyLayout.overview.shape),
-      ...this.profiles(body).map(node => node instanceof HTMLElement && node.tagName === 'SECTION' ? collapse(node, node.firstElementChild?.textContent ?? tr('Body profiles')) : node),
+    return [hint(tr('Explore muscular development, body proportions and posing.')),
+      this.bodyGeneticsControls(body),
+      ...this.groups(body, bodyLayout.overview.shape),
+      ...this.profiles(body).map((node, index) => node instanceof HTMLElement && node.tagName === 'SECTION' && index > 0 ? collapse(node, node.firstElementChild?.textContent ?? tr('Physique presets')) : node),
       this.connections(body),
       h('details', { class: 'sec' }, h('summary', {}, tr('Layers')), this.layers(body)),
       collapse(this.views(body), tr('Inspection and views')),
       collapse(this.actions(body), tr('Parameters and comparison')),
       button(tr('Anatomical atlas'), () => { this.browsingAtlas = true; this.refresh(); })];
+  }
+
+  private bodyGeneticsControls(body: AnatomyBody): HTMLElement {
+    const genetics = body.parameters.definition?.genetics;
+    const current = genetics?.preset && bodyGenetics[genetics.preset] ? genetics.preset : '';
+    const apply = (key: string, seed = 0) => { body.patch(bodyGeneticsParameters(body.parameters, key, seed)); this.refresh(); };
+    return section(tr('Body genetics'),
+      select(tr('Body architecture'), [{ value: '', label: tr('Current anatomy') },
+        ...Object.entries(bodyGenetics).map(([value, recipe]) => ({ value, label: tr(recipe.label) }))], current,
+        value => { if (value) apply(value); }),
+      hint(tr('Vary proportions and muscle-belly shapes throughout the body. Fat thickness and hypertrophy stay unchanged.')),
+      button(tr('New genetic variation'), () => apply(current || 'balanced', (genetics?.seed ?? 0) + 1)),
+      ...(genetics?.seed ? [hint(tr('Variation {number}', { number: String(genetics.seed) }))] : []));
   }
 
   private connections(body: AnatomyBody): HTMLElement {
@@ -457,12 +483,20 @@ export class AnatomyPanel {
 
   private profiles(body: AnatomyBody): Node[] {
     const presets = Object.entries(catalogue.bodyPresets).map(([value, p]) => ({ value, label: tr(p.label) }));
-    const gallery = h('div', { class: 'grid anatomy-gallery' }, ...Object.entries(catalogue.bodyPresets).map(([, preset]) => {
+    const currentGenetics = selectedAbdominalGenetics(body.parameters);
+    const gallery = h('div', { class: 'grid anatomy-gallery' }, ...Object.entries(catalogue.bodyPresets).map(([id, preset]) => {
+      const recipe = preset.abdomen ? abdominalGenetics[preset.abdomen] : undefined;
+      const values = { ...(preset.genetics ? bodyGeneticsFrame(preset.genetics, preset.geneticSeed) : {}), ...preset.values, ...(recipe ? { rectWidth: recipe.width, rectGap: recipe.gap } : {}) };
       const preview = h('span', { class: 'anatomy-preview', 'aria-label': tr('Front and side silhouettes'), role: 'img' });
-      preview.innerHTML = bodyIcon(preset.values);
+      preview.innerHTML = bodyIcon(values);
       const keys = catalogue.controls.filter(c => c.kind === 'geometry' && (!catalogue.inguinalPresetFields.includes(c.key) || c.key === 'pubicFat')).map(c => c.key);
-      const active = keys.every(key => Math.abs(body.parameters[key] - (preset.values[key] ?? defaults[key])) < .000001);
-      return h('button', { class: `card anatomy-profile ${active ? 'active' : ''}`, 'aria-pressed': active, onClick: () => body.profile(preset.values) }, preview, h('span', {}, tr(preset.label)));
+      const active = keys.every(key => Math.abs(body.parameters[key] - (values[key] ?? defaults[key])) < .000001) &&
+        (!preset.abdomen || currentGenetics === preset.abdomen) &&
+        (!preset.genetics || body.parameters.definition?.genetics?.preset === preset.genetics && body.parameters.definition.genetics.seed === (preset.geneticSeed ?? 0));
+      return h('button', { class: `card anatomy-profile ${active ? 'active' : ''}`, 'data-physique-preset': id, 'aria-label': tr(preset.label), 'aria-pressed': String(active),
+        onClick: () => { body.profile(physiquePresetParameters(body.parameters, preset)); this.refresh(); } }, preview, h('span', {}, tr(preset.label)),
+        ...(preset.abdomen ? [h('small', {}, tr('Abdomen: {layout}', { layout: tr(abdominalGenetics[preset.abdomen].label) }))] : []),
+        ...(preset.description ? [h('small', {}, tr(preset.description))] : []));
     }));
     const componentControls = Object.entries(catalogue.profileComponents).map(([group, items]) => select(tr(({ structure: 'Structure', muscle: 'Muscles', adipose: 'Fat distribution' }[group] ?? group)), Object.entries(items).map(([value, p]) => ({ value, label: tr(p.label) })), this.components[group], value => { this.components[group] = value; }));
     const compose = () => body.profile(Object.assign({}, ...Object.entries(this.components).map(([group, name]) => catalogue.profileComponents[group][name].values)));
@@ -473,7 +507,7 @@ export class AnatomyPanel {
       body.profile(values, commit);
     };
     return [
-      section(tr('Body profiles'), gallery,
+      section(tr('Physique presets'), hint(tr('Choose a starting physique, then adjust proportions, muscle groups and body composition.')), gallery,
         toggle(tr('Linked anatomical adjustments'), body.state.anatomicalLinks, value => body.change(() => { body.state.anatomicalLinks = value; })),
         button(tr('Nearby variation'), () => this.vary(body))),
       section(tr('Compose a body'), ...componentControls, button(tr('Apply combination'), compose)),
@@ -653,6 +687,11 @@ export class AnatomyPanel {
       button(tr('Reset nipple edits'), () => body.setFittedNippleEdit(side, fittedNippleEditDefaults)))];
   }
 
+  private surfaceDetailControls(body: AnatomyBody): Node[] {
+    const controls = [...this.navelDepthControls(body), ...this.fittedNippleControls(body)];
+    return controls.length ? [h('details', { class: 'sec' }, h('summary', {}, tr('Surface details')), ...controls)] : [];
+  }
+
   private fitCandidates() {
     return this.ui.editor.entities.filter(e => e.kind === 'model' && !e.anatomy && !e.groupMembers &&
       e.meshes.some(mesh => mesh.getTotalVertices() > 0));
@@ -678,7 +717,7 @@ export class AnatomyPanel {
     const baseSurface=select(tr('Base surface'), [{ value: '0', label: tr('Authored human mesh') }, { value: '1', label: tr('Procedural surface') }], String(body.parameters.skinModel), value => { body.edit('skinModel', +value); body.commit(); });
     const detach=()=>{body.detachSkinDrive();body.patch({skinOpacity:1});this.skinSources.set(body,'procedural');this.refresh();};
     if(source==='procedural') return [sourceSwitch,section(tr('Procedural skin'),baseSurface,
-      ...(bound?[hint(tr('A model is bound as the skin. Use the procedural skin to release it.')),button(tr('Use the procedural skin'),detach)]:[])), ...this.navelDepthControls(body), ...this.fittedNippleControls(body)];
+      ...(bound?[hint(tr('A model is bound as the skin. Use the procedural skin to release it.')),button(tr('Use the procedural skin'),detach)]:[])), ...this.surfaceDetailControls(body)];
 
     const choose=(id:string)=>{const e=candidates.find(e=>String(e.id)===id);if(!e)return;body.change(()=>{body.state.fitSetup={targetId:e.id,targetName:e.name,mode,hints:body.state.fitSetup?.targetId===e.id?body.state.fitSetup.hints:undefined};});this.refresh();};
     const file=h('input',{type:'file',accept:'.glb',hidden:true}) as HTMLInputElement;
@@ -737,7 +776,7 @@ export class AnatomyPanel {
         ...(evidence?.volumeFit?[hint(tr('Posed skin distance: {before} → {after} mm',{before:evidence.volumeFit.skin.beforeMm.toFixed(1),after:evidence.volumeFit.skin.afterMm.toFixed(1)}))]:[]),
         ...(evidence?.poseFit?[hint(tr('Reference-pose distance: {distance} mm',{distance:evidence.poseFit.meanMm.toFixed(1)}))]:[]),
         ...(evidence?.surfaceRegistration?[hint(tr('Surface distance: {before} → {after} mm',{before:evidence.surfaceRegistration.beforeMm.toFixed(1),after:evidence.surfaceRegistration.afterMm.toFixed(1)}))]:[])),
-      ...this.navelDepthControls(body), ...this.fittedNippleControls(body), advanced,
+      ...this.surfaceDetailControls(body), advanced,
     ];
     this.fitControls=h('fieldset',{class:'stack',style:'border:0;padding:0;margin:0;min-width:0',disabled:!!body.fitting},...content) as HTMLFieldSetElement;
     return [this.fitControls];

@@ -1,5 +1,6 @@
 import { isOriginalAbdomen, type AnatomyParameters } from './parameters';
 import type { AnatomyMesh } from './contracts';
+import { transferGeneticSurface } from './bodyGeneticSurface';
 import { forearmMuscles, individualMuscles, normalizeDefinition, type MuscleId, type MuscleTemplate } from './definition';
 import { shapeMuscle, type AnatomyMetric, type SurfaceChange } from './regions/abdomen';
 import { calculateNormals } from './algorithms/loft';
@@ -157,7 +158,14 @@ export function applyPriorityAnatomy(p: AnatomyParameters, inside: Record<string
     changes.length = 0;
     for (const [mesh, original] of originals) if (mesh.attachments || mesh.anatomyId) changes.push({ source: original.positions, target: mesh.positions, normals: original.normals, posterior: posteriorMuscles.has(mesh.anatomyId?.slice(0, -2) ?? ''), rectus: mesh.anatomyId?.startsWith('rectus_abdominis.') });
   }
-  transferSurface(skin, changes, p);
-  if (lean) transferSurface(lean, changes, p);
+  if (definition.genetics) {
+    const rectus = changes.filter(change => change.rectus), body = changes.filter(change => !change.rectus);
+    transferSurface(skin, rectus, p);
+    transferGeneticSurface(skin, body);
+    if (lean) { transferSurface(lean, rectus, p); transferGeneticSurface(lean, body); }
+  } else {
+    transferSurface(skin, changes, p);
+    if (lean) transferSurface(lean, changes, p);
+  }
   return metrics;
 }

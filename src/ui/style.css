@@ -3032,9 +3032,10 @@ body.drawing canvas {
 
 .card.anatomy-profile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: auto; min-height: 108px; padding: 8px; text-align: center; }
 .anatomy-profile.active { border-color: var(--gold); color: var(--gold); }
-.anatomy-preview { flex: 0 0 64px; }
-.anatomy-preview svg { width: 64px; height: 64px; fill: currentColor; }
+.anatomy-preview { flex: 0 0 82px; }
+.anatomy-preview svg { width: 92px; height: 82px; fill: currentColor; }
 .anatomy-label { pointer-events: none; color: var(--gold); }
 .grid.anatomy-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.anatomy-profile > span:last-child { width: 100%; overflow-wrap: anywhere; }
+.anatomy-profile > span:not(.anatomy-preview), .anatomy-profile > small { width: 100%; overflow-wrap: anywhere; }
+.anatomy-profile > small { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .anatomy-point { width: 20px; height: 20px; padding: 0; border: 1px solid var(--gold); border-radius: 50%; background: transparent; }

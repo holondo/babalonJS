@@ -11,7 +11,11 @@ export interface TendinousIntersection { position: number; angle: number; curvat
 export interface MuscleShape {
   width: number; depth: number; volume: number; fullness: number; profile: number; activation: number; balance: number;
   centerlineBend: number; peakOffset: number;
+  /** Longitudinal extent of a fusiform belly; attachment vertices stay fixed. */
+  bellySpan?: [number, number];
   intersections?: TendinousIntersection[];
+  /** Authored segment shape, independent of the surface-fitting observations. */
+  bellies?: { width: number; peak: number; projection: number }[];
   fittedIntersections?: TendinousIntersection[];
   fittedBellies?: { width: number; peak: number; projection: number }[];
   depthProfile?: number[];
@@ -28,7 +32,7 @@ export interface BoneShape { width: number; depth: number; height: number; flare
 /** skinFollows: the covering is pushed out by the superficial muscles instead of limiting them. */
 export interface TissueInteraction { recipeVersion: 1; attachments: boolean; contact: boolean; clearanceMm: number; supportDetail: 1 | 2; skinFollows?: boolean }
 export const interactionDefaults: TissueInteraction = { recipeVersion: 1, attachments: false, contact: false, clearanceMm: 1, supportDetail: 1 };
-export interface AnatomyDefinition { version: 1; muscles: Partial<Record<MuscleId, MuscleShape>>; bones: Partial<Record<BoneId, BoneShape>>; interaction?: TissueInteraction }
+export interface AnatomyDefinition { version: 1; muscles: Partial<Record<MuscleId, MuscleShape>>; bones: Partial<Record<BoneId, BoneShape>>; interaction?: TissueInteraction; genetics?: { version: 1; preset: string; seed: number } }
 export const muscleDefaults: MuscleShape = { width: 1, depth: 1, volume: 1, fullness: 0, profile: .5, activation: 0, balance: 0, centerlineBend: 0, peakOffset: 0 };
 export const boneDefaults: BoneShape = { width: 1, depth: 1, height: 1, flare: 0, acetabularAngle: 0 };
 export const muscleRanges = { width: [.65, 1.5], depth: [.65, 1.5], volume: [.5, 2], fullness: [-.3, .3], profile: [0, 1], activation: [0, 1], balance: [-1, 1], centerlineBend: [-2, 2], peakOffset: [-.25, .25] } as const;
@@ -49,6 +53,9 @@ export function normalizeDefinition(input: unknown): AnatomyDefinition | undefin
   const value = object(input);
   if (value.version !== 1) throw new Error('Unsupported anatomy definition version.');
   const result: AnatomyDefinition = { version: 1, muscles: {}, bones: {} };
+  const genetics = object(value.genetics);
+  if (genetics.version === 1 && typeof genetics.preset === 'string' && /^[a-z][a-zA-Z]{0,39}$/.test(genetics.preset))
+    result.genetics = { version: 1, preset: genetics.preset, seed: Math.floor(bounded(genetics.seed, 0, 2147483647, 0)) };
   if (value.interaction && typeof value.interaction === 'object') {
     const interaction = object(value.interaction);
     if (interaction.recipeVersion !== undefined && interaction.recipeVersion !== 1) throw new Error('Unsupported anatomy interaction version.');
@@ -58,13 +65,31 @@ export function normalizeDefinition(input: unknown): AnatomyDefinition | undefin
     const raw = object(value.muscles)[id]; if (!raw || typeof raw !== 'object') continue;
     const fields = object(raw), shape = { ...muscleDefaults };
     for (const key of Object.keys(muscleRanges) as (keyof typeof muscleRanges)[]) { const [min, max] = muscleRanges[key]; shape[key] = bounded(fields[key], min, max, muscleDefaults[key]); }
+    if (Array.isArray(fields.bellySpan) && fields.bellySpan.length === 2)
+      shape.bellySpan = [bounded(fields.bellySpan[0], .03, .3, .1), bounded(fields.bellySpan[1], .65, .97, .9)];
     if (id.startsWith('rectus_abdominis.')) shape.intersections = normalizeIntersections(fields.intersections);
     if (id.startsWith('rectus_abdominis.')) shape.fittedIntersections = normalizeIntersections(fields.fittedIntersections);
-    if (id.startsWith('rectus_abdominis.') && Array.isArray(fields.fittedBellies) && fields.fittedBellies.length >= 2 && fields.fittedBellies.length <= 6)
-      shape.fittedBellies = fields.fittedBellies.map(value => {
-        const belly = object(value);
-        return {width:bounded(belly.width,.85,1.3,1),peak:bounded(belly.peak,.32,.68,.5),projection:bounded(belly.projection,0,12,0)};
-      });
+    for (const key of ['bellies', 'fittedBellies'] as const) {
+      if (id.startsWith('rectus_abdominis.') && Array.isArray(fields[key]) && fields[key].length >= (key === 'bellies' ? 1 : 2) && fields[key].length <= 6)
+        shape[key] = fields[key].map(value => {
+          const belly = object(value);
+          return {width:bounded(belly.width,.85,1.3,1),peak:bounded(belly.peak,.32,.68,.5),projection:bounded(belly.projection,0,12,0)};
+        });
+    }
+    if (shape.bellies) {
+      if (!shape.intersections) delete shape.bellies;
+      else if (shape.bellies.length !== shape.intersections.length + 1) {
+        // Adding or removing an inscription must not discard the authored belly surface.
+        const source = shape.bellies, count = shape.intersections.length + 1;
+        shape.bellies = Array.from({ length: count }, (_, i) => {
+          const t = count === 1 ? (source.length - 1) / 2 : i * (source.length - 1) / (count - 1);
+          const a = Math.floor(t), b = Math.min(source.length - 1, a + 1), f = t - a;
+          return { width: source[a].width * (1 - f) + source[b].width * f,
+            peak: source[a].peak * (1 - f) + source[b].peak * f,
+            projection: source[a].projection * (1 - f) + source[b].projection * f };
+        });
+      }
+    }
     for (const key of ['outlineWarp', 'costalOutlineWarp'] as const) {
       const warp = fields[key];
       if (Array.isArray(warp) && warp.length === 6) shape[key] = warp.map((value, i) => bounded(value, i < 2 ? -.2 : -.35, i < 2 ? .2 : .35, 0));

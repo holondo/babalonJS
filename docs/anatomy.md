@@ -1,23 +1,79 @@
 # Parametric anatomy
 
-## Algorithm demo
+## Physique studio
 
-Add → Sample models → Anatomy algorithm demo runs the supplied procedural anatomy
-algorithms to generate three synthetic bones and one hamstring-like muscle. It is
-an algorithm illustration, not medically accurate anatomy. The geometry is built
-on demand, exported from an isolated right-handed metre-scale scene, and imported
-as one ordinary GLB object. Selection, transforms, materials, duplication, undo,
-project saving and export use the existing model pipeline.
+Add → Parametric models → Physique studio opens the editable body. The overview
+shows ten starting physiques with different stature, torso-to-leg proportions,
+muscle distribution and subcutaneous coverage. These are illustrative shapes,
+not athlete classifications or predictions of training results. Fat controls use
+the model's thickness parameters, not a measured body-fat percentage.
 
-This first integration is static: it does not expose bone placement controls,
-connect to the parametric body, change either skin, or simulate tissue physics.
-The algorithm source is in `src/anatomy/algorithms/`; the editor adapter is
-`src/anatomy/algorithmDemo.ts`. No runtime dependencies or reference assets were
-added. Run `node scripts/check-anatomy-algorithm-demo.mjs <dev-server-url>` to check
-the real Add action, undo/redo, project archive round-trip and GLB export on
-desktop and phone layouts (requires Playwright, or `PLAYWRIGHT_MODULE`).
+Preset cards show front and side illustrations at a shared scale and describe
+their main differences. Navel and chest surface details are collapsed by default;
+the existing fitting and anatomical controls remain available. Run
+`node scripts/check-physique-profiles.mjs` to exercise preset selection, generated
+skin, undo/redo and desktop/phone layouts (Playwright or `PLAYWRIGHT_MODULE`).
 
 ## Parametric body
+
+### Whole-body architecture
+
+Body → Overview → Body genetics applies coordinated architecture to the chest,
+shoulder girdle and neck, back, arms and forearms, pelvis and gluteal muscles,
+thighs and calves. The eight starting architectures vary skeletal proportions,
+muscle width/depth distribution, longitudinal belly extent and regional contours.
+The separate fat and hypertrophy controls are retained. Each quick physique also
+specifies a body architecture; its training and fat settings remain explicit.
+
+New genetic variation uses a deterministic seed to recombine regional traits and
+bounded shape variations. Both sides share each muscle recipe. Stored muscle
+parameters are authoritative; the seed and architecture label are metadata, not
+genetic inference or a dependency on an external model.
+
+Fusiform `bellySpan` overrides retain endpoints and use the existing volume solve.
+Width/depth changes compensate their target-volume multiplier. Authored genetics
+bound the deltoid redistribution before this solve so hypertrophy does not amplify
+the seam between the heads. Authored genetics
+opt into normal-aware surface transfer around the full body; the established
+front/posterior fitting transfer stays unchanged for other documents. Coverage is
+confirmed against actual skin triangles and external rays, and welded skin seams
+share corrections. Do not enable `skinFollows` just to implement a shape preset:
+releasing the existing muscle skin cage can inflate superficial fans and distort
+the covering. Authored genetics retain this support while varying shape.
+
+Opaque anatomical skin casts the body's exterior shadow instead of combining
+offset shadows from its enclosed layers. Transparent or hidden skin keeps the
+internal casters; changing opacity refreshes the caster list. Regenerated meshes
+retain shadow reception, including after
+project restore. Visual checks must wait for material and shadow variants to
+compile and render before capturing a comparison.
+
+Run `node scripts/check-body-genetics.mjs` for the real selector and variation
+button, same-fat/training comparisons, independent regional changes at a fixed
+frame, muscle-volume checks, pose return, undo/redo, exact baseline restoration
+and parameter/project round trips. Images include front/back/side skin and a
+three-quarter muscle view. The test accepts the same Playwright and screenshot
+environment variables as the abdominal check below.
+
+### Abdominal architecture
+
+Body → Abdomen → Abdominal genetics offers eight illustrative layouts, independently
+of fat thickness and hypertrophy: balanced, long, broad, short, staggered, arched,
+narrow and widely separated columns. Physique presets also choose a layout. These
+are editable anatomical starting shapes, not inferred genetic information.
+
+Both sides store their own tendinous intersections and optional authored `bellies`
+in the existing anatomy definition. Segment width, peak and projection shape the
+muscle; the surface reads the same intersections. The neutral surface comparison
+uses the original band layout, rather than inheriting the candidate's intersections.
+Fitting observations remain separate in `fittedIntersections` and `fittedBellies`.
+Authored belly shapes participate in support-cache invalidation. Existing documents
+without authored bellies keep their previous generation path.
+
+Run `node scripts/check-abdominal-genetics.mjs` for actual dropdown selection,
+same-fat surface comparisons, skin/muscle captures, cache invalidation, exact
+baseline restoration, undo/redo and parameter/project round trips. Set
+`ANATOMY_SCREENSHOTS` for images and `PLAYWRIGHT_MODULE` if Playwright is external.
 
 ### FORMA v5 update
 

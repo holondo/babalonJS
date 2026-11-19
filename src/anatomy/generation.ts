@@ -18,6 +18,7 @@ import { applySurfaceFollowers } from './connective';
 import { applyLowerPelvisProjection } from './regions/pelvis';
 import { applyFatPaint } from './fatPaint';
 import { bindSkinFeatures } from './skinFeatures';
+import { coverGeneticMuscles } from './bodyGeneticCovering';
 import { refineNavelPatch } from './navelPatch';
 
 const featureCharts = new Map<number, { mesh: AnatomyMesh; navel: number[] }>();
@@ -55,7 +56,15 @@ export function generateAnatomy(parameters: AnatomyParameters, requestedLayers: 
     const anatomyMetrics = applyPriorityAnatomy(p, inside, skin, lean);
     if (p.abdominalModel === 1) seatRectusUnderPectorals(inside, skin, 1, (x, y) => rectusGrowthExposure(p, x, y));
     const interaction = p.definition?.interaction;
-    const contacts = interaction?.contact ? solveTissueContact(inside, skin, lean, interaction.clearanceMm, undefined, p.abdominalModel === 1) : interaction?.skinFollows ? coverMuscles(inside, skin, lean, interaction.clearanceMm, undefined, p.abdominalModel === 1) : [];
+    const contacts = interaction?.contact ? solveTissueContact(inside, skin, lean, interaction.clearanceMm, undefined, p.abdominalModel === 1) : interaction?.skinFollows && !p.definition?.genetics ? coverMuscles(inside, skin, lean, interaction.clearanceMm, undefined, p.abdominalModel === 1) : [];
+    if (p.definition?.genetics) {
+      const boundary = lean ?? skin, before = boundary.positions.slice();
+      coverGeneticMuscles(boundary, inside.otherMuscles ?? []);
+      if (lean && skin.positions.length === before.length) {
+        for (let i = 0; i < before.length; i++) skin.positions[i] += lean.positions[i] - before[i];
+        skin.normals = calculateNormals(skin.positions, skin.indices);
+      }
+    }
     applySurfaceFollowers(Object.values(inside).flat());
     if (p.abdominalModel === 1) {
       const original = skin.positions.slice();

@@ -759,6 +759,7 @@ export class AnatomyBody {
         mesh.material = material;
         mesh.metadata = { anatomyLayer: key, anatomyId: raw.anatomyId, anatomicalName: raw.anatomicalName, hasAnatomicalFibers: !!raw.fibers };
         mesh.parent = this.entity.root;
+        mesh.receiveShadows = true;
         mesh.setEnabled(material.alpha > .001);
       }
     } catch (error) { if (!reuse) next.forEach(m => m.dispose(false, false)); throw error; }
@@ -794,6 +795,7 @@ export class AnatomyBody {
     for (const mesh of this.entity.meshes) mesh.setEnabled((mesh.material?.alpha ?? 0) > .001);
     this.drawn = { ...p };
     this.studio.update(!!this.state.studyLighting, p, this.entity.meshes);
+    this.editor.refreshShadows();
     this.editor.invalidate();
   }
 
@@ -807,6 +809,7 @@ export class AnatomyBody {
       if (!meshes.length && material.alpha > .001 && !(key === 'adipose' && this.parameters.fat <= 0 && this.parameters.lowerAbdominalFat <= 0 && this.parameters.flankFullness <= 0 && this.parameters.suprapubicFat <= 0)) missing = true;
     }
     if (missing && !this.busy) this.rebuild();
+    this.editor.refreshShadows();
   }
 
   restore(state: AnatomyState) {
