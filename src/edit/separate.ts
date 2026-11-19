@@ -30,6 +30,7 @@ export class Separator {
   readonly editor: Editor;
   constructor(editor: Editor) { this.editor = editor; }
   blocker(entity: Entity) {
+    if (entity.anatomy) return tr('Use the Anatomy controls for this parametric body.');
     if (!entity.source || entity.kind !== 'model' || entity.meshes.some(m => !(m instanceof Mesh) || !m.getVerticesData('position') || m.getClassName().includes('Splat'))) return tr('Choose a triangle model to separate.');
     if (entity.optimization) return tr('Revert optimization before editing geometry.');
     return null;

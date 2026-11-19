@@ -1,4 +1,5 @@
 import { Animation } from '@babylonjs/core/Animations/animation.js';
+import { SKIN_BONES, skinBones } from './skinInput';
 import { Bone } from '@babylonjs/core/Bones/bone.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
@@ -25,7 +26,7 @@ import type { WeightJob, SkinInput, SkinWeights } from './weights';
 import { tr } from '../core/i18n';
 import { SKIN_TREATMENTS, applySkinTreatment } from './skinTreatments';
 import type { SkinTreatment } from './skinTreatments';
-import { findLegJunction } from './bodyLandmarks';
+import { findLegJunction, findRaisedArm } from './bodyLandmarks';
 import { DeformationMap } from './deformationMap';
 
 /**
@@ -83,7 +84,7 @@ export interface RigState {
 
 /** Center joints: kept on the middle line when symmetry is on. */
 const CENTER: RigJoint[] = ['hips', 'spine', 'chest', 'upperChest', 'neck', 'head', 'headTop'];
-const BONES = RIG_TEMPLATE.filter((j) => !TIP_JOINTS.includes(j.id));
+const BONES = SKIN_BONES;
 const ratio = (id: RigJoint) => (templateJoint(id).pos[1] - templateJoint('hips').pos[1]) / (templateJoint('neck').pos[1] - templateJoint('hips').pos[1]);
 
 /** Test pose (character frame): arms down and forward, one knee up, a little lean. */
@@ -116,6 +117,7 @@ export class Rigger {
   fellBack = false;
   /** Joint positions in the object's own (root) space. */
   readonly joints = new Map<RigJoint, Vector3>();
+  fittingSession: {save:()=>void;returnToAnatomy:()=>void} | null = null;
   /** Joint placement history while rigging (undo/redo of drags, turns, resets). */
   private past: { yaw: number; joints: Map<RigJoint, Vector3> }[] = [];
   private future: { yaw: number; joints: Map<RigJoint, Vector3> }[] = [];
@@ -143,7 +145,7 @@ export class Rigger {
 
   /** Static models made of regular meshes can be rigged. */
   canRig(e: Entity) {
-    return e.kind === 'model' && !e.groupMembers && !skeletonsOf(e).length && e.meshes.length > 0 && e.meshes.every((m) => m instanceof Mesh && m.getTotalIndices() > 0);
+    return e.kind === 'model' && !e.anatomy && !e.groupMembers && !skeletonsOf(e).length && e.meshes.length > 0 && e.meshes.every((m) => m instanceof Mesh && m.getTotalIndices() > 0);
   }
 
   // ---------- Placing the joints ----------
@@ -167,9 +169,12 @@ export class Rigger {
     this.editor.notify('rig');
   }
 
+  refreshPlacement() {this.derive();this.placeHandle();this.editor.invalidate();this.editor.notify('rig');}
+
   /** Leaves rigging without changing the model. */
   cancel() {
     if (!this.entity) return;
+    const fitting=this.fittingSession;this.fittingSession=null;fitting?.save();
     this.job?.cancel();
     if (this.pending) this.discardPending();
     this.entity = null;
@@ -296,7 +301,6 @@ export class Rigger {
     };
     const mean = (ids: number[], arr: number[]) => (ids.length ? ids.reduce((t, i) => t + arr[i], 0) / ids.length : 0);
     const legs = findLegJunction(U, V, W, H);
-    const split = legs.split;
     // Neck: the narrowest middle piece between the shoulders and the head
     let neckV = H * 0.84;
     let narrow = Infinity;
@@ -334,14 +338,26 @@ export class Rigger {
       let front = -Infinity;
       for (const i of feet) front = Math.max(front, W[i]);
       j('Toes').copyFrom(at(footU, H * 0.008, (Number.isFinite(front) ? front : H * 0.1) - 0.092 * s));
-      // Arms: from the shoulder to the furthest point on this side (the finger tips)
-      let tip = -1;
-      for (let i = 0; i < n; i++) if (V[i] > split && (tip < 0 || U[i] * sideSign > U[tip] * sideSign)) tip = i;
-      const shoulder = at(sideSign * torsoHalf * 0.85, H * 0.787);
-      const tipP = tip >= 0 ? at(U[tip], V[tip]) : shoulder;
+      const shoulderU = sideSign * torsoHalf, shoulderV = H * .787;
+      const shoulder = at(shoulderU, shoulderV);
       j('UpperArm').copyFrom(shoulder);
-      j('LowerArm').copyFrom(Vector3.Lerp(shoulder, tipP, 0.351));
-      j('Hand').copyFrom(Vector3.Lerp(shoulder, tipP, 0.701));
+      const raised = findRaisedArm(U,V,W,H,sideSign,shoulderU,shoulderV);
+      if (raised) {
+        j('LowerArm').copyFrom(at(raised.elbow.u, raised.elbow.v, raised.elbow.w));
+        j('Hand').copyFrom(at(raised.wrist.u, raised.wrist.v, raised.wrist.w));
+        continue;
+      }
+      // A lowered arm's lateral extreme is often its elbow, not its fingertips.
+      // Use distance from the shoulder, excluding the trunk, head and lower legs.
+      let tip = -1, reach = 0;
+      for (let i = 0; i < n; i++) {
+        if (U[i] * sideSign < torsoHalf * 1.15 || V[i] < H * .32 || V[i] > H * .92) continue;
+        const d = (U[i] - sideSign * torsoHalf) ** 2 + (V[i] - H * .787) ** 2;
+        if (d > reach) { reach = d; tip = i; }
+      }
+      const tipP = tip >= 0 ? at(U[tip], V[tip]) : shoulder;
+      j('LowerArm').copyFrom(Vector3.Lerp(shoulder, tipP, 0.45));
+      j('Hand').copyFrom(Vector3.Lerp(shoulder, tipP, 0.82));
     }
     for (const j of RIG_TEMPLATE) if (j.handle && !j.id.endsWith('Toes')) this.findDepth(j.id);
     this.derive();
@@ -477,6 +493,7 @@ export class Rigger {
   }
 
   /** Facing direction and the model's right, in its own space. */
+  get facingWorld() {return this.entity?Vector3.TransformNormal(this.fwd,worldMatrix(this.entity.root)).normalize():this.fwd;}
   private get fwd() {
     return new Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
   }
@@ -510,6 +527,12 @@ export class Rigger {
     let front = 0;
     let back = 0;
     const p = new Vector3();
+    // Foot direction is relative to the ankle, not the complete body bounds:
+    // extended hands and the head can shift the latter behind the foot.
+    let ankleCenter=0,ankleCount=0;
+    for(const mesh of e.meshes){const positions=mesh.getVerticesData(VertexBuffer.PositionKind);if(!positions)continue;const toRoot=worldMatrix(mesh).multiply(inv);
+      for(let i=0;i<positions.length;i+=3){Vector3.TransformCoordinatesFromFloatsToRef(positions[i],positions[i+1],positions[i+2],toRoot,p);const h=(p.y-min.y)/(max.y-min.y);if(h>.045&&h<.07){ankleCenter+=Vector3.Dot(p.subtract(c),f);ankleCount++;}}}
+    ankleCenter=ankleCount?ankleCenter/ankleCount:0;
     for (const m of e.meshes) {
       const pos = m.getVerticesData(VertexBuffer.PositionKind);
       if (!pos) continue;
@@ -517,7 +540,7 @@ export class Rigger {
       for (let i = 0; i < pos.length; i += 3) {
         Vector3.TransformCoordinatesFromFloatsToRef(pos[i], pos[i + 1], pos[i + 2], toRoot, p);
         if (p.y > low) continue;
-        const w = Vector3.Dot(p.subtract(c), f);
+        const w = Vector3.Dot(p.subtract(c), f)-ankleCenter;
         front = Math.max(front, w);
         back = Math.max(back, -w);
       }
@@ -887,36 +910,7 @@ export class Rigger {
       t += idx.length;
     }
     // Auxiliary bones receive transferred influence after solving; they are not additional heat sources.
-    const bones = new Float32Array(BONES.length * 6);
-    BONES.forEach((j, i) => {
-      const a = rigPosition(st, j.id);
-      const b = rigPosition(st, BONE_END[j.id as HumanBone]);
-      bones.set([a.x, a.y, a.z, b.x, b.y, b.z], i * 6);
-    });
-    const limbRoots = new Uint8Array(BONES.length);
-    BONES.forEach((j, i) => (limbRoots[i] = /(UpperArm|UpperLeg)$/.test(j.id) ? 1 : 0));
-    const limbRootOf = new Int16Array(BONES.length).fill(-1);
-    BONES.forEach((_, i) => {
-      let ancestor = i;
-      while (ancestor >= 0) {
-        if (limbRoots[ancestor]) { limbRootOf[i] = ancestor; break; }
-        const parent = BONES[ancestor].parent;
-        ancestor = BONES.findIndex(j => j.id === parent);
-      }
-    });
-    const limbAxes = new Float32Array(BONES.length * 3);
-    const shoulderCenter = rigPosition(st, 'leftUpperArm').add(rigPosition(st, 'rightUpperArm')).scale(0.5);
-    BONES.forEach((j, i) => {
-      if (!limbRoots[i]) return;
-      const start = rigPosition(st, j.id);
-      const axis = j.id.endsWith('UpperArm') ? start.subtract(shoulderCenter) : rigPosition(st, BONE_END[j.id as HumanBone]).subtract(start);
-      axis.normalize();
-      limbAxes.set(axis.asArray(), i * 3);
-    });
-    const treatedRoots = new Uint32Array(['leftUpperArm', 'rightUpperArm'].map(id => BONES.findIndex(j => j.id === id)));
-    const trunkUp = new Float32Array(rigPosition(st, 'neck').subtract(rigPosition(st, 'hips')).normalize().asArray());
-    const trunkBones = new Uint32Array(['spine', 'chest', 'upperChest'].map(id => BONES.findIndex(j => j.id === id)));
-    return { points, triangles, bones, limbRoots, limbRootOf, limbAxes, treatedRoots, trunkUp, trunkBones, treatment: st.data.treatment ?? 'current' };
+    return { points, triangles, ...skinBones((id) => st.data.joints[id] as [number, number, number]), treatment: st.data.treatment ?? 'current' };
   }
 
   private async computeWeights(st: RigState, comparison = false): Promise<SkinWeights> {
@@ -1145,11 +1139,6 @@ function fitNodeOf(e: Entity): TransformNode {
   let n: Node = e.meshes[0];
   while (n.parent && n.parent !== e.root && n.parent.name !== 'motion') n = n.parent;
   return n as TransformNode;
-}
-
-function rigPosition(st: RigState, id: RigJoint) {
-  const p = st.data.joints[id]!;
-  return new Vector3(p[0], p[1], p[2]);
 }
 
 /** Canonical bones of a rig made in the app. */

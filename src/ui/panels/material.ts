@@ -88,6 +88,17 @@ export class MaterialPanel {
     const ed = this.ui.editor;
     const e = ed.selected;
     if (!e || e.kind === 'light') return [hint(tr('Select a model or shape to edit its materials.'))];
+    if (e.anatomyBody) {
+      const body = e.anatomyBody;
+      if (body.showingA) return [hint(tr('The reference is read-only. Switch to the current body to edit materials.')), button(tr('View B'), () => body.compare(false))];
+      const options = body.structureOptions();
+      const key = body.activeStructure;
+      return [
+        select(tr('Anatomical structure'), options.map(s => ({ value: s.id, label: s.group === s.label ? tr(s.label) : `${tr(s.group)} · ${tr(s.label)}` })), key, value => body.selectStructure(value)),
+        ...this.materialControls(body.materialFor(key)),
+        ...this.ui.anatomyMaterialDetails(),
+      ];
+    }
     const mats = ed.materialsOf(e);
     if (!mats.length) return [hint(tr('This object has no editable materials.'))];
     if (this.materialIndex >= mats.length) this.materialIndex = -1;

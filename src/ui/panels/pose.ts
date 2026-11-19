@@ -12,6 +12,7 @@ import { tr } from '../../core/i18n';
 import { button, h, hint, icon, iconButton, row, section, select, slider, toggle } from '../dom';
 import type { UI } from '../ui';
 import { jointLabel } from '../shared';
+import { poseJointPicker, readyPoseSection } from '../poseControls';
 
 /** Objects → Pose: posing joints by hand, ready poses, skeleton mapping, treatment comparison; the pose bar and joint handles. */
 export class PosePanel {
@@ -123,12 +124,9 @@ export class PosePanel {
       out.push(
         section(
           tr('Joint'),
-          select(
-            tr('Joint'),
-            [{ value: '', label: tr('Tap a joint or pick one') }, ...joints.map((x, i) => ({ value: String(i), label: jointLabel(x) }))],
-            j ? String(joints.findIndex((x) => x.node === j.node)) : '',
-            (v) => p.selectJoint(v === '' ? null : joints[+v]),
-          ),
+          poseJointPicker(joints.map((joint, index) => ({ id: String(index), label: jointLabel(joint) })),
+            j ? String(joints.findIndex(x => x.node === j.node)) : '',
+            id => p.selectJoint(id === '' ? null : joints[+id])),
           ...(j
             ? [
                 turn('x', tr('Bend')),
@@ -157,31 +155,15 @@ export class PosePanel {
       );
     }
     if (d?.humanoid && d.complete) {
-      out.push(
-        section(
-          tr('Ready poses'),
-          e.rig?.data.comparison ? hint(tr('Ready poses apply to all models in this comparison.')) : null,
-          h(
-            'div',
-            { class: 'chips' },
-            ...POSE_PRESETS.map((preset) =>
-              h(
-                'button',
-                {
-                  class: 'chip',
-                  onClick: () => this.ui.run(() => {
-                    const targets = [...ed.rigger.comparisonMembers(e).filter(other => other !== e), e];
-                    if (!preset.dirs) return ed.clips.poseManyFromClip(targets, preset.clip!, preset.time ?? 0);
-                    const dirs = Object.fromEntries(Object.entries(preset.dirs).map(([b, v]) => [b, Vector3.FromArray(v).normalize()]));
-                    ed.group(() => targets.forEach(target => p.applyDirections(target, dirs)));
-                  }),
-                },
-                tr(preset.label),
-              ),
-            ),
-          ),
-        ),
-      );
+      out.push(readyPoseSection(POSE_PRESETS.map(preset => ({
+        label: preset.label,
+        apply: () => this.ui.run(() => {
+          const targets = [...ed.rigger.comparisonMembers(e).filter(other => other !== e), e];
+          if (!preset.dirs) return ed.clips.poseManyFromClip(targets, preset.clip!, preset.time ?? 0);
+          const dirs = Object.fromEntries(Object.entries(preset.dirs).map(([bone, value]) => [bone, Vector3.FromArray(value).normalize()]));
+          ed.group(() => targets.forEach(target => p.applyDirections(target, dirs)));
+        }),
+      })), e.rig?.data.comparison ? hint(tr('Ready poses apply to all models in this comparison.')) : null));
     }
     if (e.rig?.data.comparison) {
       const difference = ed.rigger.difference;

@@ -1,0 +1,145 @@
+/** Canonical, backwards-compatible parameters from FORMA v5. Lengths are centimetres unless specified. */
+export const defaults = {
+  "pectoralFiberConvergence": 0.6,
+  "pectoralTendonWidth": 0.8,
+  "rectusBellyProfile": 1,
+  "iliacWing": 1,
+  "acetabularRim": 1,
+  "rectusSegmentCount": 6,
+  "rectusSegmentDefinition": 0.55,
+  "pectoralClavicular": 1,
+  "pectoralSternal": 1,
+  "pectoralCostal": 1,
+  "pectoralSeparation": 0,
+  "abdominalProjection": 0,
+  "lowerAbdominalFat": 0,
+  "flankFullness": 0,
+  "iliacCrestRelief": 0,
+  "suprapubicFat": 0,
+  "lineaAlbaDefinition": 0.5,
+  "rectusIntersectionShift": 0,
+  "skinModel": 0,
+  "abdominalModel": 1,
+  "pelvisModel": 1,
+  "legBalance": 0,
+  "shoulderSlope": 0,
+  "chestRoundness": 0,
+  "ribFlare": 0,
+  "pecSpread": 0,
+  "pecUpper": 0,
+  "armBelly": 0,
+  "obliqueFlesh": 0,
+  "rectPattern": 0,
+  "gluteFullness": 0,
+  "thighSweep": 0,
+  "calfBelly": 0,
+  "armFat": 1,
+  "gluteFat": 1,
+  "thighFat": 1,
+  "gluteMax": 1,
+  "gluteMed": 1,
+  "quadriceps": 1,
+  "adductors": 1,
+  "hamstrings": 1,
+  "calves": 1,
+  "shin": 1,
+  "pectoral": 1,
+  "deltoid": 1,
+  "biceps": 1,
+  "triceps": 1,
+  "forearm": 1,
+  "height": 175,
+  "chestWidth": 34,
+  "chestDepth": 24,
+  "shoulderWidth": 43,
+  "waistWidth": 29,
+  "waistDepth": 22,
+  "pelvisWidth": 35,
+  "pelvisDepth": 26,
+  "lowerPelvisFrontDepth": 0,
+  "lowerPelvisBackDepth": 0,
+  "thighGirth": 55,
+  "proximalThigh": 1.15,
+  "asisDistance": 26,
+  "asisHeight": 0,
+  "pubisHeight": 0,
+  "flare": 0,
+  "tilt": 0,
+  "oblique": 1,
+  "rectus": 1,
+  "rectWidth": 5,
+  "rectGap": 1.5,
+  "tendon": 0.55,
+  "back": 1,
+  "lowerFat": 1,
+  "flankFat": 1,
+  "fat": 12,
+  "inguinalDefinition": 0.65,
+  "inguinalOpening": 1,
+  "inguinalHeight": 11.3,
+  "inguinalCurvature": 0.2,
+  "inguinalLateralWrap": 0.35,
+  "inguinalGrooveSharpness": 0.55,
+  "supraInguinalVolume": 0.65,
+  "inguinalFoldOffset": 0.8,
+  "pubicFat": 1,
+  "asym": 0,
+  "fiberAngle": 1,
+  "roughness": 0.62,
+  "shine": 0.28,
+  "texture": 0.7,
+  "navelDepth": 1,
+  "navelSize": 1,
+  "navelOffsetX": 0,
+  "navelOffsetY": 0,
+  "navelAspect": 1.25,
+  "nippleLeftX": 0,
+  "nippleLeftY": 0,
+  "nippleLeftRadius": 9,
+  "nippleLeftProjection": 3,
+  "nippleRightX": 0,
+  "nippleRightY": 0,
+  "nippleRightRadius": 9,
+  "nippleRightProjection": 3,
+  "skinTone": 0.52,
+  "azimuth": -40,
+  "elevation": 40,
+  "intensity": 1.15,
+  "fill": 0.55,
+  "rim": 0.28,
+  "exposure": 1,
+  "skinOpacity": 1,
+  "adiposeOpacity": 0,
+  "externalObliqueOpacity": 0,
+  "internalObliqueOpacity": 0,
+  "transversusAbdominisOpacity": 0,
+  "rectusAbdominisOpacity": 0,
+  "otherMusclesOpacity": 0,
+  "aponeurosesOpacity": 0,
+  "bonesOpacity": 0,
+  "inguinalLigamentsOpacity": 0
+};
+export type AnatomyKey = keyof typeof defaults;
+export type AnatomyParameters = typeof defaults & { fatPaint?: import('./fatPaint').FatPaint; fatDistribution?: import('./fatDistribution').FatDistribution; fatPriorDistribution?: import('./fatDistribution').FatDistribution; skinFit?: import('./surfaceFit').SurfaceFit; tissueFit?: import('./tissueFit').TissueFit; referencePose?: import('./referencePose').ReferencePose; surfaceFit?: import('./surfaceFit').SurfaceFit; boneLengthsCm?: import('./segmentProportions').BoneLengths; individualGrowth?: Record<string, number>; definition?: import('./definition').AnatomyDefinition };
+export interface AnatomyState {
+  fitOptions?: { surface:'unknown'|'skin'|'clothed';height:boolean;fat:boolean;muscles:boolean;proportions:boolean;refine:boolean };
+  fitSetup?: { targetId:number|null; targetName:string; mode:'anatomy'|'skin'; hints?: import('./inference/bodyEvidence').BodyHints };
+
+  fitEvidence?: import('./inference/bodyEvidence').BodyEvidence;
+  parameters: AnatomyParameters;
+  anatomicalLinks: boolean;
+  reference?: AnatomyParameters;
+  pose?: import('./pose').AnatomyPose;
+  poseBasis?: 'fitted';
+  referencePose?: import('./pose').AnatomyPose;
+  referencePoseBasis?: 'fitted';
+  inspect?: boolean;
+  materials?: Record<string, import('../core/state').MaterialJSON>;
+  referenceMaterials?: Record<string, import('../core/state').MaterialJSON>;
+  studyLighting?: boolean;
+  activeStructure?: string;
+  details?: Record<string, boolean>;
+}
+
+/** Original abdominal fans before the rectus/chest isolation changes (9619032). */
+export function isOriginalAbdomen(p: Pick<AnatomyParameters, 'abdominalModel'>) { return p.abdominalModel === 2; }

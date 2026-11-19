@@ -43,3 +43,7 @@ android/keystore.properties
 
 # vite-plugin-pwa dev output
 dev-dist
+/src/anatomy/BabalonJS_Procedural_Anatomy_Algorithms_FULL
+/src/anatomy/FORMA_ABC_BabalonJS
+src/anatomy/BabalonJS_Procedural_Anatomy_Algorithms_FULL.zip
+src/anatomy/FORMA_ABC_BabalonJS.zip

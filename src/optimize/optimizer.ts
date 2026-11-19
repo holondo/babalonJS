@@ -90,6 +90,7 @@ export class ModelOptimizer {
 
   /** Why a model can't be optimized (null when it can). */
   blocker(e: Entity): string | null {
+    if (e.anatomy) return tr('Use the Anatomy controls for this parametric body.');
     if (e.kind !== 'model') return tr('Only models can be optimized.');
     if (e.rig) return tr('This model was rigged in the app: optimize it before rigging.');
     if (e.textureOptimization) return tr('Revert the texture optimization first, then change the geometry.');

@@ -25,6 +25,7 @@ export class LightPanel {
     const ed = this.ui.editor;
     const lights = ed.entities.filter((e) => e.kind === 'light');
     const out: (Node | null)[] = [
+      ...this.ui.anatomyLightingContent(),
       section(
         tr('Lighting presets'),
         h('div', { class: 'chips' }, ...LIGHT_PRESETS.map((p) => h('button', { class: 'chip', onClick: () => ed.applyLightPreset(p.id) }, tr(p.label)))),

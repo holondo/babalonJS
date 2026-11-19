@@ -29,3 +29,43 @@ Other sample models in the app are loaded from `assets.babylonjs.com` when the u
 Geometry triangulation uses [Earcut](https://github.com/mapbox/earcut), Copyright Mapbox, under the ISC license.
 
 Optional solid fusion uses [Manifold](https://github.com/elalish/manifold), under the Apache-2.0 license. Its WASM module is cached on first use.
+
+## FORMA anatomy study
+
+The user-supplied `FORMA_v5.html` update (SHA-256
+`b5a69b6cef7cfce5731deee277baedcf690c9a4ae10b04d22364922d8555c1ff`)
+supplies the additional procedural recipes, pose preview and illustrative atlas
+in `src/anatomy/atlas.json`. The skin reference remains the same CC0 asset below.
+Atlas measurements/source labels are prototype metadata, not independently
+verified clinical data or a newly downloaded anatomical dataset.
+
+The separate `src/anatomy/algorithms/` core is copied from the user-supplied
+**BabalonJS — Procedural Anatomy algorithms** handoff (GPL-3.0-or-later).
+Its synthetic pelvis/femur/tibia and hamstring sample is generated locally;
+no anatomical dataset, SKEL/HIT code, trained assets, or external models are
+bundled. The handoff credits MyoGeneratorRemix and OpenSim as algorithm references.
+
+`src/anatomy/reference.json` contains the authored human surface supplied in
+`vline_anatomy_reconstruido.html` (FORMA anatomy study). That source explicitly
+marks the surface as CC0. The embedded mesh records source revision
+`a8bc2d54ff0ac92e78ff71431b1023eda42bf482`. The original supplied HTML has SHA-256
+`889465d8292afa0751dec76db52b1c3d8d327ed41e7f3a90e4ed6b9ffcafd171`.
+The procedural kernels and shading were ported from the same user-supplied
+study; no remote model or external service is required. The mesh is shipped
+inside the on-demand anatomy worker, outside the startup graph.
+
+## Reference écorché measurements (BodyParts3D, Z-Anatomy)
+
+Some placement and thickness values of the procedural pectoralis major and deltoid
+(lower pectoral border, deltoid clavicular origin, pectoral thickness distribution)
+were measured against a user-supplied écorché GLB built from BodyParts3D
+(© The Database Center for Life Science, CC BY 4.0) and Z-Anatomy by Gauthier Kervyn
+(CC BY-SA 4.0); the combined derivative is CC BY-SA 4.0. No mesh from that file is
+bundled or loaded by the application: only these generator parameters were derived
+from it. CC BY-SA 4.0 is one-way compatible with GPL-3.0.
+
+The same reference was used for the trapezius, back, gluteal, abdominal wall and thigh
+muscle attachments, and for `src/anatomy/data/pelvisReference.json`: about 150 control
+points (landmarks, crest curve, ilium mid-surface, obturator ring, sacrum rows) from which
+the procedural hip bones and sacrum are generated. These control points are a derivative
+of that CC BY-SA 4.0 source and remain under CC BY-SA 4.0.

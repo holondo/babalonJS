@@ -1,4 +1,4 @@
-import { ArrowDownToLine, Eye, EyeOff, FlipHorizontal2, RotateCcw, Trash2 } from 'lucide';
+import { ArrowDownToLine, Eye, EyeOff, FlipHorizontal2, PersonStanding, RotateCcw, Trash2 } from 'lucide';
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { Entity } from '../../core/editor';
 import { locale, tr } from '../../core/i18n';
@@ -39,6 +39,7 @@ export class ObjectsPanel {
       out.push(hint(tr('Tap an object in the scene to select it. Double-tap to focus.')));
       return out;
     }
+    if (this.ui.canBuildAnatomyFrom(e)) out.push(button(tr('Build anatomy from this model'), () => this.ui.buildAnatomyFrom(e), { icon: PersonStanding }));
     out.push(this.transformSection(e));
     if (e.kind === 'light') out.push(this.ui.lightUI.lightControls(e));
     else out.push(this.objectSection(e));

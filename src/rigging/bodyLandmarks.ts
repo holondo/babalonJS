@@ -30,6 +30,41 @@ function quantile(values: number[], fraction: number) {
   return values[Math.min(values.length - 1, Math.floor((values.length - 1) * fraction))];
 }
 
+/** Find the elbow and wrist separately when a forearm folds back above the shoulder. */
+export function findRaisedArm(U: number[], V: number[], W: number[], height: number, side: number, shoulderU: number, shoulderV: number) {
+  const outside = Math.abs(shoulderU) + height*.035;
+  const raised: number[] = [], elbowBand: number[] = [];
+  for (let i = 0; i < U.length; i++) {
+    if (U[i]*side < outside) continue;
+    if (V[i] > shoulderV + height*.048) raised.push(i);
+    if (Math.abs(V[i] - shoulderV) < height*.038) elbowBand.push(i);
+  }
+  if (raised.length < 12 || elbowBand.length < 12) return;
+  const top = quantile(raised.map(i => V[i]), .97);
+  if (top - shoulderV < height*.115) return;
+
+  const center = (ids: number[]) => ({
+    u: side * (quantile(ids.map(i => U[i]*side),.15) + quantile(ids.map(i => U[i]*side),.85)) / 2,
+    v: quantile(ids.map(i => V[i]),.5),
+    w: (quantile(ids.map(i => W[i]),.15) + quantile(ids.map(i => W[i]),.85)) / 2,
+  });
+  const edge = quantile(elbowBand.map(i => U[i]*side),.95);
+  if (edge - Math.abs(shoulderU) < height*.075) return;
+  const elbow = center(elbowBand.filter(i => U[i]*side >= edge-height*.045));
+  let wrist: ReturnType<typeof center> | undefined, narrowest = Infinity;
+  for (let drop = .038; drop <= .072; drop += .008) {
+    const row = raised.filter(i => Math.abs(V[i] - (top-height*drop)) <= height*.009);
+    if (row.length < 6) continue;
+    const candidate = center(row);
+    if (candidate.v - elbow.v < height*.075 || Math.abs(candidate.u) > Math.abs(elbow.u) + height*.018) continue;
+    const width = quantile(row.map(i => U[i]*side),.85) - quantile(row.map(i => U[i]*side),.15);
+    const depth = quantile(row.map(i => W[i]),.85) - quantile(row.map(i => W[i]),.15);
+    const score = width + depth + height*Math.abs(drop-.052)*.35;
+    if (score < narrowest) { narrowest = score; wrist = candidate; }
+  }
+  return wrist && { elbow, wrist };
+}
+
 /**
  * Where the legs join the trunk: the leg split, the hip pivots and the skeleton root above them.
  * The trunk's width profile above the split finds the hip line and the waist.

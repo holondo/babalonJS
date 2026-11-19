@@ -1,0 +1,2950 @@
+{
+  "version": 1,
+  "source": "src/anatomy/FORMA_ABC_BabalonJS/FORMA_Entrega_A_Anatomical_Data_Kit/catalog/individual_muscle_geometry_profiles.json",
+  "sha256": "bb0f5b726f0d0252fde2116e7035b4ad34de70dc786e2319ab665b15c0a8ed4c",
+  "profiles": {
+    "pectoralis_major_clavicular": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.9,
+      "referenceVolumeCm3": 87,
+      "seedVolumeCm3": 87,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "pectoralis_major_sternocostal": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 2.3,
+      "referenceVolumeCm3": 203,
+      "seedVolumeCm3": 203,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "rectus_abdominis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        0.97,
+        0.93,
+        1,
+        0.79,
+        0.62,
+        0.19
+      ],
+      "aspect": 1.4,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 260,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "external_oblique": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 3,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 170,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "internal_oblique": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 3,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 145,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "transversus_abdominis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 3.3,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 115,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "deltoid_anterior": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 1.15,
+      "referenceVolumeCm3": 110.345,
+      "seedVolumeCm3": 110.345,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "deltoid_middle": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 1.25,
+      "referenceVolumeCm3": 163.615,
+      "seedVolumeCm3": 163.615,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "deltoid_posterior": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 1.1,
+      "referenceVolumeCm3": 106.54,
+      "seedVolumeCm3": 106.54,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "trapezius_upper": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1.0,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 120,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "trapezius_middle": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1.0,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 95,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "trapezius_lower": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1.0,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 65,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "latissimus_dorsi": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1.0,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 3.2,
+      "referenceVolumeCm3": 262.3,
+      "seedVolumeCm3": 262.3,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "biceps_brachii_long": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1.0,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.85,
+      "referenceVolumeCm3": 73.287,
+      "seedVolumeCm3": 73.287,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "brachialis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1.0,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": 143.7,
+      "seedVolumeCm3": 143.7,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "triceps_brachii_long": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1.0,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.85,
+      "referenceVolumeCm3": 148.84,
+      "seedVolumeCm3": 148.84,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "triceps_brachii_lateral": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1.0,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": 141.398,
+      "seedVolumeCm3": 141.398,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "gluteus_maximus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1.0,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.3,
+      "referenceVolumeCm3": 889.9,
+      "seedVolumeCm3": 889.9,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "gluteus_medius": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1.0,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.55,
+      "referenceVolumeCm3": 345.5,
+      "seedVolumeCm3": 345.5,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "rectus_femoris": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 0.9,
+      "referenceVolumeCm3": 200.2,
+      "seedVolumeCm3": 200.2,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "vastus_lateralis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 1.2,
+      "referenceVolumeCm3": 512.044,
+      "seedVolumeCm3": 512.044,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "vastus_medialis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 1.25,
+      "referenceVolumeCm3": 381.056,
+      "seedVolumeCm3": 381.056,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "adductor_longus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1.0,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.75,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 185,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "adductor_magnus_adductor": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1.0,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 245,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "biceps_femoris_long": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1.0,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 190,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "semitendinosus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1.0,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.54,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 115,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "semimembranosus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1.0,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 160,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "gastrocnemius_medial": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1.0,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.95,
+      "referenceVolumeCm3": 204.3,
+      "seedVolumeCm3": 204.3,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "gastrocnemius_lateral": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1.0,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": 124.1,
+      "seedVolumeCm3": 124.1,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "soleus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 1.3,
+      "referenceVolumeCm3": 457.2,
+      "seedVolumeCm3": 457.2,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "tibialis_anterior": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1.0,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 150,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "rhomboid_minor": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1.0,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 58.0,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "rhomboid_major": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1.0,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 122.0,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "supraspinatus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 0.9,
+      "referenceVolumeCm3": 50.0,
+      "seedVolumeCm3": 50.0,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "infraspinatus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1.0,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.75,
+      "referenceVolumeCm3": 118.6,
+      "seedVolumeCm3": 118.6,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "teres_minor": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1.0,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": 28.0,
+      "seedVolumeCm3": 28.0,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "teres_major": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1.0,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": 32.7,
+      "seedVolumeCm3": 32.7,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "erector_spinae_longissimus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1.0,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 185,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "erector_spinae_iliocostalis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1.0,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 150,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "gluteus_minimus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1.0,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.3,
+      "referenceVolumeCm3": 77.3,
+      "seedVolumeCm3": 77.3,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "tensor_fasciae_latae": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1.0,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": 67.8,
+      "seedVolumeCm3": 67.8,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "psoas_major": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1.0,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 167.53,
+      "seedVolumeCm3": 167.53,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "iliacus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1.0,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.75,
+      "referenceVolumeCm3": 137.07,
+      "seedVolumeCm3": 137.07,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "sartorius": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1.0,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.65,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 105,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "pectineus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1.0,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 85,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "gracilis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1.0,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.6,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 100,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "adductor_brevis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1.0,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.75,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 95,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "biceps_brachii_short": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.9,
+      "referenceVolumeCm3": 70.413,
+      "seedVolumeCm3": 70.413,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "triceps_brachii_medial": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": 81.862,
+      "seedVolumeCm3": 81.862,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "brachioradialis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": 65.1,
+      "seedVolumeCm3": 65.1,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "pronator_teres": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": 38.4,
+      "seedVolumeCm3": 38.4,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "pronator_quadratus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": 11.2,
+      "seedVolumeCm3": 11.2,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "supinator": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.09,
+        0.31,
+        0.63,
+        0.9,
+        1,
+        0.73,
+        0.34,
+        0.07
+      ],
+      "aspect": 0.7,
+      "referenceVolumeCm3": 19.7,
+      "seedVolumeCm3": 19.7,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "flexor_carpi_radialis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 34.8,
+      "seedVolumeCm3": 34.8,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "flexor_carpi_ulnaris": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 37.1,
+      "seedVolumeCm3": 37.1,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "palmaris_longus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 10,
+      "seedVolumeCm3": 10,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "flexor_digitorum_superficialis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 0.9,
+      "referenceVolumeCm3": 74.2,
+      "seedVolumeCm3": 74.2,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "flexor_digitorum_profundus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 0.9,
+      "referenceVolumeCm3": 91.6,
+      "seedVolumeCm3": 91.6,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "flexor_pollicis_longus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": 17.1,
+      "seedVolumeCm3": 17.1,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "extensor_carpi_radialis_longus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 37.5,
+      "seedVolumeCm3": 37.5,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "extensor_carpi_radialis_brevis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 21.6,
+      "seedVolumeCm3": 21.6,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "extensor_carpi_ulnaris": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 17,
+      "seedVolumeCm3": 17,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "extensor_digitorum": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 0.9,
+      "referenceVolumeCm3": 28.6,
+      "seedVolumeCm3": 28.6,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "extensor_digiti_minimi": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 7,
+      "seedVolumeCm3": 7,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "extensor_indicis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 4.2,
+      "seedVolumeCm3": 4.2,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "abductor_pollicis_longus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 11.9,
+      "seedVolumeCm3": 11.9,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "extensor_pollicis_longus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 6.6,
+      "seedVolumeCm3": 6.6,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "extensor_pollicis_brevis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 4.4,
+      "seedVolumeCm3": 4.4,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "sternocleidomastoid": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 31.9,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "levator_scapulae": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 49.3,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "scalenus_anterior": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 31.9,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "scalenus_medius": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 31.9,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "scalenus_posterior": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 31.9,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "splenius_capitis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 31.9,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "platysma": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 67.1,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "pectoralis_minor": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.75,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 91.3,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "subclavius": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 63.8,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "subscapularis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 0.9,
+      "referenceVolumeCm3": 164.5,
+      "seedVolumeCm3": 164.5,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "serratus_anterior": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.8,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 180,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "coracobrachialis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": 25.2,
+      "seedVolumeCm3": 25.2,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "anconeus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.75,
+      "referenceVolumeCm3": 10.8,
+      "seedVolumeCm3": 10.8,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "measured_cohort_mean"
+    },
+    "vastus_intermedius": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 0.9,
+      "referenceVolumeCm3": 297.7,
+      "seedVolumeCm3": 297.7,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "derived_from_group_measurement_with_heuristic_split"
+    },
+    "adductor_magnus_hamstring": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 80,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "biceps_femoris_short": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 80,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "popliteus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.75,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 9.96,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "plantaris": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 46.4,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "tibialis_posterior": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 0.9,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 130,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "fibularis_longus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 100,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "fibularis_brevis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 60,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "fibularis_tertius": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 46.4,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "extensor_digitorum_longus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 0.9,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 87.2,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "extensor_hallucis_longus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 80,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "flexor_digitorum_longus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "aspect": 0.9,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 87.2,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "flexor_hallucis_longus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "aspect": 0.78,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 80,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "serratus_posterior_superior": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 122,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "serratus_posterior_inferior": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 122,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "spinalis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 58,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "multifidus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        0.97,
+        0.93,
+        1,
+        0.79,
+        0.62,
+        0.19
+      ],
+      "aspect": 1.15,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 85,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "quadratus_lumborum": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 110,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "pyramidalis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.75,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 83,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "external_intercostals": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        0.97,
+        0.93,
+        1,
+        0.79,
+        0.62,
+        0.19
+      ],
+      "aspect": 1.15,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 46.75,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "internal_intercostals": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        0.97,
+        0.93,
+        1,
+        0.79,
+        0.62,
+        0.19
+      ],
+      "aspect": 1.15,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 46.75,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "diaphragm": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.55,
+        0.82,
+        1,
+        0.97,
+        0.94,
+        0.84,
+        0.6,
+        0.4
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 230,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "piriformis": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.75,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 44,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "obturator_internus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.09,
+        0.31,
+        0.63,
+        0.9,
+        1,
+        0.73,
+        0.34,
+        0.07
+      ],
+      "aspect": 0.7,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 86.8,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "obturator_externus": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "aspect": 1.75,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 116.2,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "gemellus_superior": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 81.2,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "gemellus_inferior": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "aspect": 0.46,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 81.2,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    },
+    "quadratus_femoris": {
+      "u": [
+        0,
+        0.1,
+        0.22,
+        0.38,
+        0.56,
+        0.73,
+        0.88,
+        1
+      ],
+      "area": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "aspect": 2.5,
+      "referenceVolumeCm3": null,
+      "seedVolumeCm3": 32,
+      "quality": "heuristic_visual_seed",
+      "volumeQuality": "heuristic_visual_seed_not_measurement"
+    }
+  }
+}

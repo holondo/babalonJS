@@ -63,6 +63,7 @@ import { MaterialPanel } from './panels/material';
 import { AnimatePanel } from './panels/animate';
 import { PosePanel } from './panels/pose';
 import type { RigPanel } from './panels/rig';
+import type { AnatomyPanel } from './panels/anatomy';
 import { ToolsPanel } from './panels/tools';
 import type { OptimizePanel } from './panels/optimize';
 import type { SeparatePanel } from './panels/separate';
@@ -93,6 +94,18 @@ const TABS: { id: Exclude<Tab, 'photo'>; label: string; icon: IconNode }[] = [
 
 const PANEL_TITLES: Record<Tab, string> = { add: 'Add', objects: 'Objects', light: 'Light', tools: 'Tools', photo: 'Photo' };
 
+/** Collapsible sections keyed by their summary text (and repeat index), so state survives a rebuild. */
+function detailsByKey(root: ParentNode): Map<string, HTMLDetailsElement> {
+  const seen = new Map<string, number>(), out = new Map<string, HTMLDetailsElement>();
+  for (const element of root.querySelectorAll('details')) {
+    const label = element.querySelector(':scope > summary')?.textContent ?? '', index = seen.get(label) ?? 0;
+    seen.set(label, index + 1);
+    out.set(`${label}#${index}`, element);
+  }
+  return out;
+}
+function detailsState(root: ParentNode) { return new Map([...detailsByKey(root)].map(([key, element]) => [key, element.open])); }
+
 export class UI {
   // Panels and modes, each in its own module
   readonly addUI = new AddPanel(this);
@@ -101,6 +114,7 @@ export class UI {
   readonly animateUI = new AnimatePanel(this);
   readonly poseUI = new PosePanel(this);
   rigUI: RigPanel | null = null;
+  anatomyUI: AnatomyPanel | null = null;
   readonly toolsUI = new ToolsPanel(this);
   readonly lightUI = new LightPanel(this);
   optimizeUI: OptimizePanel | null = null;
@@ -218,11 +232,11 @@ export class UI {
     editor.changed.add((kind) => {
       if (kind === 'activity') {
         if (editor.gizmoError) { this.toast(editor.gizmoError, 'error'); editor.gizmoError = null; }
-        const state = `${editor.optimizer.busy}:${editor.textureOptimizer.busy}:${editor.rigger.progress !== null}:${editor.rigger.comparing}`;
+        const state = `${editor.optimizer.busy}:${editor.textureOptimizer.busy}:${editor.rigger.progress !== null}:${editor.rigger.comparing}:${editor.selected?.anatomyBody?.busy}`;
         const changed = state !== this.activityState;
         this.activityState = state;
         this.renderSelbar();
-        if (changed && this.tab === 'objects') this.renderPanel();
+        if (changed && this.tab === 'objects' && !editor.selected?.anatomyBody?.isEditing) this.renderPanel();
         else this.updateOperationProgress();
         return;
       }
@@ -259,7 +273,7 @@ export class UI {
         this.photoUI.renderPhotoHud();
         this.photoUI.renderFrame();
       }
-      if (this.busy) return;
+      if (this.busy || editor.selected?.anatomyBody?.isEditing) return;
       if (kind === 'env' && this.tab !== 'light') return;
       if (kind === 'entities') this.labelsUI.buildLabels();
       this.renderAll();
@@ -307,6 +321,7 @@ export class UI {
     this.activities.set(id, activity);
     this.renderSelbar();
     return {
+      setCancel: (cancel?:()=>void) => {activity.cancel=cancel;this.renderSelbar();},
       update: (progress: number | null, nextLabel = activity.label) => {
         if (!this.activities.has(id)) return;
         if (nextLabel === activity.label && (progress === null ? activity.progress === null : activity.progress !== null && Math.round(progress * 100) === Math.round(activity.progress * 100))) return;
@@ -458,11 +473,11 @@ export class UI {
       const nativeBridge = (window as unknown as { AndroidNative?: NativeBridge }).AndroidNative;
       try {
         if (!nativeBridge) throw new Error(tr('Native AR bridge unavailable'));
+        if (this.editor.entities.some(e => e.visible && e.meshes.some(isSplat))) this.toast(tr('Native AR uses a point-cloud preview for Gaussian splats. The editor keeps the original appearance.'), 'info', undefined, 9000);
         const restoreModels = await this.prepareLightAR();
         let blob: Blob | null;
         try {
-          const { exportNativeAR } = await import('../ar/nativeSplats');
-          blob = await exportNativeAR(this.editor);
+          blob = await this.editor.exportGLB(false, true);
         } finally {
           // Native AR uses the exported copy; restore the editor immediately,
           // including when export fails.
@@ -485,7 +500,7 @@ export class UI {
             const clip = this.editor.anim.current(e)!;
             return { name: nativeAnimationName(e), speed: clip.speedRatio, loop: clip.loopAnimation };
           }),
-          lighting: 'studio',
+          lighting: 'room',
           lightLevel: this.editor.env.intensity || 1.0,
         });
 
@@ -1165,7 +1180,7 @@ export class UI {
   }
 
   /** Opens a part of a dock panel (a context's full settings). */
-  private openPart(tab: Tab, part?: string) {
+  openPart(tab: Tab, part?: string) {
     if (part) this.segment[tab] = part;
     if (this.tab !== tab) this.openTab(tab); else this.renderPanel();
   }
@@ -1196,6 +1211,8 @@ export class UI {
       busy: ed.rigger.progress !== null || ed.rigger.comparing, progress: ed.rigger.progress,
       render: () => this.renderFeatureContext('rig', () => this.rigUI!.renderRigBar()), expand: () => this.openPart('objects', 'rig') });
     if (ed.photoMode) return out;
+    const body = ed.selected?.anatomyBody;
+    if (body) out.push({ id: 'anatomy', icon: PersonStanding, label: tr('Anatomy'), busy: body.busy, render: () => this.renderFeatureContext('anatomy', () => this.selbar.replaceChildren(...this.anatomyUI!.context())), expand: () => this.openPart('objects', 'anatomy') });
     if (ed.pose.active) out.push({ id: 'pose', icon: PersonStanding, label: tr('Pose'), render: () => this.poseUI.renderPoseBar(), expand: () => this.openPart('objects', 'pose') });
     if (ed.separator.active) {
       const n = ed.separator.selection?.count ?? 0;
@@ -1233,7 +1250,7 @@ export class UI {
   modeSwitch() {
     const ed = this.editor, e = ed.selected;
     const mesh = ed.separator.active;
-    if (!mesh && (!e || e.kind === 'light' || e.groupMembers || ed.selection.length > 1)) return null;
+    if (!mesh && (!e || e.anatomy || e.kind === 'light' || e.groupMembers || ed.selection.length > 1)) return null;
     return h('span', { class: 'objmode' },
       iconButton(Box, tr('Object mode (Tab)'), () => { if (mesh) this.leaveMesh(); }, { active: !mesh, label: tr('Object'), cls: 'tool' }),
       iconButton(Triangle, tr('Mesh mode (Tab)'), () => { if (!mesh && e) this.startMesh(e); }, { active: mesh, label: tr('Mesh'), cls: 'tool' }),
@@ -1259,6 +1276,21 @@ export class UI {
       { id: 'view', icon: Focus, label: tr('Camera and actions'), content: this.contextCameraControls() },
     ]);
     if (this.selMenuOpen) this.toggleSelMenu(true);
+  }
+
+  canBuildAnatomyFrom(model: Entity) {
+    return model.kind === 'model' && !model.anatomy && !model.groupMembers && this.editor.selection.length === 1 &&
+      model.meshes.some(mesh => mesh.getTotalVertices() >= 50);
+  }
+
+  /** Opens fitting with the selected model as the reference. */
+  buildAnatomyFrom(model: Entity) {
+    void this.run(async () => {
+      const body = await this.editor.addAnatomy({ fitSetup: { targetId: model.id, targetName: model.name, mode: 'anatomy' } });
+      this.editor.select(body);
+      this.openPart('objects', 'anatomy-fit');
+      this.toast(tr('Anatomy will be fitted to {name}. Choose Fit only to compare, or Fit and use as skin.', { name: model.name }));
+    });
   }
 
   /** Secondary selection actions, one level deep. */
@@ -1298,6 +1330,8 @@ export class UI {
         ? [ed.anim.isPlaying(e) ? item(Pause, tr('Pause animation'), () => ed.anim.pause(e)) : item(Play, tr('Play animation'), () => ed.anim.play(e))]
         : []),
       ...(!e.groupMembers && skeletonsOf(e).length ? [item(PersonStanding, tr('Pose joints'), () => this.poseUI.startPosing(e))] : []),
+      ...(this.canBuildAnatomyFrom(e)
+        ? [item(PersonStanding, tr('Build anatomy from this model'), () => this.buildAnatomyFrom(e))] : []),
       item(Group, tr('Multi-select'), () => (ed.setMultiSelect(!ed.multiSelect), this.toggleSelMenu(true)), { on: ed.multiSelect, keep: true }),
       item(Magnet, tr('Snap to grid'), () => (ed.setSnap(!ed.snap), this.toggleSelMenu(true)), { on: ed.snap, keep: true }),
     );
@@ -1398,6 +1432,7 @@ export class UI {
 
   private panelCloseTimer = 0;
 
+  private renderedView = '';
   renderPanel() {
     const ed = this.editor;
     const tab: Tab | null = ed.photoMode ? (this.photoPanel ? 'photo' : null) : this.tab;
@@ -1416,9 +1451,12 @@ export class UI {
     }
     window.clearTimeout(this.panelCloseTimer);
     const title = this.editor.separator.active && tab === 'objects' ? tr('Mesh') : tr(PANEL_TITLES[tab]);
-    const scroll = this.panel.querySelector('.panel-body')?.scrollTop ?? 0;
+    const previous = this.panel.querySelector<HTMLElement>('.panel-body'), scroll = previous?.scrollTop ?? 0;
     const parts = this.panelParts(tab);
     const current = parts?.find((p) => p.id === this.segment[tab]) ? this.segment[tab]! : parts?.[0].id ?? '';
+    // Re-rendering the same view keeps sections the user opened or closed, so content height and scroll hold.
+    const sameView = this.renderedView === `${tab}:${current}`, sections = sameView && previous ? detailsState(previous) : null;
+    this.renderedView = `${tab}:${current}`;
     let content: (Node | null)[];
     try {
       content = this.panelContent(tab, current);
@@ -1427,6 +1465,7 @@ export class UI {
       content = [hint(tr('An error occurred while displaying this panel.')), button(tr('Try again'), () => this.renderPanel())];
     }
     const body = h('div', { class: 'panel-body' }, ...content);
+    if (sections) for (const [key, element] of detailsByKey(body)) if (sections.has(key)) element.open = sections.get(key)!;
     const rigging = tab === 'objects' && current === 'rig' && ed.rigger.active && ed.rigger.entity === ed.selected;
     const meshActive = tab === 'objects' && ed.separator.active;
     this.panel.replaceChildren(
@@ -1476,6 +1515,7 @@ export class UI {
             { id: 'modify', label: tr('Modify') },
           ];
         }
+        if (e.anatomy) return [{ id: 'object', label: tr('Object') }, { id: 'anatomy', label: tr('Body') }, { id: 'anatomy-fit', label: tr('Skin') }, { id: 'anatomy-pose', label: tr('Pose') }, { id: 'material', label: tr('Material') }];
         if (e.groupMembers) return [{ id: 'object', label: tr('Object') }, { id: 'material', label: tr('Material') }, { id: 'modify', label: tr('Modify') }];
         return [
           { id: 'object', label: tr('Object') },
@@ -1484,7 +1524,7 @@ export class UI {
           ...(this.editor.rigger.active && this.editor.rigger.entity === e
             ? [{ id: 'rig', label: tr('Rig') }]
             : skeletonsOf(e).length ? [{ id: 'pose', label: tr('Pose') }] : this.editor.rigger.canRig(e) ? [{ id: 'rig', label: tr('Rig') }] : []),
-          ...(e.kind === 'model' ? [{ id: 'optimize', label: tr('Optimize') }] : []),
+          ...(e.kind === 'model' && !e.anatomy ? [{ id: 'optimize', label: tr('Optimize') }] : []),
           { id: 'modify', label: tr('Modify') },
         ];
       }
@@ -1509,18 +1549,28 @@ export class UI {
     return null;
   }
 
+  anatomyLightingContent() {
+    const body = this.editor.selected?.anatomyBody;
+    return body ? this.featureContent('anatomy', () => [this.anatomyUI!.lighting(body)]) : [];
+  }
+  anatomyMaterialDetails() {
+    const body = this.editor.selected?.anatomyBody;
+    return body ? this.featureContent('anatomy', () => [this.anatomyUI!.materialDetails(body)]) : [];
+  }
+
   private library: LibraryPanel | null = null;
   loadRigUI() { return this.ensureFeature('rig'); }
 
-  private ensureFeature(name: 'rig' | 'optimize' | 'separate' | 'modify'): Promise<void> {
-    const ready = { rig: this.rigUI, optimize: this.optimizeUI, separate: this.separateUI, modify: this.modifyUI }[name];
+  private ensureFeature(name: 'rig' | 'optimize' | 'separate' | 'modify' | 'anatomy'): Promise<void> {
+    const ready = { rig: this.rigUI, optimize: this.optimizeUI, separate: this.separateUI, modify: this.modifyUI, anatomy: this.anatomyUI }[name];
     if (ready) return Promise.resolve();
     const pending = this.featureLoads.get(name);
     if (pending) return pending;
     // Register the promise before rendering its activity, to avoid reentrant duplicate loads.
     const load = Promise.resolve().then(async () => {
-      const activity = this.beginActivity(tr('Loading {name}', { name: tr({ rig: 'Rig', optimize: 'Optimize', separate: 'Mesh', modify: 'Modify' }[name]) }), Layers);
+      const activity = this.beginActivity(tr('Loading {name}', { name: tr({ rig: 'Rig', optimize: 'Optimize', separate: 'Mesh', modify: 'Modify', anatomy: 'Anatomy' }[name]) }), Layers);
       try {
+        if (name === 'anatomy') this.anatomyUI = new (await import('./panels/anatomy')).AnatomyPanel(this);
         if (name === 'rig') this.rigUI = new (await import('./panels/rig')).RigPanel(this);
         if (name === 'optimize') this.optimizeUI = new (await import('./panels/optimize')).OptimizePanel(this);
         if (name === 'separate') this.separateUI = new (await import('./panels/separate')).SeparatePanel(this);
@@ -1539,16 +1589,16 @@ export class UI {
     return load;
   }
 
-  private featureContent(name: 'rig' | 'optimize' | 'separate' | 'modify', render: () => (Node | null)[]): (Node | null)[] {
-    if ({ rig: this.rigUI, optimize: this.optimizeUI, separate: this.separateUI, modify: this.modifyUI }[name]) return render();
+  private featureContent(name: 'rig' | 'optimize' | 'separate' | 'modify' | 'anatomy', render: () => (Node | null)[]): (Node | null)[] {
+    if ({ rig: this.rigUI, optimize: this.optimizeUI, separate: this.separateUI, modify: this.modifyUI, anatomy: this.anatomyUI }[name]) return render();
     const error = this.featureErrors.get(name);
     if (error) return [hint(error), button(tr('Try again'), () => { this.featureErrors.delete(name); void this.run(() => this.ensureFeature(name)); this.renderPanel(); })];
     void this.ensureFeature(name).catch(() => {});
     return [hint(tr('Loading…'))];
   }
 
-  private renderFeatureContext(name: 'rig' | 'separate', render: () => void) {
-    if (name === 'rig' ? this.rigUI : this.separateUI) { render(); return; }
+  private renderFeatureContext(name: 'rig' | 'separate' | 'anatomy', render: () => void) {
+    if ({ rig: this.rigUI, separate: this.separateUI, anatomy: this.anatomyUI }[name]) { render(); return; }
     this.selbar.replaceChildren(...this.featureContent(name, () => []).filter((node): node is Node => node !== null));
   }
 
@@ -1601,6 +1651,7 @@ export class UI {
     if (this.editor.separator.active) {
       return this.featureContent('separate', () => this.separateUI!.panel(part as 'select' | 'sculpt' | 'modify'));
     }
+    if (part.startsWith('anatomy')) return this.featureContent('anatomy', () => this.anatomyUI!.panel(part));
     if (part === 'material') return this.materialUI.materialPanel();
     if (part === 'animate') return this.animateUI.animatePanel();
     if (part === 'pose') return this.poseUI.posePanel();

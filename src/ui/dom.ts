@@ -50,11 +50,13 @@ export function row(...children: Child[]) {
   return h('div', { class: 'row' }, ...children);
 }
 
-export function button(label: string, onClick: () => void, opts: { icon?: IconNode; cls?: string; active?: boolean } = {}) {
+/** `name` gives a short visible label a full accessible name (also shown as a tooltip). */
+export function button(label: string, onClick: () => void, opts: { icon?: IconNode; cls?: string; active?: boolean; name?: string } = {}) {
   return h(
     'button',
     {
       class: `btn ${opts.cls ?? ''} ${opts.active ? 'active' : ''}`,
+      ...(opts.name ? { 'aria-label': opts.name, title: opts.name } : {}),
       onClick: () => {
         haptic('light');
         onClick();

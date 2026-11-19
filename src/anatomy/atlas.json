@@ -1,0 +1,5596 @@
+{
+  "version": "FORMA A+B+C 1.0 visual prototype",
+  "muscles": [
+    {
+      "id": "sternocleidomastoid",
+      "name": "Sternocleidomastoid",
+      "region": "neck",
+      "architecture": "strap",
+      "origin": [
+        "sternum::manubrium",
+        "clavicle::medial_third"
+      ],
+      "insertion": [
+        "temporal::mastoid_process"
+      ],
+      "joints": [
+        "cervical_spine"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 31.9,
+      "source": "volume_unavailable",
+      "aliases": [
+        "sternocleidomastoid"
+      ]
+    },
+    {
+      "id": "scalenus_anterior",
+      "name": "Anterior scalene",
+      "region": "neck",
+      "architecture": "strap",
+      "origin": [
+        "cervical_vertebra::transverse_process"
+      ],
+      "insertion": [
+        "rib::external_surface"
+      ],
+      "joints": [
+        "cervical_spine"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 31.9,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "scalenus_medius",
+      "name": "Middle scalene",
+      "region": "neck",
+      "architecture": "strap",
+      "origin": [
+        "cervical_vertebra::transverse_process"
+      ],
+      "insertion": [
+        "rib::external_surface"
+      ],
+      "joints": [
+        "cervical_spine"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 31.9,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "scalenus_posterior",
+      "name": "Posterior scalene",
+      "region": "neck",
+      "architecture": "strap",
+      "origin": [
+        "cervical_vertebra::transverse_process"
+      ],
+      "insertion": [
+        "rib::external_surface"
+      ],
+      "joints": [
+        "cervical_spine"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 31.9,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "splenius_capitis",
+      "name": "Splenius capitis",
+      "region": "neck",
+      "architecture": "strap",
+      "origin": [
+        "cervical_vertebra::spinous_process",
+        "thoracic_vertebra::spinous_process"
+      ],
+      "insertion": [
+        "temporal::mastoid_process",
+        "occipital::superior_nuchal_line"
+      ],
+      "joints": [
+        "cervical_spine"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 31.9,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "levator_scapulae",
+      "name": "Levator scapulae",
+      "region": "shoulder",
+      "architecture": "strap",
+      "origin": [
+        "cervical_vertebra::transverse_process"
+      ],
+      "insertion": [
+        "scapula::medial_border"
+      ],
+      "joints": [
+        "scapulothoracic",
+        "cervical_spine"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 49.3,
+      "source": "volume_unavailable",
+      "aliases": [
+        "levatorScapulae"
+      ]
+    },
+    {
+      "id": "trapezius_upper",
+      "name": "Trapezius upper fibers",
+      "region": "back",
+      "architecture": "sheet",
+      "origin": [
+        "occipital::superior_nuchal_line",
+        "cervical_vertebra::spinous_process"
+      ],
+      "insertion": [
+        "clavicle::lateral_third"
+      ],
+      "joints": [
+        "scapulothoracic",
+        "cervical_spine"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 120,
+      "source": "volume_unavailable",
+      "aliases": [
+        "trapeziusUpper"
+      ]
+    },
+    {
+      "id": "trapezius_middle",
+      "name": "Trapezius middle fibers",
+      "region": "back",
+      "architecture": "sheet",
+      "origin": [
+        "cervical_vertebra::spinous_process",
+        "thoracic_vertebra::spinous_process"
+      ],
+      "insertion": [
+        "scapula::acromion",
+        "scapula::scapular_spine"
+      ],
+      "joints": [
+        "scapulothoracic"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 95,
+      "source": "volume_unavailable",
+      "aliases": [
+        "trapeziusMiddle"
+      ]
+    },
+    {
+      "id": "trapezius_lower",
+      "name": "Trapezius lower fibers",
+      "region": "back",
+      "architecture": "sheet",
+      "origin": [
+        "thoracic_vertebra::spinous_process"
+      ],
+      "insertion": [
+        "scapula::scapular_spine"
+      ],
+      "joints": [
+        "scapulothoracic"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 65,
+      "source": "volume_unavailable",
+      "aliases": [
+        "trapeziusLower"
+      ]
+    },
+    {
+      "id": "rhomboid_major",
+      "name": "Rhomboid major",
+      "region": "back",
+      "architecture": "sheet",
+      "origin": [
+        "thoracic_vertebra::spinous_process"
+      ],
+      "insertion": [
+        "scapula::medial_border"
+      ],
+      "joints": [
+        "scapulothoracic"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 122,
+      "source": "volume_unavailable",
+      "aliases": [
+        "rhomboids"
+      ]
+    },
+    {
+      "id": "rhomboid_minor",
+      "name": "Rhomboid minor",
+      "region": "back",
+      "architecture": "strap",
+      "origin": [
+        "cervical_vertebra::spinous_process",
+        "thoracic_vertebra::spinous_process"
+      ],
+      "insertion": [
+        "scapula::medial_border"
+      ],
+      "joints": [
+        "scapulothoracic"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 58,
+      "source": "volume_unavailable",
+      "aliases": [
+        "rhomboids"
+      ]
+    },
+    {
+      "id": "serratus_anterior",
+      "name": "Serratus anterior",
+      "region": "thorax",
+      "architecture": "serrated_sheet",
+      "origin": [
+        "rib::external_surface"
+      ],
+      "insertion": [
+        "scapula::medial_border"
+      ],
+      "joints": [
+        "scapulothoracic"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 180,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "serratus_posterior_superior",
+      "name": "Serratus posterior superior",
+      "region": "back",
+      "architecture": "sheet",
+      "origin": [
+        "cervical_vertebra::spinous_process",
+        "thoracic_vertebra::spinous_process"
+      ],
+      "insertion": [
+        "rib::external_surface"
+      ],
+      "joints": [
+        "thorax"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 122,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "serratus_posterior_inferior",
+      "name": "Serratus posterior inferior",
+      "region": "back",
+      "architecture": "sheet",
+      "origin": [
+        "thoracic_vertebra::spinous_process",
+        "lumbar_vertebra::spinous_process"
+      ],
+      "insertion": [
+        "rib::external_surface"
+      ],
+      "joints": [
+        "thorax"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 122,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "pectoralis_major_clavicular",
+      "name": "Pectoralis major clavicular portion",
+      "region": "chest",
+      "architecture": "fan",
+      "origin": [
+        "clavicle::medial_third"
+      ],
+      "insertion": [
+        "humerus::intertubercular_groove"
+      ],
+      "joints": [
+        "glenohumeral"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": 87,
+      "seed_cm3": 87,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": []
+    },
+    {
+      "id": "pectoralis_major_sternocostal",
+      "name": "Pectoralis major sternocostal portion",
+      "region": "chest",
+      "architecture": "fan",
+      "origin": [
+        "sternum::sternal_body",
+        "rib::costal_cartilage_junction"
+      ],
+      "insertion": [
+        "humerus::intertubercular_groove"
+      ],
+      "joints": [
+        "glenohumeral"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": 203,
+      "seed_cm3": 203,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": []
+    },
+    {
+      "id": "pectoralis_minor",
+      "name": "Pectoralis minor",
+      "region": "chest",
+      "architecture": "fan",
+      "origin": [
+        "rib::external_surface"
+      ],
+      "insertion": [
+        "scapula::coracoid_process"
+      ],
+      "joints": [
+        "scapulothoracic"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 91.3,
+      "source": "volume_unavailable",
+      "aliases": [
+        "pectoralisMinor"
+      ]
+    },
+    {
+      "id": "subclavius",
+      "name": "Subclavius",
+      "region": "chest",
+      "architecture": "strap",
+      "origin": [
+        "rib::costal_cartilage_junction"
+      ],
+      "insertion": [
+        "clavicle::medial_third"
+      ],
+      "joints": [
+        "sternoclavicular"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 63.8,
+      "source": "volume_unavailable",
+      "aliases": [
+        "subclavius"
+      ]
+    },
+    {
+      "id": "latissimus_dorsi",
+      "name": "Latissimus dorsi",
+      "region": "back",
+      "architecture": "broad_sheet",
+      "origin": [
+        "thoracic_vertebra::spinous_process",
+        "lumbar_vertebra::spinous_process",
+        "hip_bone::posterior_iliac_crest",
+        "thoracolumbar_fascia::posterior"
+      ],
+      "insertion": [
+        "humerus::intertubercular_groove"
+      ],
+      "joints": [
+        "glenohumeral",
+        "spine"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": 262.3,
+      "seed_cm3": 262.3,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": []
+    },
+    {
+      "id": "teres_major",
+      "name": "Teres major",
+      "region": "shoulder",
+      "architecture": "fusiform",
+      "origin": [
+        "scapula::inferior_angle"
+      ],
+      "insertion": [
+        "humerus::intertubercular_groove"
+      ],
+      "joints": [
+        "glenohumeral"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 32.7,
+      "seed_cm3": 32.7,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "teresMajor"
+      ]
+    },
+    {
+      "id": "teres_minor",
+      "name": "Teres minor",
+      "region": "shoulder",
+      "architecture": "fusiform",
+      "origin": [
+        "scapula::lateral_border"
+      ],
+      "insertion": [
+        "humerus::greater_tubercle"
+      ],
+      "joints": [
+        "glenohumeral"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 28,
+      "seed_cm3": 28,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "teresMinor"
+      ]
+    },
+    {
+      "id": "supraspinatus",
+      "name": "Supraspinatus",
+      "region": "shoulder",
+      "architecture": "multipennate",
+      "origin": [
+        "scapula::supraspinous_fossa"
+      ],
+      "insertion": [
+        "humerus::greater_tubercle"
+      ],
+      "joints": [
+        "glenohumeral"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 50,
+      "seed_cm3": 50,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "supraspinatus"
+      ]
+    },
+    {
+      "id": "infraspinatus",
+      "name": "Infraspinatus",
+      "region": "shoulder",
+      "architecture": "fan",
+      "origin": [
+        "scapula::infraspinous_fossa"
+      ],
+      "insertion": [
+        "humerus::greater_tubercle"
+      ],
+      "joints": [
+        "glenohumeral"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": 118.6,
+      "seed_cm3": 118.6,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "infraspinatus"
+      ]
+    },
+    {
+      "id": "subscapularis",
+      "name": "Subscapularis",
+      "region": "shoulder",
+      "architecture": "multipennate",
+      "origin": [
+        "scapula::subscapular_fossa"
+      ],
+      "insertion": [
+        "humerus::lesser_tubercle"
+      ],
+      "joints": [
+        "glenohumeral"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 164.5,
+      "seed_cm3": 164.5,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "subscapularis"
+      ]
+    },
+    {
+      "id": "deltoid_anterior",
+      "name": "Deltoid anterior fibers",
+      "region": "shoulder",
+      "architecture": "multipennate",
+      "origin": [
+        "clavicle::lateral_third"
+      ],
+      "insertion": [
+        "humerus::deltoid_tuberosity"
+      ],
+      "joints": [
+        "glenohumeral"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 110.345,
+      "seed_cm3": 110.345,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "deltoidAnterior"
+      ]
+    },
+    {
+      "id": "deltoid_middle",
+      "name": "Deltoid middle fibers",
+      "region": "shoulder",
+      "architecture": "multipennate",
+      "origin": [
+        "scapula::acromion"
+      ],
+      "insertion": [
+        "humerus::deltoid_tuberosity"
+      ],
+      "joints": [
+        "glenohumeral"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 163.615,
+      "seed_cm3": 163.615,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "deltoidMiddle"
+      ]
+    },
+    {
+      "id": "deltoid_posterior",
+      "name": "Deltoid posterior fibers",
+      "region": "shoulder",
+      "architecture": "multipennate",
+      "origin": [
+        "scapula::scapular_spine"
+      ],
+      "insertion": [
+        "humerus::deltoid_tuberosity"
+      ],
+      "joints": [
+        "glenohumeral"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 106.54,
+      "seed_cm3": 106.54,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "deltoidPosterior"
+      ]
+    },
+    {
+      "id": "erector_spinae_iliocostalis",
+      "name": "Iliocostalis group",
+      "region": "back",
+      "architecture": "strap",
+      "origin": [
+        "hip_bone::posterior_iliac_crest",
+        "sacrum::dorsal_sacrum"
+      ],
+      "insertion": [
+        "rib::external_surface",
+        "cervical_vertebra::transverse_process"
+      ],
+      "joints": [
+        "spine"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 150,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "erector_spinae_longissimus",
+      "name": "Longissimus group",
+      "region": "back",
+      "architecture": "strap",
+      "origin": [
+        "sacrum::dorsal_sacrum",
+        "lumbar_vertebra::transverse_process"
+      ],
+      "insertion": [
+        "thoracic_vertebra::transverse_process",
+        "cervical_vertebra::transverse_process"
+      ],
+      "joints": [
+        "spine"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 185,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "spinalis",
+      "name": "Spinalis group",
+      "region": "back",
+      "architecture": "strap",
+      "origin": [
+        "lumbar_vertebra::spinous_process"
+      ],
+      "insertion": [
+        "thoracic_vertebra::spinous_process",
+        "cervical_vertebra::spinous_process"
+      ],
+      "joints": [
+        "spine"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 58,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "multifidus",
+      "name": "Multifidus group",
+      "region": "back",
+      "architecture": "segmented",
+      "origin": [
+        "sacrum::dorsal_sacrum",
+        "lumbar_vertebra::transverse_process",
+        "thoracic_vertebra::transverse_process"
+      ],
+      "insertion": [
+        "lumbar_vertebra::spinous_process",
+        "thoracic_vertebra::spinous_process"
+      ],
+      "joints": [
+        "spine"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        0.97,
+        0.93,
+        1,
+        0.79,
+        0.62,
+        0.19
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 85,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "quadratus_lumborum",
+      "name": "Quadratus lumborum",
+      "region": "abdomen",
+      "architecture": "sheet",
+      "origin": [
+        "hip_bone::iliac_crest"
+      ],
+      "insertion": [
+        "rib::inferior_border",
+        "lumbar_vertebra::transverse_process"
+      ],
+      "joints": [
+        "spine"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 110,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "rectus_abdominis",
+      "name": "Rectus abdominis",
+      "region": "abdomen",
+      "architecture": "segmented",
+      "origin": [
+        "hip_bone::pubic_crest"
+      ],
+      "insertion": [
+        "sternum::xiphoid_process",
+        "rib::costal_cartilage_junction"
+      ],
+      "joints": [
+        "spine"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        0.97,
+        0.93,
+        1,
+        0.79,
+        0.62,
+        0.19
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 260,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "pyramidalis",
+      "name": "Pyramidalis",
+      "region": "abdomen",
+      "architecture": "triangular",
+      "origin": [
+        "hip_bone::pubic_crest"
+      ],
+      "insertion": [
+        "linea_alba::inferior"
+      ],
+      "joints": [
+        "spine"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 83,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "external_oblique",
+      "name": "External abdominal oblique",
+      "region": "abdomen",
+      "architecture": "sheet",
+      "origin": [
+        "rib::external_surface"
+      ],
+      "insertion": [
+        "hip_bone::iliac_crest",
+        "linea_alba::anterior"
+      ],
+      "joints": [
+        "spine"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 170,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "internal_oblique",
+      "name": "Internal abdominal oblique",
+      "region": "abdomen",
+      "architecture": "sheet",
+      "origin": [
+        "hip_bone::iliac_crest",
+        "thoracolumbar_fascia::posterior",
+        "inguinal_ligament::lateral"
+      ],
+      "insertion": [
+        "rib::inferior_border",
+        "linea_alba::anterior"
+      ],
+      "joints": [
+        "spine"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 145,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "transversus_abdominis",
+      "name": "Transversus abdominis",
+      "region": "abdomen",
+      "architecture": "sheet",
+      "origin": [
+        "rib::costal_cartilage_junction",
+        "thoracolumbar_fascia::posterior",
+        "hip_bone::iliac_crest",
+        "inguinal_ligament::lateral"
+      ],
+      "insertion": [
+        "linea_alba::anterior",
+        "hip_bone::pubic_crest"
+      ],
+      "joints": [
+        "spine"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 115,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "external_intercostals",
+      "name": "External intercostal group",
+      "region": "thorax",
+      "architecture": "segmented",
+      "origin": [
+        "rib::inferior_border"
+      ],
+      "insertion": [
+        "rib::superior_border"
+      ],
+      "joints": [
+        "thorax"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        0.97,
+        0.93,
+        1,
+        0.79,
+        0.62,
+        0.19
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 46.75,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "internal_intercostals",
+      "name": "Internal intercostal group",
+      "region": "thorax",
+      "architecture": "segmented",
+      "origin": [
+        "rib::inferior_border"
+      ],
+      "insertion": [
+        "rib::superior_border"
+      ],
+      "joints": [
+        "thorax"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        0.97,
+        0.93,
+        1,
+        0.79,
+        0.62,
+        0.19
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 46.75,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "diaphragm",
+      "name": "Diaphragm",
+      "region": "thorax",
+      "architecture": "dome",
+      "origin": [
+        "sternum::xiphoid_process",
+        "rib::inferior_border",
+        "lumbar_vertebra::vertebral_body"
+      ],
+      "insertion": [
+        "diaphragm_central_tendon::center"
+      ],
+      "joints": [
+        "thorax",
+        "spine"
+      ],
+      "profile": [
+        0.55,
+        0.82,
+        1,
+        0.97,
+        0.94,
+        0.84,
+        0.6,
+        0.4
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 230,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "biceps_brachii_long",
+      "name": "Biceps brachii long head",
+      "region": "arm",
+      "architecture": "fusiform",
+      "origin": [
+        "scapula::supraglenoid_tubercle"
+      ],
+      "insertion": [
+        "radius::radial_tuberosity",
+        "biceps_aponeurosis::medial"
+      ],
+      "joints": [
+        "glenohumeral",
+        "elbow",
+        "radioulnar"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 73.287,
+      "seed_cm3": 73.287,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "biceps"
+      ]
+    },
+    {
+      "id": "biceps_brachii_short",
+      "name": "Biceps brachii short head",
+      "region": "arm",
+      "architecture": "fusiform",
+      "origin": [
+        "scapula::coracoid_process"
+      ],
+      "insertion": [
+        "radius::radial_tuberosity",
+        "biceps_aponeurosis::medial"
+      ],
+      "joints": [
+        "glenohumeral",
+        "elbow",
+        "radioulnar"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 70.413,
+      "seed_cm3": 70.413,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "biceps"
+      ]
+    },
+    {
+      "id": "brachialis",
+      "name": "Brachialis",
+      "region": "arm",
+      "architecture": "fusiform",
+      "origin": [
+        "humerus::distal_anterior_shaft"
+      ],
+      "insertion": [
+        "ulna::coronoid_process"
+      ],
+      "joints": [
+        "elbow"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 143.7,
+      "seed_cm3": 143.7,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "brachialis"
+      ]
+    },
+    {
+      "id": "coracobrachialis",
+      "name": "Coracobrachialis",
+      "region": "arm",
+      "architecture": "strap",
+      "origin": [
+        "scapula::coracoid_process"
+      ],
+      "insertion": [
+        "humerus::proximal_anterior_shaft"
+      ],
+      "joints": [
+        "glenohumeral"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 25.2,
+      "seed_cm3": 25.2,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": []
+    },
+    {
+      "id": "triceps_brachii_long",
+      "name": "Triceps brachii long head",
+      "region": "arm",
+      "architecture": "fusiform",
+      "origin": [
+        "scapula::infraglenoid_tubercle"
+      ],
+      "insertion": [
+        "ulna::olecranon"
+      ],
+      "joints": [
+        "glenohumeral",
+        "elbow"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 148.84,
+      "seed_cm3": 148.84,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "tricepsLong"
+      ]
+    },
+    {
+      "id": "triceps_brachii_lateral",
+      "name": "Triceps brachii lateral head",
+      "region": "arm",
+      "architecture": "fusiform",
+      "origin": [
+        "humerus::posterior_shaft"
+      ],
+      "insertion": [
+        "ulna::olecranon"
+      ],
+      "joints": [
+        "elbow"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 141.398,
+      "seed_cm3": 141.398,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "tricepsLateral"
+      ]
+    },
+    {
+      "id": "triceps_brachii_medial",
+      "name": "Triceps brachii medial head",
+      "region": "arm",
+      "architecture": "fusiform",
+      "origin": [
+        "humerus::posterior_shaft"
+      ],
+      "insertion": [
+        "ulna::olecranon"
+      ],
+      "joints": [
+        "elbow"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 81.862,
+      "seed_cm3": 81.862,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": []
+    },
+    {
+      "id": "anconeus",
+      "name": "Anconeus",
+      "region": "arm",
+      "architecture": "triangular",
+      "origin": [
+        "humerus::lateral_epicondyle"
+      ],
+      "insertion": [
+        "ulna::olecranon",
+        "ulna::proximal_shaft"
+      ],
+      "joints": [
+        "elbow"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": 10.8,
+      "seed_cm3": 10.8,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": []
+    },
+    {
+      "id": "brachioradialis",
+      "name": "Brachioradialis",
+      "region": "forearm",
+      "architecture": "fusiform",
+      "origin": [
+        "humerus::supracondylar_ridge"
+      ],
+      "insertion": [
+        "radius::styloid_process"
+      ],
+      "joints": [
+        "elbow"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 65.1,
+      "seed_cm3": 65.1,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "brachioradialis"
+      ]
+    },
+    {
+      "id": "pronator_teres",
+      "name": "Pronator teres",
+      "region": "forearm",
+      "architecture": "fusiform",
+      "origin": [
+        "humerus::medial_epicondyle",
+        "ulna::coronoid_process"
+      ],
+      "insertion": [
+        "radius::shaft"
+      ],
+      "joints": [
+        "radioulnar",
+        "elbow"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 38.4,
+      "seed_cm3": 38.4,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmFlexors"
+      ]
+    },
+    {
+      "id": "pronator_quadratus",
+      "name": "Pronator quadratus",
+      "region": "forearm",
+      "architecture": "sheet",
+      "origin": [
+        "ulna::anterior_shaft"
+      ],
+      "insertion": [
+        "radius::shaft"
+      ],
+      "joints": [
+        "radioulnar"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": 11.2,
+      "seed_cm3": 11.2,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmFlexors"
+      ]
+    },
+    {
+      "id": "supinator",
+      "name": "Supinator",
+      "region": "forearm",
+      "architecture": "curved_wrap",
+      "origin": [
+        "humerus::lateral_epicondyle",
+        "ulna::proximal_shaft"
+      ],
+      "insertion": [
+        "radius::shaft"
+      ],
+      "joints": [
+        "radioulnar"
+      ],
+      "profile": [
+        0.09,
+        0.31,
+        0.63,
+        0.9,
+        1,
+        0.73,
+        0.34,
+        0.07
+      ],
+      "volume_cm3": 19.7,
+      "seed_cm3": 19.7,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmExtensors"
+      ]
+    },
+    {
+      "id": "flexor_carpi_radialis",
+      "name": "Flexor carpi radialis",
+      "region": "forearm",
+      "architecture": "strap",
+      "origin": [
+        "humerus::medial_epicondyle"
+      ],
+      "insertion": [
+        "metacarpal::base"
+      ],
+      "joints": [
+        "wrist"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 34.8,
+      "seed_cm3": 34.8,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmFlexors"
+      ]
+    },
+    {
+      "id": "flexor_carpi_ulnaris",
+      "name": "Flexor carpi ulnaris",
+      "region": "forearm",
+      "architecture": "strap",
+      "origin": [
+        "humerus::medial_epicondyle",
+        "ulna::olecranon"
+      ],
+      "insertion": [
+        "pisiform::body",
+        "metacarpal::base"
+      ],
+      "joints": [
+        "wrist"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 37.1,
+      "seed_cm3": 37.1,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmFlexors"
+      ]
+    },
+    {
+      "id": "palmaris_longus",
+      "name": "Palmaris longus (variable)",
+      "region": "forearm",
+      "architecture": "strap",
+      "origin": [
+        "humerus::medial_epicondyle"
+      ],
+      "insertion": [
+        "palmar_aponeurosis::central"
+      ],
+      "joints": [
+        "wrist"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 10,
+      "seed_cm3": 10,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmFlexors"
+      ]
+    },
+    {
+      "id": "flexor_digitorum_superficialis",
+      "name": "Flexor digitorum superficialis",
+      "region": "forearm",
+      "architecture": "multipennate",
+      "origin": [
+        "humerus::medial_epicondyle",
+        "ulna::coronoid_process",
+        "radius::shaft"
+      ],
+      "insertion": [
+        "hand_phalanx_middle::base"
+      ],
+      "joints": [
+        "wrist",
+        "fingers"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 74.2,
+      "seed_cm3": 74.2,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmFlexors"
+      ]
+    },
+    {
+      "id": "flexor_digitorum_profundus",
+      "name": "Flexor digitorum profundus",
+      "region": "forearm",
+      "architecture": "multipennate",
+      "origin": [
+        "ulna::anterior_shaft"
+      ],
+      "insertion": [
+        "hand_phalanx_distal::base"
+      ],
+      "joints": [
+        "wrist",
+        "fingers"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 91.6,
+      "seed_cm3": 91.6,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmFlexors"
+      ]
+    },
+    {
+      "id": "flexor_pollicis_longus",
+      "name": "Flexor pollicis longus",
+      "region": "forearm",
+      "architecture": "fusiform",
+      "origin": [
+        "radius::shaft"
+      ],
+      "insertion": [
+        "hand_phalanx_distal::base"
+      ],
+      "joints": [
+        "wrist",
+        "thumb"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 17.1,
+      "seed_cm3": 17.1,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmFlexors"
+      ]
+    },
+    {
+      "id": "extensor_carpi_radialis_longus",
+      "name": "Extensor carpi radialis longus",
+      "region": "forearm",
+      "architecture": "strap",
+      "origin": [
+        "humerus::supracondylar_ridge"
+      ],
+      "insertion": [
+        "metacarpal::base"
+      ],
+      "joints": [
+        "wrist"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 37.5,
+      "seed_cm3": 37.5,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmExtensors"
+      ]
+    },
+    {
+      "id": "extensor_carpi_radialis_brevis",
+      "name": "Extensor carpi radialis brevis",
+      "region": "forearm",
+      "architecture": "strap",
+      "origin": [
+        "humerus::lateral_epicondyle"
+      ],
+      "insertion": [
+        "metacarpal::base"
+      ],
+      "joints": [
+        "wrist"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 21.6,
+      "seed_cm3": 21.6,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmExtensors"
+      ]
+    },
+    {
+      "id": "extensor_carpi_ulnaris",
+      "name": "Extensor carpi ulnaris",
+      "region": "forearm",
+      "architecture": "strap",
+      "origin": [
+        "humerus::lateral_epicondyle",
+        "ulna::posterior_shaft"
+      ],
+      "insertion": [
+        "metacarpal::base"
+      ],
+      "joints": [
+        "wrist"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 17,
+      "seed_cm3": 17,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmExtensors"
+      ]
+    },
+    {
+      "id": "extensor_digitorum",
+      "name": "Extensor digitorum (hand)",
+      "region": "forearm",
+      "architecture": "multipennate",
+      "origin": [
+        "humerus::lateral_epicondyle"
+      ],
+      "insertion": [
+        "hand_phalanx_middle::base",
+        "hand_phalanx_distal::base"
+      ],
+      "joints": [
+        "wrist",
+        "fingers"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 28.6,
+      "seed_cm3": 28.6,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmExtensors"
+      ]
+    },
+    {
+      "id": "extensor_digiti_minimi",
+      "name": "Extensor digiti minimi",
+      "region": "forearm",
+      "architecture": "strap",
+      "origin": [
+        "humerus::lateral_epicondyle"
+      ],
+      "insertion": [
+        "hand_phalanx_middle::base"
+      ],
+      "joints": [
+        "wrist",
+        "fingers"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 7,
+      "seed_cm3": 7,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmExtensors"
+      ]
+    },
+    {
+      "id": "extensor_indicis",
+      "name": "Extensor indicis",
+      "region": "forearm",
+      "architecture": "strap",
+      "origin": [
+        "ulna::posterior_shaft"
+      ],
+      "insertion": [
+        "hand_phalanx_middle::base"
+      ],
+      "joints": [
+        "wrist",
+        "fingers"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 4.2,
+      "seed_cm3": 4.2,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmExtensors"
+      ]
+    },
+    {
+      "id": "abductor_pollicis_longus",
+      "name": "Abductor pollicis longus",
+      "region": "forearm",
+      "architecture": "strap",
+      "origin": [
+        "radius::shaft",
+        "ulna::posterior_shaft"
+      ],
+      "insertion": [
+        "metacarpal::base"
+      ],
+      "joints": [
+        "thumb",
+        "wrist"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 11.9,
+      "seed_cm3": 11.9,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmExtensors"
+      ]
+    },
+    {
+      "id": "extensor_pollicis_longus",
+      "name": "Extensor pollicis longus",
+      "region": "forearm",
+      "architecture": "strap",
+      "origin": [
+        "ulna::posterior_shaft"
+      ],
+      "insertion": [
+        "hand_phalanx_distal::base"
+      ],
+      "joints": [
+        "thumb",
+        "wrist"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 6.6,
+      "seed_cm3": 6.6,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmExtensors"
+      ]
+    },
+    {
+      "id": "extensor_pollicis_brevis",
+      "name": "Extensor pollicis brevis",
+      "region": "forearm",
+      "architecture": "strap",
+      "origin": [
+        "radius::shaft"
+      ],
+      "insertion": [
+        "hand_phalanx_proximal::base"
+      ],
+      "joints": [
+        "thumb",
+        "wrist"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 4.4,
+      "seed_cm3": 4.4,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "forearmExtensors"
+      ]
+    },
+    {
+      "id": "thenar_group",
+      "name": "Thenar intrinsic muscles (render group)",
+      "region": "hand",
+      "architecture": "cluster",
+      "origin": [
+        "trapezium::body",
+        "flexor_retinaculum::anterior"
+      ],
+      "insertion": [
+        "hand_phalanx_proximal::base",
+        "metacarpal::shaft"
+      ],
+      "joints": [
+        "thumb"
+      ],
+      "profile": [
+        0.43,
+        0.78,
+        1,
+        0.9,
+        0.88,
+        0.85,
+        0.7,
+        0.3
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 4.2,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "hypothenar_group",
+      "name": "Hypothenar intrinsic muscles (render group)",
+      "region": "hand",
+      "architecture": "cluster",
+      "origin": [
+        "pisiform::body",
+        "hamate::hook"
+      ],
+      "insertion": [
+        "hand_phalanx_proximal::base"
+      ],
+      "joints": [
+        "fingers"
+      ],
+      "profile": [
+        0.43,
+        0.78,
+        1,
+        0.9,
+        0.88,
+        0.85,
+        0.7,
+        0.3
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 4.2,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "hand_interossei_group",
+      "name": "Hand interossei (render group)",
+      "region": "hand",
+      "architecture": "cluster",
+      "origin": [
+        "metacarpal::shaft"
+      ],
+      "insertion": [
+        "hand_phalanx_proximal::base"
+      ],
+      "joints": [
+        "fingers"
+      ],
+      "profile": [
+        0.43,
+        0.78,
+        1,
+        0.9,
+        0.88,
+        0.85,
+        0.7,
+        0.3
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 4.2,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "hand_lumbricals_group",
+      "name": "Hand lumbricals (render group)",
+      "region": "hand",
+      "architecture": "cluster",
+      "origin": [
+        "flexor_digitorum_profundus_tendons::digital_tendons"
+      ],
+      "insertion": [
+        "hand_phalanx_proximal::base"
+      ],
+      "joints": [
+        "fingers"
+      ],
+      "profile": [
+        0.43,
+        0.78,
+        1,
+        0.9,
+        0.88,
+        0.85,
+        0.7,
+        0.3
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 4.2,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "gluteus_maximus",
+      "name": "Gluteus maximus",
+      "region": "pelvis",
+      "architecture": "broad_sheet",
+      "origin": [
+        "hip_bone::posterior_ilium",
+        "sacrum::dorsal_sacrum",
+        "coccyx::coccygeal_apex"
+      ],
+      "insertion": [
+        "iliotibial_tract::lateral",
+        "femur::gluteal_tuberosity"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": 889.9,
+      "seed_cm3": 889.9,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "gluteusMaximus"
+      ]
+    },
+    {
+      "id": "gluteus_medius",
+      "name": "Gluteus medius",
+      "region": "pelvis",
+      "architecture": "fan",
+      "origin": [
+        "hip_bone::lateral_ilium"
+      ],
+      "insertion": [
+        "femur::greater_trochanter"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": 345.5,
+      "seed_cm3": 345.5,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "gluteusMedius"
+      ]
+    },
+    {
+      "id": "gluteus_minimus",
+      "name": "Gluteus minimus",
+      "region": "pelvis",
+      "architecture": "fan",
+      "origin": [
+        "hip_bone::lateral_ilium"
+      ],
+      "insertion": [
+        "femur::greater_trochanter"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": 77.3,
+      "seed_cm3": 77.3,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "gluteusMinimus"
+      ]
+    },
+    {
+      "id": "tensor_fasciae_latae",
+      "name": "Tensor fasciae latae",
+      "region": "pelvis",
+      "architecture": "fusiform",
+      "origin": [
+        "hip_bone::anterior_superior_iliac_spine"
+      ],
+      "insertion": [
+        "iliotibial_tract::proximal"
+      ],
+      "joints": [
+        "hip",
+        "knee"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 67.8,
+      "seed_cm3": 67.8,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "tensorFasciaeLatae"
+      ]
+    },
+    {
+      "id": "piriformis",
+      "name": "Piriformis",
+      "region": "pelvis",
+      "architecture": "fan",
+      "origin": [
+        "sacrum::anterior_surface"
+      ],
+      "insertion": [
+        "femur::greater_trochanter"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 44,
+      "source": "volume_unavailable",
+      "aliases": [
+        "piriformis"
+      ]
+    },
+    {
+      "id": "obturator_internus",
+      "name": "Obturator internus",
+      "region": "pelvis",
+      "architecture": "curved_wrap",
+      "origin": [
+        "hip_bone::obturator_foramen"
+      ],
+      "insertion": [
+        "femur::greater_trochanter"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.09,
+        0.31,
+        0.63,
+        0.9,
+        1,
+        0.73,
+        0.34,
+        0.07
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 86.8,
+      "source": "volume_unavailable",
+      "aliases": [
+        "obturatorInternus"
+      ]
+    },
+    {
+      "id": "obturator_externus",
+      "name": "Obturator externus",
+      "region": "pelvis",
+      "architecture": "fan",
+      "origin": [
+        "hip_bone::obturator_foramen"
+      ],
+      "insertion": [
+        "femur::trochanteric_fossa"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 116.2,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "gemellus_superior",
+      "name": "Superior gemellus",
+      "region": "pelvis",
+      "architecture": "strap",
+      "origin": [
+        "hip_bone::ischial_spine"
+      ],
+      "insertion": [
+        "femur::greater_trochanter"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 81.2,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "gemellus_inferior",
+      "name": "Inferior gemellus",
+      "region": "pelvis",
+      "architecture": "strap",
+      "origin": [
+        "hip_bone::ischial_tuberosity"
+      ],
+      "insertion": [
+        "femur::greater_trochanter"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 81.2,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "quadratus_femoris",
+      "name": "Quadratus femoris",
+      "region": "pelvis",
+      "architecture": "sheet",
+      "origin": [
+        "hip_bone::ischial_tuberosity"
+      ],
+      "insertion": [
+        "femur::intertrochanteric_crest"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 32,
+      "source": "volume_unavailable",
+      "aliases": [
+        "quadratusFemoris"
+      ]
+    },
+    {
+      "id": "psoas_major",
+      "name": "Psoas major",
+      "region": "pelvis",
+      "architecture": "strap",
+      "origin": [
+        "lumbar_vertebra::vertebral_body",
+        "lumbar_vertebra::transverse_process"
+      ],
+      "insertion": [
+        "femur::lesser_trochanter"
+      ],
+      "joints": [
+        "hip",
+        "spine"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": 167.53,
+      "seed_cm3": 167.53,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "iliopsoas"
+      ]
+    },
+    {
+      "id": "iliacus",
+      "name": "Iliacus",
+      "region": "pelvis",
+      "architecture": "fan",
+      "origin": [
+        "hip_bone::iliac_fossa"
+      ],
+      "insertion": [
+        "femur::lesser_trochanter"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": 137.07,
+      "seed_cm3": 137.07,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "iliopsoas",
+        "iliacus"
+      ]
+    },
+    {
+      "id": "sartorius",
+      "name": "Sartorius",
+      "region": "thigh",
+      "architecture": "long_strap",
+      "origin": [
+        "hip_bone::anterior_superior_iliac_spine"
+      ],
+      "insertion": [
+        "tibia::medial_shaft"
+      ],
+      "joints": [
+        "hip",
+        "knee"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 105,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "rectus_femoris",
+      "name": "Rectus femoris",
+      "region": "thigh",
+      "architecture": "bipennate",
+      "origin": [
+        "hip_bone::anterior_inferior_iliac_spine",
+        "hip_bone::acetabulum"
+      ],
+      "insertion": [
+        "quadriceps_tendon::proximal"
+      ],
+      "joints": [
+        "hip",
+        "knee"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 200.2,
+      "seed_cm3": 200.2,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "rectusFemoris"
+      ]
+    },
+    {
+      "id": "vastus_lateralis",
+      "name": "Vastus lateralis",
+      "region": "thigh",
+      "architecture": "multipennate",
+      "origin": [
+        "femur::greater_trochanter",
+        "femur::linea_aspera"
+      ],
+      "insertion": [
+        "quadriceps_tendon::lateral"
+      ],
+      "joints": [
+        "knee"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 512.044,
+      "seed_cm3": 512.044,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "vastusLateralis"
+      ]
+    },
+    {
+      "id": "vastus_medialis",
+      "name": "Vastus medialis",
+      "region": "thigh",
+      "architecture": "multipennate",
+      "origin": [
+        "femur::linea_aspera",
+        "femur::medial_supracondylar_line"
+      ],
+      "insertion": [
+        "quadriceps_tendon::medial"
+      ],
+      "joints": [
+        "knee"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 381.056,
+      "seed_cm3": 381.056,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "vastusMedialis"
+      ]
+    },
+    {
+      "id": "vastus_intermedius",
+      "name": "Vastus intermedius",
+      "region": "thigh",
+      "architecture": "multipennate",
+      "origin": [
+        "femur::anterior_shaft"
+      ],
+      "insertion": [
+        "quadriceps_tendon::deep"
+      ],
+      "joints": [
+        "knee"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 297.7,
+      "seed_cm3": 297.7,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "vastusIntermedius"
+      ]
+    },
+    {
+      "id": "pectineus",
+      "name": "Pectineus",
+      "region": "thigh",
+      "architecture": "sheet",
+      "origin": [
+        "hip_bone::pubic_crest"
+      ],
+      "insertion": [
+        "femur::linea_aspera"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 85,
+      "source": "volume_unavailable",
+      "aliases": [
+        "pectineus"
+      ]
+    },
+    {
+      "id": "adductor_longus",
+      "name": "Adductor longus",
+      "region": "thigh",
+      "architecture": "fan",
+      "origin": [
+        "hip_bone::pubic_body"
+      ],
+      "insertion": [
+        "femur::linea_aspera"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 185,
+      "source": "volume_unavailable",
+      "aliases": [
+        "adductorLongus"
+      ]
+    },
+    {
+      "id": "adductor_brevis",
+      "name": "Adductor brevis",
+      "region": "thigh",
+      "architecture": "fan",
+      "origin": [
+        "hip_bone::pubic_body",
+        "hip_bone::pubic_ramus"
+      ],
+      "insertion": [
+        "femur::linea_aspera"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 95,
+      "source": "volume_unavailable",
+      "aliases": [
+        "adductorBrevis"
+      ]
+    },
+    {
+      "id": "adductor_magnus_adductor",
+      "name": "Adductor magnus adductor portion",
+      "region": "thigh",
+      "architecture": "broad_sheet",
+      "origin": [
+        "hip_bone::ischial_ramus",
+        "hip_bone::pubic_ramus"
+      ],
+      "insertion": [
+        "femur::linea_aspera"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 245,
+      "source": "volume_unavailable",
+      "aliases": [
+        "adductorMagnus"
+      ]
+    },
+    {
+      "id": "adductor_magnus_hamstring",
+      "name": "Adductor magnus hamstring portion",
+      "region": "thigh",
+      "architecture": "strap",
+      "origin": [
+        "hip_bone::ischial_tuberosity"
+      ],
+      "insertion": [
+        "femur::adductor_tubercle"
+      ],
+      "joints": [
+        "hip"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 80,
+      "source": "volume_unavailable",
+      "aliases": [
+        "adductorMagnus"
+      ]
+    },
+    {
+      "id": "gracilis",
+      "name": "Gracilis",
+      "region": "thigh",
+      "architecture": "long_strap",
+      "origin": [
+        "hip_bone::pubic_body"
+      ],
+      "insertion": [
+        "tibia::medial_shaft"
+      ],
+      "joints": [
+        "hip",
+        "knee"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 100,
+      "source": "volume_unavailable",
+      "aliases": [
+        "gracilis"
+      ]
+    },
+    {
+      "id": "biceps_femoris_long",
+      "name": "Biceps femoris long head",
+      "region": "thigh",
+      "architecture": "fusiform",
+      "origin": [
+        "hip_bone::ischial_tuberosity"
+      ],
+      "insertion": [
+        "fibula::head"
+      ],
+      "joints": [
+        "hip",
+        "knee"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 190,
+      "source": "volume_unavailable",
+      "aliases": [
+        "bicepsFemoris"
+      ]
+    },
+    {
+      "id": "biceps_femoris_short",
+      "name": "Biceps femoris short head",
+      "region": "thigh",
+      "architecture": "fusiform",
+      "origin": [
+        "femur::linea_aspera"
+      ],
+      "insertion": [
+        "fibula::head"
+      ],
+      "joints": [
+        "knee"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 80,
+      "source": "volume_unavailable",
+      "aliases": [
+        "bicepsFemoris"
+      ]
+    },
+    {
+      "id": "semitendinosus",
+      "name": "Semitendinosus",
+      "region": "thigh",
+      "architecture": "long_strap",
+      "origin": [
+        "hip_bone::ischial_tuberosity"
+      ],
+      "insertion": [
+        "tibia::medial_shaft"
+      ],
+      "joints": [
+        "hip",
+        "knee"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 115,
+      "source": "volume_unavailable",
+      "aliases": [
+        "semitendinosus"
+      ]
+    },
+    {
+      "id": "semimembranosus",
+      "name": "Semimembranosus",
+      "region": "thigh",
+      "architecture": "broad_sheet",
+      "origin": [
+        "hip_bone::ischial_tuberosity"
+      ],
+      "insertion": [
+        "tibia::medial_condyle"
+      ],
+      "joints": [
+        "hip",
+        "knee"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 160,
+      "source": "volume_unavailable",
+      "aliases": [
+        "semimembranosus"
+      ]
+    },
+    {
+      "id": "popliteus",
+      "name": "Popliteus",
+      "region": "knee",
+      "architecture": "fan",
+      "origin": [
+        "femur::lateral_condyle"
+      ],
+      "insertion": [
+        "tibia::posterior_shaft"
+      ],
+      "joints": [
+        "knee"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 9.96,
+      "source": "volume_unavailable",
+      "aliases": [
+        "popliteus"
+      ]
+    },
+    {
+      "id": "gastrocnemius_medial",
+      "name": "Gastrocnemius medial head",
+      "region": "leg",
+      "architecture": "fusiform",
+      "origin": [
+        "femur::medial_condyle"
+      ],
+      "insertion": [
+        "achilles_tendon::proximal"
+      ],
+      "joints": [
+        "knee",
+        "ankle"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 204.3,
+      "seed_cm3": 204.3,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "gastrocnemiusMedial"
+      ]
+    },
+    {
+      "id": "gastrocnemius_lateral",
+      "name": "Gastrocnemius lateral head",
+      "region": "leg",
+      "architecture": "fusiform",
+      "origin": [
+        "femur::lateral_condyle"
+      ],
+      "insertion": [
+        "achilles_tendon::proximal"
+      ],
+      "joints": [
+        "knee",
+        "ankle"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": 124.1,
+      "seed_cm3": 124.1,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "gastrocnemiusLateral"
+      ]
+    },
+    {
+      "id": "soleus",
+      "name": "Soleus",
+      "region": "leg",
+      "architecture": "multipennate",
+      "origin": [
+        "tibia::soleal_line",
+        "fibula::proximal_shaft"
+      ],
+      "insertion": [
+        "achilles_tendon::middle"
+      ],
+      "joints": [
+        "ankle"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": 457.2,
+      "seed_cm3": 457.2,
+      "source": "calibrated_with_reference_population_or_heuristic_split",
+      "aliases": [
+        "soleus"
+      ]
+    },
+    {
+      "id": "plantaris",
+      "name": "Plantaris (variable)",
+      "region": "leg",
+      "architecture": "long_strap",
+      "origin": [
+        "femur::lateral_condyle"
+      ],
+      "insertion": [
+        "calcaneus::calcaneal_tuberosity"
+      ],
+      "joints": [
+        "knee",
+        "ankle"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 46.4,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "tibialis_anterior",
+      "name": "Tibialis anterior",
+      "region": "leg",
+      "architecture": "fusiform",
+      "origin": [
+        "tibia::lateral_condyle",
+        "tibia::anterior_shaft"
+      ],
+      "insertion": [
+        "cuneiform_medial::body",
+        "metatarsal::base"
+      ],
+      "joints": [
+        "ankle",
+        "foot"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 150,
+      "source": "volume_unavailable",
+      "aliases": [
+        "tibialisAnterior"
+      ]
+    },
+    {
+      "id": "tibialis_posterior",
+      "name": "Tibialis posterior",
+      "region": "leg",
+      "architecture": "multipennate",
+      "origin": [
+        "tibia::posterior_shaft",
+        "fibula::posterior_shaft"
+      ],
+      "insertion": [
+        "navicular::tuberosity",
+        "cuneiform_medial::body"
+      ],
+      "joints": [
+        "ankle",
+        "foot"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 130,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "fibularis_longus",
+      "name": "Fibularis longus",
+      "region": "leg",
+      "architecture": "strap",
+      "origin": [
+        "fibula::head",
+        "fibula::lateral_shaft"
+      ],
+      "insertion": [
+        "cuneiform_medial::body",
+        "metatarsal::base"
+      ],
+      "joints": [
+        "ankle",
+        "foot"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 100,
+      "source": "volume_unavailable",
+      "aliases": [
+        "fibularisLongus"
+      ]
+    },
+    {
+      "id": "fibularis_brevis",
+      "name": "Fibularis brevis",
+      "region": "leg",
+      "architecture": "strap",
+      "origin": [
+        "fibula::lateral_shaft"
+      ],
+      "insertion": [
+        "metatarsal::base"
+      ],
+      "joints": [
+        "ankle",
+        "foot"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 60,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "fibularis_tertius",
+      "name": "Fibularis tertius",
+      "region": "leg",
+      "architecture": "strap",
+      "origin": [
+        "fibula::lateral_shaft"
+      ],
+      "insertion": [
+        "metatarsal::base"
+      ],
+      "joints": [
+        "ankle",
+        "foot"
+      ],
+      "profile": [
+        0.06,
+        0.45,
+        0.78,
+        0.95,
+        1,
+        0.94,
+        0.45,
+        0.05
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 46.4,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "extensor_digitorum_longus",
+      "name": "Extensor digitorum longus",
+      "region": "leg",
+      "architecture": "multipennate",
+      "origin": [
+        "tibia::lateral_condyle",
+        "fibula::proximal_shaft"
+      ],
+      "insertion": [
+        "foot_phalanx_middle::base",
+        "foot_phalanx_distal::base"
+      ],
+      "joints": [
+        "ankle",
+        "toes"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 87.2,
+      "source": "volume_unavailable",
+      "aliases": [
+        "extensorDigitorum"
+      ]
+    },
+    {
+      "id": "extensor_hallucis_longus",
+      "name": "Extensor hallucis longus",
+      "region": "leg",
+      "architecture": "fusiform",
+      "origin": [
+        "fibula::lateral_shaft"
+      ],
+      "insertion": [
+        "foot_phalanx_distal::base"
+      ],
+      "joints": [
+        "ankle",
+        "toes"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 80,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "flexor_digitorum_longus",
+      "name": "Flexor digitorum longus",
+      "region": "leg",
+      "architecture": "multipennate",
+      "origin": [
+        "tibia::posterior_shaft"
+      ],
+      "insertion": [
+        "foot_phalanx_distal::base"
+      ],
+      "joints": [
+        "ankle",
+        "toes"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 87.2,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "flexor_hallucis_longus",
+      "name": "Flexor hallucis longus",
+      "region": "leg",
+      "architecture": "fusiform",
+      "origin": [
+        "fibula::posterior_shaft"
+      ],
+      "insertion": [
+        "foot_phalanx_distal::base"
+      ],
+      "joints": [
+        "ankle",
+        "toes"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 80,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "extensor_digitorum_brevis",
+      "name": "Extensor digitorum brevis",
+      "region": "foot",
+      "architecture": "fan",
+      "origin": [
+        "calcaneus::anterior_surface"
+      ],
+      "insertion": [
+        "foot_phalanx_middle::base"
+      ],
+      "joints": [
+        "toes"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 11.62,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "abductor_hallucis",
+      "name": "Abductor hallucis",
+      "region": "foot",
+      "architecture": "fusiform",
+      "origin": [
+        "calcaneus::calcaneal_tuberosity"
+      ],
+      "insertion": [
+        "foot_phalanx_proximal::base"
+      ],
+      "joints": [
+        "toes"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 14,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "flexor_digitorum_brevis",
+      "name": "Flexor digitorum brevis",
+      "region": "foot",
+      "architecture": "multipennate",
+      "origin": [
+        "calcaneus::calcaneal_tuberosity"
+      ],
+      "insertion": [
+        "foot_phalanx_middle::base"
+      ],
+      "joints": [
+        "toes"
+      ],
+      "profile": [
+        0.05,
+        0.31,
+        0.71,
+        0.98,
+        0.99,
+        0.72,
+        0.28,
+        0.03
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 15.26,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "abductor_digiti_minimi_foot",
+      "name": "Abductor digiti minimi (foot)",
+      "region": "foot",
+      "architecture": "fusiform",
+      "origin": [
+        "calcaneus::calcaneal_tuberosity"
+      ],
+      "insertion": [
+        "foot_phalanx_proximal::base"
+      ],
+      "joints": [
+        "toes"
+      ],
+      "profile": [
+        0.01,
+        0.2,
+        0.59,
+        0.88,
+        1,
+        0.71,
+        0.31,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 14,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "foot_interossei_group",
+      "name": "Foot interossei (render group)",
+      "region": "foot",
+      "architecture": "cluster",
+      "origin": [
+        "metatarsal::shaft"
+      ],
+      "insertion": [
+        "foot_phalanx_proximal::base"
+      ],
+      "joints": [
+        "toes"
+      ],
+      "profile": [
+        0.43,
+        0.78,
+        1,
+        0.9,
+        0.88,
+        0.85,
+        0.7,
+        0.3
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 4.9,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "foot_lumbricals_group",
+      "name": "Foot lumbricals (render group)",
+      "region": "foot",
+      "architecture": "cluster",
+      "origin": [
+        "flexor_digitorum_longus_tendons::digital_tendons"
+      ],
+      "insertion": [
+        "foot_phalanx_proximal::base"
+      ],
+      "joints": [
+        "toes"
+      ],
+      "profile": [
+        0.43,
+        0.78,
+        1,
+        0.9,
+        0.88,
+        0.85,
+        0.7,
+        0.3
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 4.9,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "masseter",
+      "name": "Masseter",
+      "region": "face",
+      "architecture": "fan",
+      "origin": [
+        "zygomatic::malar_prominence"
+      ],
+      "insertion": [
+        "mandible::angle"
+      ],
+      "joints": [
+        "jaw"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 25,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "temporalis",
+      "name": "Temporalis",
+      "region": "face",
+      "architecture": "fan",
+      "origin": [
+        "temporal::temporal_fossa"
+      ],
+      "insertion": [
+        "mandible::coronoid_process"
+      ],
+      "joints": [
+        "jaw"
+      ],
+      "profile": [
+        0.23,
+        0.67,
+        1,
+        0.91,
+        0.72,
+        0.45,
+        0.19,
+        0.02
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 30,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "orbicularis_oris",
+      "name": "Orbicularis oris",
+      "region": "face",
+      "architecture": "sphincter",
+      "origin": [
+        "maxilla::alveolar_process",
+        "mandible::mental_protuberance"
+      ],
+      "insertion": [
+        "skin::lips"
+      ],
+      "joints": [
+        "face"
+      ],
+      "profile": [
+        0.6,
+        0.92,
+        1,
+        1,
+        1,
+        1,
+        0.92,
+        0.6
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 6,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "orbicularis_oculi",
+      "name": "Orbicularis oculi",
+      "region": "face",
+      "architecture": "sphincter",
+      "origin": [
+        "frontal::supraorbital_margin",
+        "maxilla::infraorbital_margin"
+      ],
+      "insertion": [
+        "skin::eyelid"
+      ],
+      "joints": [
+        "face"
+      ],
+      "profile": [
+        0.6,
+        0.92,
+        1,
+        1,
+        1,
+        1,
+        0.92,
+        0.6
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 6,
+      "source": "volume_unavailable",
+      "aliases": []
+    },
+    {
+      "id": "platysma",
+      "name": "Platysma",
+      "region": "neck",
+      "architecture": "sheet",
+      "origin": [
+        "deep_fascia::superficial_chest"
+      ],
+      "insertion": [
+        "mandible::inferior_border",
+        "skin::lower_face"
+      ],
+      "joints": [
+        "face",
+        "cervical_spine"
+      ],
+      "profile": [
+        0.31,
+        0.74,
+        0.97,
+        1,
+        0.96,
+        0.79,
+        0.54,
+        0.21
+      ],
+      "volume_cm3": null,
+      "seed_cm3": 67.1,
+      "source": "volume_unavailable",
+      "aliases": []
+    }
+  ],
+  "bones": [
+    {
+      "id": "cranium",
+      "name": "Skull cranial shell",
+      "region": "head",
+      "laterality": "midline",
+      "landmarks": [
+        "forehead",
+        "occipital ridge",
+        "superior orbital rim",
+        "temporal region"
+      ]
+    },
+    {
+      "id": "frontal",
+      "name": "Frontal bone",
+      "region": "head",
+      "laterality": "midline",
+      "landmarks": [
+        "frontal squama",
+        "supraorbital margin"
+      ]
+    },
+    {
+      "id": "parietal",
+      "name": "Parietal bone",
+      "region": "head",
+      "laterality": "bilateral",
+      "landmarks": [
+        "parietal eminence"
+      ]
+    },
+    {
+      "id": "temporal",
+      "name": "Temporal bone",
+      "region": "head",
+      "laterality": "bilateral",
+      "landmarks": [
+        "mastoid process",
+        "temporal fossa",
+        "zygomatic process"
+      ]
+    },
+    {
+      "id": "occipital",
+      "name": "Occipital bone",
+      "region": "head",
+      "laterality": "midline",
+      "landmarks": [
+        "external occipital protuberance",
+        "superior nuchal line"
+      ]
+    },
+    {
+      "id": "maxilla",
+      "name": "Maxilla",
+      "region": "head",
+      "laterality": "bilateral",
+      "landmarks": [
+        "alveolar process",
+        "infraorbital margin"
+      ]
+    },
+    {
+      "id": "zygomatic",
+      "name": "Zygomatic bone",
+      "region": "head",
+      "laterality": "bilateral",
+      "landmarks": [
+        "malar prominence"
+      ]
+    },
+    {
+      "id": "mandible",
+      "name": "Mandible",
+      "region": "head",
+      "laterality": "midline",
+      "landmarks": [
+        "angle",
+        "condylar process",
+        "coronoid process",
+        "inferior border",
+        "mental protuberance"
+      ]
+    },
+    {
+      "id": "hyoid",
+      "name": "Hyoid",
+      "region": "neck",
+      "laterality": "midline",
+      "landmarks": [
+        "body",
+        "greater horn"
+      ]
+    },
+    {
+      "id": "cervical_vertebra",
+      "name": "Cervical vertebra template (C1-C7)",
+      "region": "spine",
+      "laterality": "midline",
+      "landmarks": [
+        "lamina",
+        "spinous process",
+        "superior articular facet",
+        "transverse process",
+        "vertebral body"
+      ]
+    },
+    {
+      "id": "thoracic_vertebra",
+      "name": "Thoracic vertebra template (T1-T12)",
+      "region": "spine",
+      "laterality": "midline",
+      "landmarks": [
+        "spinous process",
+        "superior articular facet",
+        "transverse process",
+        "vertebral body"
+      ]
+    },
+    {
+      "id": "lumbar_vertebra",
+      "name": "Lumbar vertebra template (L1-L5)",
+      "region": "spine",
+      "laterality": "midline",
+      "landmarks": [
+        "spinous process",
+        "superior articular facet",
+        "transverse process",
+        "vertebral body"
+      ]
+    },
+    {
+      "id": "sacrum",
+      "name": "Sacrum",
+      "region": "pelvis",
+      "laterality": "midline",
+      "landmarks": [
+        "anterior surface",
+        "dorsal sacrum",
+        "sacral crest"
+      ]
+    },
+    {
+      "id": "coccyx",
+      "name": "Coccyx",
+      "region": "pelvis",
+      "laterality": "midline",
+      "landmarks": [
+        "coccygeal apex"
+      ]
+    },
+    {
+      "id": "rib",
+      "name": "Rib (1-12)",
+      "region": "thorax",
+      "laterality": "bilateral",
+      "landmarks": [
+        "costal cartilage junction",
+        "external surface",
+        "inferior border",
+        "superior border"
+      ]
+    },
+    {
+      "id": "sternum",
+      "name": "Sternum",
+      "region": "thorax",
+      "laterality": "midline",
+      "landmarks": [
+        "manubrium",
+        "sternal body",
+        "xiphoid process"
+      ]
+    },
+    {
+      "id": "clavicle",
+      "name": "Clavicle",
+      "region": "shoulder",
+      "laterality": "bilateral",
+      "landmarks": [
+        "acromial end",
+        "lateral third",
+        "medial third",
+        "sternal end"
+      ]
+    },
+    {
+      "id": "scapula",
+      "name": "Scapula",
+      "region": "shoulder",
+      "laterality": "bilateral",
+      "landmarks": [
+        "acromion",
+        "coracoid process",
+        "glenoid",
+        "inferior angle",
+        "infraglenoid tubercle",
+        "infraspinous fossa",
+        "lateral border",
+        "medial border",
+        "scapular spine",
+        "subscapular fossa",
+        "supraglenoid tubercle",
+        "supraspinous fossa"
+      ]
+    },
+    {
+      "id": "humerus",
+      "name": "Humerus",
+      "region": "arm",
+      "laterality": "bilateral",
+      "landmarks": [
+        "capitulum",
+        "deltoid tuberosity",
+        "distal anterior shaft",
+        "greater tubercle",
+        "head",
+        "intertubercular groove",
+        "lateral epicondyle",
+        "lesser tubercle",
+        "medial epicondyle",
+        "posterior shaft",
+        "proximal anterior shaft",
+        "supracondylar ridge",
+        "trochlea"
+      ]
+    },
+    {
+      "id": "radius",
+      "name": "Radius",
+      "region": "forearm",
+      "laterality": "bilateral",
+      "landmarks": [
+        "distal radius",
+        "radial head",
+        "radial tuberosity",
+        "shaft",
+        "styloid process"
+      ]
+    },
+    {
+      "id": "ulna",
+      "name": "Ulna",
+      "region": "forearm",
+      "laterality": "bilateral",
+      "landmarks": [
+        "anterior shaft",
+        "coronoid process",
+        "olecranon",
+        "posterior shaft",
+        "proximal shaft",
+        "styloid process"
+      ]
+    },
+    {
+      "id": "scaphoid",
+      "name": "Scaphoid",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body"
+      ]
+    },
+    {
+      "id": "lunate",
+      "name": "Lunate",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body"
+      ]
+    },
+    {
+      "id": "triquetrum",
+      "name": "Triquetrum",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body"
+      ]
+    },
+    {
+      "id": "pisiform",
+      "name": "Pisiform",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body"
+      ]
+    },
+    {
+      "id": "trapezium",
+      "name": "Trapezium",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body"
+      ]
+    },
+    {
+      "id": "trapezoid",
+      "name": "Trapezoid",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body"
+      ]
+    },
+    {
+      "id": "capitate",
+      "name": "Capitate",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body"
+      ]
+    },
+    {
+      "id": "hamate",
+      "name": "Hamate",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body",
+        "hook"
+      ]
+    },
+    {
+      "id": "metacarpal",
+      "name": "Metacarpals I-V",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "base",
+        "head",
+        "shaft"
+      ]
+    },
+    {
+      "id": "hand_phalanx_proximal",
+      "name": "Hand proximal phalanges I-V",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "base",
+        "head",
+        "shaft"
+      ]
+    },
+    {
+      "id": "hand_phalanx_middle",
+      "name": "Hand middle phalanges II-V",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "base",
+        "head",
+        "shaft"
+      ]
+    },
+    {
+      "id": "hand_phalanx_distal",
+      "name": "Hand distal phalanges I-V",
+      "region": "hand",
+      "laterality": "bilateral",
+      "landmarks": [
+        "base",
+        "shaft",
+        "tuft"
+      ]
+    },
+    {
+      "id": "hip_bone",
+      "name": "Hip bone (ilium/ischium/pubis fused)",
+      "region": "pelvis",
+      "laterality": "bilateral",
+      "landmarks": [
+        "acetabulum",
+        "anterior ilium",
+        "anterior inferior iliac spine",
+        "anterior superior iliac spine",
+        "greater sciatic notch",
+        "iliac crest",
+        "iliac fossa",
+        "ischial ramus",
+        "ischial spine",
+        "ischial tuberosity",
+        "lateral ilium",
+        "obturator foramen",
+        "posterior iliac crest",
+        "posterior ilium",
+        "pubic body",
+        "pubic crest",
+        "pubic ramus",
+        "pubic symphysis"
+      ]
+    },
+    {
+      "id": "femur",
+      "name": "Femur",
+      "region": "thigh",
+      "laterality": "bilateral",
+      "landmarks": [
+        "adductor tubercle",
+        "anterior shaft",
+        "distal shaft",
+        "gluteal tuberosity",
+        "greater trochanter",
+        "head",
+        "intercondylar fossa",
+        "intertrochanteric crest",
+        "lateral condyle",
+        "lateral epicondyle",
+        "lateral supracondylar line",
+        "lesser trochanter",
+        "linea aspera",
+        "medial condyle",
+        "medial epicondyle",
+        "medial supracondylar line",
+        "neck",
+        "posterior shaft",
+        "trochanteric fossa"
+      ]
+    },
+    {
+      "id": "patella",
+      "name": "Patella",
+      "region": "knee",
+      "laterality": "bilateral",
+      "landmarks": [
+        "anterior surface",
+        "apex",
+        "base",
+        "posterior articular surface"
+      ]
+    },
+    {
+      "id": "tibia",
+      "name": "Tibia",
+      "region": "leg",
+      "laterality": "bilateral",
+      "landmarks": [
+        "anterior shaft",
+        "lateral condyle",
+        "medial condyle",
+        "medial malleolus",
+        "medial shaft",
+        "posterior shaft",
+        "soleal line",
+        "tibial tuberosity"
+      ]
+    },
+    {
+      "id": "fibula",
+      "name": "Fibula",
+      "region": "leg",
+      "laterality": "bilateral",
+      "landmarks": [
+        "head",
+        "lateral malleolus",
+        "lateral shaft",
+        "posterior shaft",
+        "proximal shaft"
+      ]
+    },
+    {
+      "id": "talus",
+      "name": "Talus",
+      "region": "foot",
+      "laterality": "bilateral",
+      "landmarks": [
+        "head",
+        "neck",
+        "trochlea"
+      ]
+    },
+    {
+      "id": "calcaneus",
+      "name": "Calcaneus",
+      "region": "foot",
+      "laterality": "bilateral",
+      "landmarks": [
+        "anterior surface",
+        "calcaneal tuberosity",
+        "sustentaculum tali"
+      ]
+    },
+    {
+      "id": "navicular",
+      "name": "Navicular",
+      "region": "foot",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body",
+        "tuberosity"
+      ]
+    },
+    {
+      "id": "cuboid",
+      "name": "Cuboid",
+      "region": "foot",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body",
+        "plantar groove"
+      ]
+    },
+    {
+      "id": "cuneiform_medial",
+      "name": "Medial cuneiform",
+      "region": "foot",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body"
+      ]
+    },
+    {
+      "id": "cuneiform_intermediate",
+      "name": "Intermediate cuneiform",
+      "region": "foot",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body"
+      ]
+    },
+    {
+      "id": "cuneiform_lateral",
+      "name": "Lateral cuneiform",
+      "region": "foot",
+      "laterality": "bilateral",
+      "landmarks": [
+        "body"
+      ]
+    },
+    {
+      "id": "metatarsal",
+      "name": "Metatarsals I-V",
+      "region": "foot",
+      "laterality": "bilateral",
+      "landmarks": [
+        "base",
+        "head",
+        "shaft"
+      ]
+    },
+    {
+      "id": "foot_phalanx_proximal",
+      "name": "Foot proximal phalanges I-V",
+      "region": "foot",
+      "laterality": "bilateral",
+      "landmarks": [
+        "base",
+        "head",
+        "shaft"
+      ]
+    },
+    {
+      "id": "foot_phalanx_middle",
+      "name": "Foot middle phalanges II-V",
+      "region": "foot",
+      "laterality": "bilateral",
+      "landmarks": [
+        "base",
+        "head",
+        "shaft"
+      ]
+    },
+    {
+      "id": "foot_phalanx_distal",
+      "name": "Foot distal phalanges I-V",
+      "region": "foot",
+      "laterality": "bilateral",
+      "landmarks": [
+        "base",
+        "shaft",
+        "tuft"
+      ]
+    }
+  ],
+  "joints": [
+    {
+      "id": "spine",
+      "name": "Axial spine",
+      "type": "multi_segment"
+    },
+    {
+      "id": "cervical_spine",
+      "name": "Cervical spine",
+      "type": "multi_segment"
+    },
+    {
+      "id": "thorax",
+      "name": "Rib cage / breathing",
+      "type": "coupled_deformable"
+    },
+    {
+      "id": "sternoclavicular",
+      "name": "Sternoclavicular",
+      "type": "saddle_coupled"
+    },
+    {
+      "id": "acromioclavicular",
+      "name": "Acromioclavicular",
+      "type": "coupled_rotation"
+    },
+    {
+      "id": "scapulothoracic",
+      "name": "Scapulothoracic (functional sliding)",
+      "type": "functional_slide"
+    },
+    {
+      "id": "glenohumeral",
+      "name": "Glenohumeral",
+      "type": "ball_socket"
+    },
+    {
+      "id": "elbow",
+      "name": "Humeroulnar elbow",
+      "type": "hinge_coupled"
+    },
+    {
+      "id": "radioulnar",
+      "name": "Forearm radioulnar",
+      "type": "pivot"
+    },
+    {
+      "id": "wrist",
+      "name": "Radiocarpal wrist",
+      "type": "condyloid"
+    },
+    {
+      "id": "fingers",
+      "name": "Hand digits (instanced)",
+      "type": "multi_digital"
+    },
+    {
+      "id": "thumb",
+      "name": "Thumb CMC/MCP/IP (instanced)",
+      "type": "thumb_complex"
+    },
+    {
+      "id": "hip",
+      "name": "Hip",
+      "type": "ball_socket"
+    },
+    {
+      "id": "knee",
+      "name": "Tibiofemoral knee",
+      "type": "hinge_coupled"
+    },
+    {
+      "id": "patellofemoral",
+      "name": "Patellofemoral",
+      "type": "guided_slide"
+    },
+    {
+      "id": "ankle",
+      "name": "Talocrural ankle",
+      "type": "hinge"
+    },
+    {
+      "id": "subtalar",
+      "name": "Subtalar",
+      "type": "coupled_rotation"
+    },
+    {
+      "id": "foot",
+      "name": "Midfoot",
+      "type": "composite"
+    },
+    {
+      "id": "metatarsophalangeal",
+      "name": "Metatarsophalangeal",
+      "type": "multi_digital"
+    },
+    {
+      "id": "toes",
+      "name": "Toe articulations",
+      "type": "multi_digital"
+    },
+    {
+      "id": "jaw",
+      "name": "Temporomandibular joint",
+      "type": "coupled_slide_rotation"
+    },
+    {
+      "id": "face",
+      "name": "Facial soft-tissue articulation",
+      "type": "soft_tissue_actuation"
+    }
+  ],
+  "attachments": [
+    {
+      "id": "achilles_tendon::middle",
+      "owner": "achilles_tendon",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "achilles_tendon::proximal",
+      "owner": "achilles_tendon",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "biceps_aponeurosis::medial",
+      "owner": "biceps_aponeurosis",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "calcaneus::anterior_surface",
+      "owner": "calcaneus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "calcaneus::calcaneal_tuberosity",
+      "owner": "calcaneus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "cervical_vertebra::spinous_process",
+      "owner": "cervical_vertebra",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "cervical_vertebra::transverse_process",
+      "owner": "cervical_vertebra",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "clavicle::lateral_third",
+      "owner": "clavicle",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "clavicle::medial_third",
+      "owner": "clavicle",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "coccyx::coccygeal_apex",
+      "owner": "coccyx",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "cuneiform_medial::body",
+      "owner": "cuneiform_medial",
+      "kind": "bone_surface",
+      "quality": "unresolved_full_bone_body_surface"
+    },
+    {
+      "id": "deep_fascia::superficial_chest",
+      "owner": "deep_fascia",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "diaphragm_central_tendon::center",
+      "owner": "diaphragm_central_tendon",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "femur::adductor_tubercle",
+      "owner": "femur",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "femur::anterior_shaft",
+      "owner": "femur",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "femur::gluteal_tuberosity",
+      "owner": "femur",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "femur::greater_trochanter",
+      "owner": "femur",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "femur::intertrochanteric_crest",
+      "owner": "femur",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "femur::lateral_condyle",
+      "owner": "femur",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "femur::lesser_trochanter",
+      "owner": "femur",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "femur::linea_aspera",
+      "owner": "femur",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "femur::medial_condyle",
+      "owner": "femur",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "femur::medial_supracondylar_line",
+      "owner": "femur",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "femur::trochanteric_fossa",
+      "owner": "femur",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "fibula::head",
+      "owner": "fibula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "fibula::lateral_shaft",
+      "owner": "fibula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "fibula::posterior_shaft",
+      "owner": "fibula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "fibula::proximal_shaft",
+      "owner": "fibula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "flexor_digitorum_longus_tendons::digital_tendons",
+      "owner": "flexor_digitorum_longus_tendons",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "flexor_digitorum_profundus_tendons::digital_tendons",
+      "owner": "flexor_digitorum_profundus_tendons",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "flexor_retinaculum::anterior",
+      "owner": "flexor_retinaculum",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "foot_phalanx_distal::base",
+      "owner": "foot_phalanx_distal",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "foot_phalanx_middle::base",
+      "owner": "foot_phalanx_middle",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "foot_phalanx_proximal::base",
+      "owner": "foot_phalanx_proximal",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "frontal::supraorbital_margin",
+      "owner": "frontal",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hamate::hook",
+      "owner": "hamate",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hand_phalanx_distal::base",
+      "owner": "hand_phalanx_distal",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hand_phalanx_middle::base",
+      "owner": "hand_phalanx_middle",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hand_phalanx_proximal::base",
+      "owner": "hand_phalanx_proximal",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::acetabulum",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::anterior_inferior_iliac_spine",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::anterior_superior_iliac_spine",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::iliac_crest",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::iliac_fossa",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::ischial_ramus",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::ischial_spine",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::ischial_tuberosity",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::lateral_ilium",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::obturator_foramen",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::posterior_iliac_crest",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::posterior_ilium",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::pubic_body",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::pubic_crest",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "hip_bone::pubic_ramus",
+      "owner": "hip_bone",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "humerus::deltoid_tuberosity",
+      "owner": "humerus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "humerus::distal_anterior_shaft",
+      "owner": "humerus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "humerus::greater_tubercle",
+      "owner": "humerus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "humerus::intertubercular_groove",
+      "owner": "humerus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "humerus::lateral_epicondyle",
+      "owner": "humerus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "humerus::lesser_tubercle",
+      "owner": "humerus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "humerus::medial_epicondyle",
+      "owner": "humerus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "humerus::posterior_shaft",
+      "owner": "humerus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "humerus::proximal_anterior_shaft",
+      "owner": "humerus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "humerus::supracondylar_ridge",
+      "owner": "humerus",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "iliotibial_tract::lateral",
+      "owner": "iliotibial_tract",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "iliotibial_tract::proximal",
+      "owner": "iliotibial_tract",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "inguinal_ligament::lateral",
+      "owner": "inguinal_ligament",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "linea_alba::anterior",
+      "owner": "linea_alba",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "linea_alba::inferior",
+      "owner": "linea_alba",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "lumbar_vertebra::spinous_process",
+      "owner": "lumbar_vertebra",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "lumbar_vertebra::transverse_process",
+      "owner": "lumbar_vertebra",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "lumbar_vertebra::vertebral_body",
+      "owner": "lumbar_vertebra",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "mandible::angle",
+      "owner": "mandible",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "mandible::coronoid_process",
+      "owner": "mandible",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "mandible::inferior_border",
+      "owner": "mandible",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "mandible::mental_protuberance",
+      "owner": "mandible",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "maxilla::alveolar_process",
+      "owner": "maxilla",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "maxilla::infraorbital_margin",
+      "owner": "maxilla",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "metacarpal::base",
+      "owner": "metacarpal",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "metacarpal::shaft",
+      "owner": "metacarpal",
+      "kind": "bone_surface",
+      "quality": "unresolved_full_bone_body_surface"
+    },
+    {
+      "id": "metatarsal::base",
+      "owner": "metatarsal",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "metatarsal::shaft",
+      "owner": "metatarsal",
+      "kind": "bone_surface",
+      "quality": "unresolved_full_bone_body_surface"
+    },
+    {
+      "id": "navicular::tuberosity",
+      "owner": "navicular",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "occipital::superior_nuchal_line",
+      "owner": "occipital",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "palmar_aponeurosis::central",
+      "owner": "palmar_aponeurosis",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "pisiform::body",
+      "owner": "pisiform",
+      "kind": "bone_surface",
+      "quality": "unresolved_full_bone_body_surface"
+    },
+    {
+      "id": "quadriceps_tendon::deep",
+      "owner": "quadriceps_tendon",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "quadriceps_tendon::lateral",
+      "owner": "quadriceps_tendon",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "quadriceps_tendon::medial",
+      "owner": "quadriceps_tendon",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "quadriceps_tendon::proximal",
+      "owner": "quadriceps_tendon",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "radius::radial_tuberosity",
+      "owner": "radius",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "radius::shaft",
+      "owner": "radius",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "radius::styloid_process",
+      "owner": "radius",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "rib::costal_cartilage_junction",
+      "owner": "rib",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "rib::external_surface",
+      "owner": "rib",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "rib::inferior_border",
+      "owner": "rib",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "rib::superior_border",
+      "owner": "rib",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "sacrum::anterior_surface",
+      "owner": "sacrum",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "sacrum::dorsal_sacrum",
+      "owner": "sacrum",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "scapula::acromion",
+      "owner": "scapula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "scapula::coracoid_process",
+      "owner": "scapula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "scapula::inferior_angle",
+      "owner": "scapula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "scapula::infraglenoid_tubercle",
+      "owner": "scapula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "scapula::infraspinous_fossa",
+      "owner": "scapula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "scapula::lateral_border",
+      "owner": "scapula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "scapula::medial_border",
+      "owner": "scapula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "scapula::scapular_spine",
+      "owner": "scapula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "scapula::subscapular_fossa",
+      "owner": "scapula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "scapula::supraglenoid_tubercle",
+      "owner": "scapula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "scapula::supraspinous_fossa",
+      "owner": "scapula",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "skin::eyelid",
+      "owner": "skin",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "skin::lips",
+      "owner": "skin",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "skin::lower_face",
+      "owner": "skin",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "sternum::manubrium",
+      "owner": "sternum",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "sternum::sternal_body",
+      "owner": "sternum",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "sternum::xiphoid_process",
+      "owner": "sternum",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "temporal::mastoid_process",
+      "owner": "temporal",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "temporal::temporal_fossa",
+      "owner": "temporal",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "thoracic_vertebra::spinous_process",
+      "owner": "thoracic_vertebra",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "thoracic_vertebra::transverse_process",
+      "owner": "thoracic_vertebra",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "thoracolumbar_fascia::posterior",
+      "owner": "thoracolumbar_fascia",
+      "kind": "soft_tissue_attachment",
+      "quality": "unresolved_soft_tissue_or_unmapped_ossification"
+    },
+    {
+      "id": "tibia::anterior_shaft",
+      "owner": "tibia",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "tibia::lateral_condyle",
+      "owner": "tibia",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "tibia::medial_condyle",
+      "owner": "tibia",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "tibia::medial_shaft",
+      "owner": "tibia",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "tibia::posterior_shaft",
+      "owner": "tibia",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "tibia::soleal_line",
+      "owner": "tibia",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "trapezium::body",
+      "owner": "trapezium",
+      "kind": "bone_surface",
+      "quality": "unresolved_full_bone_body_surface"
+    },
+    {
+      "id": "ulna::anterior_shaft",
+      "owner": "ulna",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "ulna::coronoid_process",
+      "owner": "ulna",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "ulna::olecranon",
+      "owner": "ulna",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "ulna::posterior_shaft",
+      "owner": "ulna",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "ulna::proximal_shaft",
+      "owner": "ulna",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    },
+    {
+      "id": "zygomatic::malar_prominence",
+      "owner": "zygomatic",
+      "kind": "bone_surface",
+      "quality": "hand_authored_anatomical_approximation_not_measurement"
+    }
+  ],
+  "legacy": {
+    "longissimus": ["erector_spinae_longissimus"],
+    "iliocostalis": ["erector_spinae_iliocostalis"],
+    "rhomboidMinor": ["rhomboid_minor"],
+    "rhomboidMajor": ["rhomboid_major"],
+    "deltoidAnterior": [
+      "deltoid_anterior"
+    ],
+    "deltoidMiddle": [
+      "deltoid_middle"
+    ],
+    "deltoidPosterior": [
+      "deltoid_posterior"
+    ],
+    "biceps": [
+      "biceps_brachii_long"
+    ],
+    "bicepsShort": [
+      "biceps_brachii_short"
+    ],
+    "tricepsMedial": [
+      "triceps_brachii_medial"
+    ],
+    "brachialis": [
+      "brachialis"
+    ],
+    "tricepsLong": [
+      "triceps_brachii_long"
+    ],
+    "tricepsLateral": [
+      "triceps_brachii_lateral"
+    ],
+    "brachioradialis": [
+      "brachioradialis"
+    ],
+    "forearmFlexors": [
+      "pronator_teres",
+      "pronator_quadratus",
+      "flexor_carpi_radialis",
+      "flexor_carpi_ulnaris",
+      "palmaris_longus",
+      "flexor_digitorum_superficialis",
+      "flexor_digitorum_profundus",
+      "flexor_pollicis_longus"
+    ],
+    "forearmExtensors": [
+      "supinator",
+      "extensor_carpi_radialis_longus",
+      "extensor_carpi_radialis_brevis",
+      "extensor_carpi_ulnaris",
+      "extensor_digitorum",
+      "extensor_digiti_minimi",
+      "extensor_indicis",
+      "abductor_pollicis_longus",
+      "extensor_pollicis_longus",
+      "extensor_pollicis_brevis"
+    ],
+    "sternocleidomastoid": [
+      "sternocleidomastoid"
+    ],
+    "levatorScapulae": [
+      "levator_scapulae"
+    ],
+    "trapeziusUpper": [
+      "trapezius_upper"
+    ],
+    "trapeziusMiddle": [
+      "trapezius_middle"
+    ],
+    "trapeziusLower": [
+      "trapezius_lower"
+    ],
+    "rhomboids": [
+      "rhomboid_major",
+      "rhomboid_minor"
+    ],
+    "infraspinatus": [
+      "infraspinatus"
+    ],
+    "supraspinatus": [
+      "supraspinatus"
+    ],
+    "teresMinor": [
+      "teres_minor"
+    ],
+    "teresMajor": [
+      "teres_major"
+    ],
+    "subscapularis": [
+      "subscapularis"
+    ],
+    "pectoralisMinor": [
+      "pectoralis_minor"
+    ],
+    "subclavius": [
+      "subclavius"
+    ],
+    "gluteusMaximus": [
+      "gluteus_maximus"
+    ],
+    "gluteusMedius": [
+      "gluteus_medius"
+    ],
+    "iliopsoas": [
+      "psoas_major",
+      "iliacus"
+    ],
+    "rectusFemoris": [
+      "rectus_femoris"
+    ],
+    "vastusLateralis": [
+      "vastus_lateralis"
+    ],
+    "vastusMedialis": [
+      "vastus_medialis"
+    ],
+    "vastusIntermedius": [
+      "vastus_intermedius"
+    ],
+    "adductorLongus": [
+      "adductor_longus"
+    ],
+    "adductorMagnus": [
+      "adductor_magnus_adductor"
+    ],
+    "pectineus": [
+      "pectineus"
+    ],
+    "gracilis": [
+      "gracilis"
+    ],
+    "bicepsFemoris": [
+      "biceps_femoris_long"
+    ],
+    "semitendinosus": [
+      "semitendinosus"
+    ],
+    "semimembranosus": [
+      "semimembranosus"
+    ],
+    "tensorFasciaeLatae": [
+      "tensor_fasciae_latae"
+    ],
+    "gastrocnemiusMedial": [
+      "gastrocnemius_medial"
+    ],
+    "gastrocnemiusLateral": [
+      "gastrocnemius_lateral"
+    ],
+    "soleus": [
+      "soleus"
+    ],
+    "tibialisAnterior": [
+      "tibialis_anterior"
+    ],
+    "gluteusMinimus": [
+      "gluteus_minimus"
+    ],
+    "piriformis": [
+      "piriformis"
+    ],
+    "obturatorInternus": [
+      "obturator_internus"
+    ],
+    "quadratusFemoris": [
+      "quadratus_femoris"
+    ],
+    "iliacus": [
+      "iliacus"
+    ],
+    "adductorBrevis": [
+      "adductor_brevis"
+    ],
+    "popliteus": [
+      "popliteus"
+    ],
+    "fibularisLongus": [
+      "fibularis_longus"
+    ],
+    "extensorDigitorum": [
+      "extensor_digitorum_longus"
+    ],
+    "latissimusDorsi": [
+      "latissimus_dorsi"
+    ],
+    "erectorSpinae": [
+      "erector_spinae_iliocostalis",
+      "erector_spinae_longissimus",
+      "spinalis"
+    ],
+    "sartorius": [
+      "sartorius"
+    ],
+    "scalenus_anterior": [
+      "scalenus_anterior"
+    ],
+    "scalenus_medius": [
+      "scalenus_medius"
+    ],
+    "scalenus_posterior": [
+      "scalenus_posterior"
+    ],
+    "splenius_capitis": [
+      "splenius_capitis"
+    ],
+    "platysma": [
+      "platysma"
+    ],
+    "serratus_anterior": [
+      "serratus_anterior"
+    ],
+    "coracobrachialis": [
+      "coracobrachialis"
+    ],
+    "anconeus": [
+      "anconeus"
+    ],
+    "plantaris": [
+      "plantaris"
+    ],
+    "tibialis_posterior": [
+      "tibialis_posterior"
+    ],
+    "fibularis_brevis": [
+      "fibularis_brevis"
+    ],
+    "fibularis_tertius": [
+      "fibularis_tertius"
+    ],
+    "extensor_hallucis_longus": [
+      "extensor_hallucis_longus"
+    ],
+    "flexor_digitorum_longus": [
+      "flexor_digitorum_longus"
+    ],
+    "flexor_hallucis_longus": [
+      "flexor_hallucis_longus"
+    ],
+    "bicepsFemorisShort": ["biceps_femoris_short"],
+    "adductorMagnusHamstring": ["adductor_magnus_hamstring"],
+    "serratus_posterior_superior": [
+      "serratus_posterior_superior"
+    ],
+    "serratus_posterior_inferior": [
+      "serratus_posterior_inferior"
+    ],
+    "multifidus": [
+      "multifidus"
+    ],
+    "quadratus_lumborum": [
+      "quadratus_lumborum"
+    ],
+    "pyramidalis": [
+      "pyramidalis"
+    ],
+    "external_intercostals": [
+      "external_intercostals"
+    ],
+    "internal_intercostals": [
+      "internal_intercostals"
+    ],
+    "diaphragm": [
+      "diaphragm"
+    ],
+    "obturator_externus": [
+      "obturator_externus"
+    ],
+    "gemellus_superior": [
+      "gemellus_superior"
+    ],
+    "gemellus_inferior": [
+      "gemellus_inferior"
+    ]
+  }
+}

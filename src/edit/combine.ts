@@ -40,6 +40,7 @@ export function disposeMeshCopy(mesh: Mesh) {
  * An optimization must be frozen first (see ModelOptimizer.freeze).
  */
 export function editBlocker(e: Entity) {
+    if (e.anatomy) return tr('Use the Anatomy controls for this parametric body.');
   if (!e.visible) return tr('Show the object before editing its geometry.');
   if (e.groupMembers || e.groupParent) return tr('Ungroup these objects before editing their geometry.');
   if (e.kind === 'light' || !e.meshes.length || e.meshes.some(m => !(m instanceof Mesh) || !m.getVerticesData('position'))) return tr('Choose triangle models or shapes.');

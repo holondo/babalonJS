@@ -1,0 +1,1463 @@
+{
+  "controls": [
+    {
+      "key": "inguinalOpening",
+      "label": "Inguinal groove opening",
+      "min": 0.65,
+      "max": 1.45,
+      "step": 0.02,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "inguinalHeight",
+      "label": "Nominal inguinal height",
+      "min": 6,
+      "max": 22,
+      "step": 0.1,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "inguinalCurvature",
+      "label": "Inguinal curvature",
+      "min": -1.3,
+      "max": 1.3,
+      "step": 0.02,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "inguinalLateralWrap",
+      "label": "Lateral wrapping",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "geometry"
+    },
+    {
+      "key": "inguinalDefinition",
+      "label": "Local definition",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "geometry"
+    },
+    {
+      "key": "inguinalGrooveSharpness",
+      "label": "Groove sharpness",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "geometry"
+    },
+    {
+      "key": "supraInguinalVolume",
+      "label": "Volume above the inguinal groove",
+      "min": 0,
+      "max": 2,
+      "step": 0.02,
+      "unitLabel": "%",
+      "kind": "geometry"
+    },
+    {
+      "key": "height",
+      "label": "Stature",
+      "min": 135,
+      "max": 215,
+      "step": 1,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "chestWidth",
+      "label": "Chest width",
+      "min": 22,
+      "max": 55,
+      "step": 0.5,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "chestDepth",
+      "label": "Chest depth",
+      "min": 16,
+      "max": 43,
+      "step": 0.5,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "shoulderWidth",
+      "label": "Shoulder width",
+      "min": 28,
+      "max": 65,
+      "step": 0.5,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "waistWidth",
+      "label": "Waist width",
+      "min": 18,
+      "max": 55,
+      "step": 0.5,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "waistDepth",
+      "label": "Abdominal depth",
+      "min": 14,
+      "max": 48,
+      "step": 0.5,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "pelvisWidth",
+      "label": "Hip width",
+      "min": 24,
+      "max": 58,
+      "step": 0.5,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "lowerPelvisFrontDepth",
+      "label": "Lower pelvis front projection",
+      "min": -12,
+      "max": 24,
+      "step": 0.5,
+      "unitLabel": "mm",
+      "kind": "geometry"
+    },
+    {
+      "key": "lowerPelvisBackDepth",
+      "label": "Lower pelvis back projection",
+      "min": -12,
+      "max": 24,
+      "step": 0.5,
+      "unitLabel": "mm",
+      "kind": "geometry"
+    },
+    {
+      "key": "pelvisDepth",
+      "label": "Hip depth",
+      "min": 18,
+      "max": 45,
+      "step": 0.5,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "thighGirth",
+      "label": "Thigh circumference",
+      "min": 35,
+      "max": 90,
+      "step": 0.5,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "pectoral",
+      "label": "Pectoral volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "deltoid",
+      "label": "Deltoid volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "biceps",
+      "label": "Biceps volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "triceps",
+      "label": "Triceps volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "forearm",
+      "label": "Forearm volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "gluteMax",
+      "label": "Gluteus maximus volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "gluteMed",
+      "label": "Gluteus medius volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "quadriceps",
+      "label": "Quadriceps volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "adductors",
+      "label": "Adductor volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "hamstrings",
+      "label": "Hamstring volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "calves",
+      "label": "Calf volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "shin",
+      "label": "Anterior lower-leg volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "asisDistance",
+      "label": "ASIS distance",
+      "min": 16,
+      "max": 38,
+      "step": 0.5,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "asisHeight",
+      "label": "Anterior crest height",
+      "min": -4,
+      "max": 4,
+      "step": 0.1,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "pubisHeight",
+      "label": "Pubis height",
+      "min": -4,
+      "max": 4,
+      "step": 0.1,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "flare",
+      "label": "Iliac flare",
+      "min": -3,
+      "max": 3,
+      "step": 0.1,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "tilt",
+      "label": "Pelvic tilt",
+      "min": -25,
+      "max": 25,
+      "step": 1,
+      "unitLabel": "°",
+      "kind": "geometry"
+    },
+    {
+      "key": "inguinalFoldOffset",
+      "label": "Skin fold to ligament distance",
+      "min": 0.1,
+      "max": 3,
+      "step": 0.1,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "rectus",
+      "label": "Rectus volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "rectWidth",
+      "label": "Rectus width",
+      "min": 2,
+      "max": 9,
+      "step": 0.1,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "rectGap",
+      "label": "Rectus separation",
+      "min": 0.1,
+      "max": 4,
+      "step": 0.1,
+      "unitLabel": "cm",
+      "kind": "geometry"
+    },
+    {
+      "key": "tendon",
+      "label": "Tendinous intersections",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "oblique",
+      "label": "Oblique volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "fiberAngle",
+      "label": "Fiber direction",
+      "min": 0.35,
+      "max": 2,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "back",
+      "label": "Back volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "proximalThigh",
+      "label": "Proximal anterior thigh volume",
+      "min": 0.2,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "legBalance",
+      "label": "Leg to torso proportion",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "shoulderSlope",
+      "label": "Shoulder slope",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "chestRoundness",
+      "label": "Chest section: oval / flat",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "ribFlare",
+      "label": "Costal arch flare",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "pecSpread",
+      "label": "Pectoral spread",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "pecUpper",
+      "label": "Upper pectoral distribution",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "armBelly",
+      "label": "Arm muscle belly position",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "obliqueFlesh",
+      "label": "Oblique fleshy extent",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "rectPattern",
+      "label": "Rectus intersection stagger",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "gluteFullness",
+      "label": "Upper gluteal distribution",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "thighSweep",
+      "label": "Lateral quadriceps emphasis",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "calfBelly",
+      "label": "Calf muscle belly height",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "armFat",
+      "label": "Arm fat",
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "gluteFat",
+      "label": "Gluteal fat",
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "thighFat",
+      "label": "Thigh fat",
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {"key":"navelOffsetX","label":"Navel horizontal offset","min":-35,"max":35,"step":1,"unitLabel":"mm","kind":"geometry"},
+    {"key":"navelOffsetY","label":"Navel vertical offset","min":-55,"max":55,"step":1,"unitLabel":"mm","kind":"geometry"},
+    {"key":"navelAspect","label":"Navel height ratio","min":0.55,"max":1.8,"step":0.05,"unitLabel":"×","kind":"geometry"},
+    {"key":"nippleLeftX","label":"Left nipple horizontal offset","min":-40,"max":40,"step":1,"unitLabel":"mm","kind":"geometry"},
+    {"key":"nippleLeftY","label":"Left nipple vertical offset","min":-45,"max":45,"step":1,"unitLabel":"mm","kind":"geometry"},
+    {"key":"nippleLeftRadius","label":"Left areola radius","min":4,"max":22,"step":0.5,"unitLabel":"mm","kind":"geometry"},
+    {"key":"nippleLeftProjection","label":"Left nipple projection","min":0,"max":9,"step":0.5,"unitLabel":"mm","kind":"geometry"},
+    {"key":"nippleRightX","label":"Right nipple horizontal offset","min":-40,"max":40,"step":1,"unitLabel":"mm","kind":"geometry"},
+    {"key":"nippleRightY","label":"Right nipple vertical offset","min":-45,"max":45,"step":1,"unitLabel":"mm","kind":"geometry"},
+    {"key":"nippleRightRadius","label":"Right areola radius","min":4,"max":22,"step":0.5,"unitLabel":"mm","kind":"geometry"},
+    {"key":"nippleRightProjection","label":"Right nipple projection","min":0,"max":9,"step":0.5,"unitLabel":"mm","kind":"geometry"},
+    {
+      "key": "navelDepth",
+      "label": "Navel depth",
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "navelSize",
+      "label": "Navel size",
+      "min": 0.4,
+      "max": 2.5,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "fat",
+      "label": "Reference subcutaneous thickness",
+      "min": 0,
+      "max": 65,
+      "step": 1,
+      "unitLabel": "mm",
+      "kind": "geometry"
+    },
+    {
+      "key": "lowerFat",
+      "label": "Lower abdominal fat thickness",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "flankFat",
+      "label": "Flank fat thickness",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "pubicFat",
+      "label": "Suprapubic fat thickness",
+      "min": 0,
+      "max": 4,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "geometry"
+    },
+    {
+      "key": "asym",
+      "label": "Muscle asymmetry",
+      "min": -0.2,
+      "max": 0.2,
+      "step": 0.005,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "skinOpacity",
+      "label": "Skin opacity",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "externalObliqueOpacity",
+      "label": "External oblique opacity",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "internalObliqueOpacity",
+      "label": "Internal oblique opacity",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "transversusAbdominisOpacity",
+      "label": "Transversus opacity",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "rectusAbdominisOpacity",
+      "label": "Rectus abdominis opacity",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "otherMusclesOpacity",
+      "label": "Other muscles opacity",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "aponeurosesOpacity",
+      "label": "Aponeuroses opacity",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "bonesOpacity",
+      "label": "Bone opacity",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "inguinalLigamentsOpacity",
+      "label": "Inguinal ligament opacity",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "roughness",
+      "label": "Roughness",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "shine",
+      "label": "Shine intensity",
+      "min": 0,
+      "max": 2.5,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "texture",
+      "label": "Microtexture",
+      "min": 0,
+      "max": 2,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "skinTone",
+      "label": "Skin tone",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "",
+      "kind": "material"
+    },
+    {
+      "key": "azimuth",
+      "label": "Horizontal direction",
+      "min": -180,
+      "max": 180,
+      "step": 1,
+      "unitLabel": "°",
+      "kind": "light"
+    },
+    {
+      "key": "elevation",
+      "label": "Light elevation",
+      "min": -85,
+      "max": 85,
+      "step": 1,
+      "unitLabel": "°",
+      "kind": "light"
+    },
+    {
+      "key": "intensity",
+      "label": "Key light",
+      "min": 0,
+      "max": 5,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "light"
+    },
+    {
+      "key": "fill",
+      "label": "Fill light",
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "light"
+    },
+    {
+      "key": "rim",
+      "label": "Rim light",
+      "min": 0,
+      "max": 2,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "light"
+    },
+    {
+      "key": "exposure",
+      "label": "Exposure",
+      "min": 0.2,
+      "max": 3.5,
+      "step": 0.05,
+      "unitLabel": "×",
+      "kind": "light"
+    },
+    {
+      "key": "adiposeOpacity",
+      "label": "Subcutaneous fat opacity",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unitLabel": "%",
+      "kind": "material"
+    },
+    {
+      "key": "pectoralFiberConvergence",
+      "label": "Pectoral fiber convergence",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "pectoralTendonWidth",
+      "label": "Pectoral tendon width",
+      "min": 0.4,
+      "max": 1.5,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "rectusBellyProfile",
+      "label": "Rectus belly curvature",
+      "min": 0.4,
+      "max": 1.6,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "iliacWing",
+      "label": "Iliac wing opening",
+      "min": 0.65,
+      "max": 1.45,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "acetabularRim",
+      "label": "Acetabular rim",
+      "min": 0.65,
+      "max": 1.4,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "rectusSegmentCount",
+      "label": "Abdominal segments",
+      "min": 4,
+      "max": 8,
+      "step": 2,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "rectusSegmentDefinition",
+      "label": "Abdominal segment definition",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "pectoralClavicular",
+      "label": "Clavicular pectoral portion",
+      "min": 0.5,
+      "max": 2,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "pectoralSternal",
+      "label": "Sternal pectoral portion",
+      "min": 0.5,
+      "max": 2,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "pectoralCostal",
+      "label": "Costal pectoral portion",
+      "min": 0.5,
+      "max": 2,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "pectoralSeparation",
+      "label": "Sternal separation",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "abdominalProjection",
+      "label": "Deep abdominal projection",
+      "min": 0,
+      "max": 1.8,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "lowerAbdominalFat",
+      "label": "Lower abdominal pouch",
+      "min": 0,
+      "max": 1.8,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "flankFullness",
+      "label": "Love handles",
+      "min": 0,
+      "max": 1.8,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "iliacCrestRelief",
+      "label": "Iliac crest relief",
+      "min": 0,
+      "max": 1.5,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "suprapubicFat",
+      "label": "Suprapubic fat pad",
+      "min": 0,
+      "max": 1.8,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "lineaAlbaDefinition",
+      "label": "Linea alba definition",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    },
+    {
+      "key": "rectusIntersectionShift",
+      "label": "Tendinous intersection height",
+      "min": -1,
+      "max": 1,
+      "step": 0.05,
+      "unitLabel": "",
+      "kind": "geometry"
+    }
+  ],
+  "layers": [
+    [
+      "skinOpacity",
+      "Skin",
+      "#cba384"
+    ],
+    [
+      "adiposeOpacity",
+      "Subcutaneous fat",
+      "#e0a640"
+    ],
+    [
+      "externalObliqueOpacity",
+      "External oblique",
+      "#bc6d5c"
+    ],
+    [
+      "internalObliqueOpacity",
+      "Internal oblique",
+      "#ad6154"
+    ],
+    [
+      "transversusAbdominisOpacity",
+      "Transversus",
+      "#875a51"
+    ],
+    [
+      "rectusAbdominisOpacity",
+      "Rectus abdominis",
+      "#c47863"
+    ],
+    [
+      "otherMusclesOpacity",
+      "Other muscles",
+      "#ad6558"
+    ],
+    [
+      "aponeurosesOpacity",
+      "Aponeuroses",
+      "#d6c7a9"
+    ],
+    [
+      "bonesOpacity",
+      "Bones",
+      "#e0d4b7"
+    ],
+    [
+      "inguinalLigamentsOpacity",
+      "Inguinal ligaments",
+      "#8cbfb6"
+    ]
+  ],
+  "bodyPresets": {
+    "reference": {
+      "label": "Reference",
+      "description": "",
+      "values": {}
+    },
+    "longilinear": {
+      "label": "Long-limbed",
+      "description": "",
+      "values": {
+        "height": 187,
+        "legBalance": 0.6,
+        "chestWidth": 32,
+        "chestDepth": 23,
+        "shoulderWidth": 41,
+        "waistWidth": 27.5,
+        "waistDepth": 21,
+        "pelvisWidth": 34,
+        "pelvisDepth": 25,
+        "asisDistance": 25,
+        "thighGirth": 51,
+        "fat": 10,
+        "rectus": 0.9,
+        "oblique": 0.9,
+        "pectoral": 0.9,
+        "deltoid": 0.9,
+        "calfBelly": 0.35,
+        "chestRoundness": -0.25,
+        "shoulderSlope": 0.25
+      }
+    },
+    "compact": {
+      "label": "Compact",
+      "description": "",
+      "values": {
+        "height": 166,
+        "legBalance": -0.55,
+        "chestWidth": 36,
+        "chestDepth": 26,
+        "shoulderWidth": 44,
+        "waistWidth": 31,
+        "waistDepth": 24,
+        "pelvisWidth": 36,
+        "pelvisDepth": 27,
+        "asisDistance": 27,
+        "thighGirth": 57,
+        "fat": 17,
+        "chestRoundness": 0.3,
+        "pecSpread": 0.3,
+        "calfBelly": -0.25
+      }
+    },
+    "muscular": {
+      "label": "Upper body emphasis",
+      "description": "",
+      "values": {
+        "height": 180,
+        "chestWidth": 39,
+        "chestDepth": 27,
+        "shoulderWidth": 47,
+        "waistWidth": 30,
+        "waistDepth": 23,
+        "pelvisWidth": 36,
+        "pelvisDepth": 27,
+        "thighGirth": 60,
+        "proximalThigh": 1.2,
+        "pectoral": 1.35,
+        "deltoid": 1.3,
+        "biceps": 1.25,
+        "triceps": 1.25,
+        "forearm": 1.1,
+        "rectus": 1.2,
+        "oblique": 1.15,
+        "back": 1.3,
+        "fat": 12,
+        "pecSpread": 0.35,
+        "pecUpper": 0.25,
+        "shoulderSlope": -0.25,
+        "ribFlare": 0.15
+      }
+    },
+    "abdominal": {
+      "label": "Central volume",
+      "description": "",
+      "values": {
+        "chestWidth": 35,
+        "chestDepth": 25,
+        "shoulderWidth": 43,
+        "waistWidth": 32,
+        "waistDepth": 25,
+        "pelvisWidth": 37,
+        "pelvisDepth": 27,
+        "asisDistance": 27,
+        "thighGirth": 57,
+        "fat": 30,
+        "lowerFat": 1.45,
+        "flankFat": 1.15,
+        "pubicFat": 1.15,
+        "armFat": 0.85,
+        "gluteFat": 0.9,
+        "thighFat": 0.85,
+        "rectus": 0.95,
+        "oblique": 1,
+        "pecSpread": 0.25
+      }
+    },
+    "widehip": {
+      "label": "Broad pelvis",
+      "description": "",
+      "values": {
+        "height": 172,
+        "legBalance": 0.1,
+        "pelvisWidth": 37.5,
+        "pelvisDepth": 28,
+        "asisDistance": 26.5,
+        "flare": 0,
+        "waistWidth": 29,
+        "waistDepth": 22.5,
+        "chestWidth": 33,
+        "chestDepth": 23.5,
+        "shoulderWidth": 40.5,
+        "thighGirth": 61,
+        "fat": 20,
+        "gluteFat": 1.5,
+        "thighFat": 1.35,
+        "gluteMax": 1.05,
+        "gluteFullness": -0.25,
+        "shoulderSlope": 0.25
+      }
+    },
+    "strongthigh": {
+      "label": "Lower body emphasis",
+      "description": "",
+      "values": {
+        "height": 178,
+        "legBalance": 0.2,
+        "thighGirth": 65,
+        "proximalThigh": 1.35,
+        "gluteMax": 1.25,
+        "gluteMed": 1.15,
+        "quadriceps": 1.35,
+        "adductors": 1.15,
+        "hamstrings": 1.25,
+        "calves": 1.15,
+        "pelvisWidth": 38,
+        "pelvisDepth": 28,
+        "asisDistance": 28,
+        "waistWidth": 30,
+        "chestWidth": 35,
+        "fat": 14,
+        "thighSweep": 0.35,
+        "calfBelly": -0.2,
+        "gluteFullness": 0.2
+      }
+    },
+    "lean": {
+      "label": "Narrow frame",
+      "description": "",
+      "values": {
+        "height": 176,
+        "chestWidth": 31.5,
+        "chestDepth": 22.5,
+        "shoulderWidth": 40,
+        "waistWidth": 27,
+        "waistDepth": 20.5,
+        "pelvisWidth": 33,
+        "pelvisDepth": 24.5,
+        "asisDistance": 25,
+        "thighGirth": 49,
+        "fat": 8,
+        "pectoral": 0.8,
+        "deltoid": 0.85,
+        "biceps": 0.85,
+        "triceps": 0.85,
+        "rectus": 0.85,
+        "oblique": 0.85,
+        "quadriceps": 0.85,
+        "hamstrings": 0.85,
+        "gluteMax": 0.85,
+        "calves": 0.85,
+        "pecSpread": -0.2,
+        "armBelly": 0.2,
+        "rectPattern": 0.2
+      }
+    },
+    "soft": {
+      "label": "Soft volumes",
+      "description": "",
+      "values": {
+        "height": 173,
+        "chestWidth": 34,
+        "chestDepth": 24,
+        "shoulderWidth": 42,
+        "pelvisWidth": 36,
+        "pelvisDepth": 27,
+        "asisDistance": 27,
+        "waistWidth": 30,
+        "waistDepth": 23,
+        "thighGirth": 57,
+        "fat": 23,
+        "lowerFat": 1.05,
+        "flankFat": 1.05,
+        "armFat": 1.1,
+        "gluteFat": 1.1,
+        "thighFat": 1.1,
+        "pectoral": 0.9,
+        "deltoid": 0.9,
+        "biceps": 0.9,
+        "triceps": 0.9,
+        "rectus": 0.9,
+        "oblique": 0.9,
+        "quadriceps": 0.9,
+        "gluteMax": 0.95,
+        "chestRoundness": 0.2,
+        "pecSpread": 0.3
+      }
+    }
+  },
+  "profileComponents": {
+    "structure": {
+      "balanced": {
+        "label": "Balanced",
+        "values": {}
+      },
+      "longlegs": {
+        "label": "Long legs",
+        "values": {
+          "height": 184,
+          "legBalance": 0.65,
+          "chestWidth": 33,
+          "chestDepth": 23,
+          "shoulderWidth": 42,
+          "waistWidth": 28,
+          "waistDepth": 21,
+          "pelvisWidth": 34,
+          "pelvisDepth": 25,
+          "asisDistance": 25,
+          "thighGirth": 52
+        }
+      },
+      "longtorso": {
+        "label": "Long torso",
+        "values": {
+          "height": 168,
+          "legBalance": -0.55,
+          "chestWidth": 35,
+          "chestDepth": 25,
+          "shoulderWidth": 43,
+          "waistWidth": 30,
+          "pelvisWidth": 36,
+          "pelvisDepth": 27,
+          "asisDistance": 27,
+          "thighGirth": 56
+        }
+      },
+      "thoracic": {
+        "label": "Broad chest",
+        "values": {
+          "chestWidth": 38,
+          "chestDepth": 27,
+          "shoulderWidth": 46,
+          "waistWidth": 31,
+          "chestRoundness": 0.25,
+          "pecSpread": 0.25
+        }
+      },
+      "pelvic": {
+        "label": "Broad pelvis",
+        "values": {
+          "pelvisWidth": 38,
+          "pelvisDepth": 28,
+          "asisDistance": 27,
+          "thighGirth": 60,
+          "shoulderWidth": 41,
+          "waistWidth": 29
+        }
+      }
+    },
+    "muscle": {
+      "balanced": {
+        "label": "Balanced",
+        "values": {}
+      },
+      "subtle": {
+        "label": "Subtle",
+        "values": {
+          "pectoral": 0.85,
+          "deltoid": 0.85,
+          "biceps": 0.85,
+          "triceps": 0.85,
+          "back": 0.85,
+          "rectus": 0.85,
+          "oblique": 0.85,
+          "quadriceps": 0.85,
+          "hamstrings": 0.85,
+          "gluteMax": 0.85,
+          "calves": 0.85
+        }
+      },
+      "upper": {
+        "label": "Upper body emphasis",
+        "values": {
+          "pectoral": 1.35,
+          "deltoid": 1.3,
+          "biceps": 1.25,
+          "triceps": 1.25,
+          "back": 1.3,
+          "rectus": 1.2,
+          "oblique": 1.15,
+          "pecUpper": 0.3,
+          "armBelly": -0.15
+        }
+      },
+      "lower": {
+        "label": "Lower body emphasis",
+        "values": {
+          "quadriceps": 1.35,
+          "gluteMax": 1.25,
+          "gluteMed": 1.15,
+          "hamstrings": 1.25,
+          "adductors": 1.15,
+          "calves": 1.15,
+          "proximalThigh": 1.3,
+          "gluteFullness": 0.25,
+          "thighSweep": 0.3
+        }
+      }
+    },
+    "adipose": {
+      "balanced": {
+        "label": "Moderate and distributed",
+        "values": {}
+      },
+      "low": {
+        "label": "Low coverage",
+        "values": {
+          "fat": 8
+        }
+      },
+      "central": {
+        "label": "Abdominal emphasis",
+        "values": {
+          "fat": 28,
+          "lowerFat": 1.4,
+          "flankFat": 1.2,
+          "pubicFat": 1.15,
+          "armFat": 0.85,
+          "gluteFat": 0.85,
+          "thighFat": 0.85
+        }
+      },
+      "lower": {
+        "label": "Gluteofemoral emphasis",
+        "values": {
+          "fat": 22,
+          "lowerFat": 0.85,
+          "flankFat": 0.9,
+          "gluteFat": 1.5,
+          "thighFat": 1.4,
+          "armFat": 0.9
+        }
+      },
+      "soft": {
+        "label": "Soft uniform coverage",
+        "values": {
+          "fat": 24,
+          "lowerFat": 1.05,
+          "flankFat": 1.05,
+          "armFat": 1.15,
+          "gluteFat": 1.15,
+          "thighFat": 1.15
+        }
+      }
+    }
+  },
+  "inguinalPresetFields": [
+    "inguinalOpening",
+    "inguinalHeight",
+    "inguinalCurvature",
+    "inguinalLateralWrap",
+    "inguinalDefinition",
+    "inguinalGrooveSharpness",
+    "supraInguinalVolume",
+    "inguinalFoldOffset",
+    "pubicFat"
+  ],
+  "inguinalPresets": {
+    "reference": {
+      "label": "Default"
+    },
+    "narrow": {
+      "label": "Narrow",
+      "inguinalOpening": 0.82,
+      "inguinalHeight": 14,
+      "inguinalCurvature": 0.08
+    },
+    "open": {
+      "label": "Open",
+      "inguinalOpening": 1.16,
+      "inguinalHeight": 9.2,
+      "inguinalCurvature": 0.1
+    },
+    "curved": {
+      "label": "Arched",
+      "inguinalCurvature": 0.66,
+      "inguinalHeight": 12.5
+    },
+    "lateral": {
+      "label": "Lateral",
+      "inguinalOpening": 1.1,
+      "inguinalLateralWrap": 0.9,
+      "inguinalCurvature": 0.25
+    },
+    "soft": {
+      "label": "Soft",
+      "inguinalDefinition": 0.3,
+      "inguinalGrooveSharpness": 0.15,
+      "supraInguinalVolume": 0.32,
+      "pubicFat": 1.4
+    },
+    "defined": {
+      "label": "Defined",
+      "inguinalDefinition": 0.92,
+      "inguinalGrooveSharpness": 0.82,
+      "supraInguinalVolume": 0.9,
+      "pubicFat": 0.65
+    }
+  },
+  "shapeRegions": {
+    "legBalance": "general",
+    "shoulderSlope": "upper",
+    "chestRoundness": "upper",
+    "ribFlare": "upper",
+    "pecSpread": "upper",
+    "pecUpper": "upper",
+    "armBelly": "upper",
+    "obliqueFlesh": "abdomen",
+    "rectPattern": "abdomen",
+    "gluteFullness": "thighs",
+    "thighSweep": "thighs",
+    "calfBelly": "thighs",
+    "pectoralFiberConvergence": "upper",
+    "pectoralTendonWidth": "upper",
+    "rectusBellyProfile": "abdomen",
+    "iliacWing": "pelvis",
+    "acetabularRim": "pelvis",
+    "rectusSegmentCount": "abdomen",
+    "rectusSegmentDefinition": "abdomen",
+    "pectoralClavicular": "upper",
+    "pectoralSternal": "upper",
+    "pectoralCostal": "upper",
+    "pectoralSeparation": "upper",
+    "abdominalProjection": "fat",
+    "lowerAbdominalFat": "fat",
+    "flankFullness": "fat",
+    "iliacCrestRelief": "pelvis",
+    "suprapubicFat": "pelvis",
+    "lineaAlbaDefinition": "abdomen",
+    "rectusIntersectionShift": "abdomen"
+  }
+}

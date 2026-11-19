@@ -4,6 +4,7 @@ import { tr } from '../core/i18n';
 import { h, icon, iconButton } from './dom';
 import type { Guide, Measurement } from '../tools/tools';
 import type { UI } from './ui';
+import type { Entity } from '../core/editor';
 
 /** Measurement and guide labels drawn over the 3D view. */
 export class MeasureLabels {
@@ -16,6 +17,7 @@ export class MeasureLabels {
   labelEls = new Map<Measurement, HTMLElement>();
 
   guideEls = new Map<Guide, HTMLElement>();
+  private anatomyEls = new Map<Entity, HTMLElement[]>();
   private angleEls = new Map<string, { label: HTMLElement; arc: SVGSVGElement; path: SVGPathElement; signature?: string }>();
 
   draggingGuide: Guide | null = null;
@@ -28,6 +30,7 @@ export class MeasureLabels {
     this.ui.labels.replaceChildren();
     this.labelEls.clear();
     this.guideEls.clear();
+    this.anatomyEls.clear();
     this.angleEls.clear();
     if (this.ui.editor.photoMode) return;
     // Guide handles only matter while editing guides: show them with the Tools tab open
@@ -102,6 +105,7 @@ export class MeasureLabels {
   }
 
   updateLabels() {
+    this.updateAnatomyLabels();
     const ed = this.ui.editor;
     const tools = ed.tools;
     const angles = ed.photoMode || ed.cleanView || !tools.measurementsVisible || !tools.measurementDisplay.angles
@@ -172,6 +176,29 @@ export class MeasureLabels {
       const text = tools.format(m.length) + (m.surfaceFailed ? ` · ${tr('straight')}` : m.path ? ` · ${tr('surface')}` : '');
       const span = el.firstElementChild as HTMLElement;
       if (span.textContent !== text) span.textContent = text;
+    }
+  }
+
+  private updateAnatomyLabels() {
+    const ed = this.ui.editor;
+    for (const [entity, elements] of this.anatomyEls) if (!ed.entities.includes(entity)) {
+      elements.forEach(el => el.remove()); this.anatomyEls.delete(entity);
+    }
+    for (const entity of ed.entities) {
+      if (!entity.anatomyBody) continue;
+      const points = entity.anatomyBody.inspectionLabels;
+      let elements = this.anatomyEls.get(entity);
+      if (!elements || elements.length !== points.length) {
+        elements?.forEach(el => el.remove());
+        elements = points.map(point => h('div', { class: `mlabel anatomy-label ${point.text ? '' : 'anatomy-point'}` }, point.text ? tr(point.text) : ''));
+        elements.forEach(el => this.ui.labels.append(el));
+        this.anatomyEls.set(entity, elements);
+      }
+      for (const [i, point] of points.entries()) {
+        const s = ed.toScreen(point.point), el = elements[i];
+        el.style.display = !ed.cleanView && entity.visible && entity.root.isEnabled() && s.visible ? '' : 'none';
+        el.style.transform = `translate(${s.x}px, ${s.y}px) translate(8px, -100%)`;
+      }
     }
   }
 }

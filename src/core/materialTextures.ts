@@ -16,7 +16,7 @@ export const USER_TEXTURE_SLOTS = [
 export type TextureSlot = typeof USER_TEXTURE_SLOTS[number]['slot'];
 export interface TextureState { path: string; u: number; v: number; rotation: number }
 export type TextureStates = Partial<Record<TextureSlot, TextureState>>;
-const resources = new WeakMap<Scene, Map<string, { file: File; texture: Texture }>>();
+const resources = new WeakMap<Scene, Map<string, { file: File; texture: Texture; url: string }>>();
 const bindings = new WeakMap<Material, Map<TextureSlot, { original: BaseTexture | null; texture: Texture | null; state: TextureState | null; channels?: [boolean, boolean, boolean] }>>();
 
 function property(m: Material, slot: TextureSlot): string {
@@ -32,15 +32,18 @@ export async function loadUserTexture(scene: Scene, file: File, path = `textures
   const extension = file.name.split('.').pop()?.toLowerCase();
   if (!['png', 'jpg', 'jpeg', 'webp', 'ktx2'].includes(extension ?? '')) throw new Error(tr('Choose a PNG, JPEG, WebP or KTX2 image.'));
   const url = URL.createObjectURL(file);
+  let retained = false;
   try {
     const texture = await new Promise<Texture>((resolve, reject) => {
       const tex = new Texture(url, scene, { invertY: false, forcedExtension: `.${extension}`, onLoad: () => resolve(tex), onError: () => { tex.dispose(); reject(new Error(tr('Could not load texture.'))); } });
     });
     if (resources.get(scene) !== map) { texture.dispose(); throw new Error(tr('Scene changed while loading.')); }
     texture.name = file.name;
-    map.set(path, { file, texture });
+    // Texture clones and glTF export can read the source after the first GPU upload.
+    map.set(path, { file, texture, url });
+    retained = true;
     return path;
-  } finally { URL.revokeObjectURL(url); }
+  } finally { if (!retained) URL.revokeObjectURL(url); }
 }
 
 export function textureStates(m: Material): TextureStates {
@@ -94,7 +97,7 @@ export function userTextureFiles(scene: Scene, state: TextureStates, files: Reco
 }
 
 export function clearUserTextures(scene: Scene) {
-  resources.get(scene)?.forEach((r) => r.texture.dispose());
+  resources.get(scene)?.forEach((r) => { r.texture.dispose(); URL.revokeObjectURL(r.url); });
   resources.delete(scene);
 }
 

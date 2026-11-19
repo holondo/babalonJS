@@ -106,6 +106,9 @@ export type GroundMode = 'shadow' | 'solid' | 'none';
 export type ChangeKind = 'selection' | 'entities' | 'transform' | 'history' | 'env' | 'photo' | 'tool' | 'animation' | 'pose' | 'rig' | 'optimize' | 'activity';
 
 export interface Entity {
+  /** Procedural anatomy remains editable after saving, independently of scene transforms. */
+  anatomy?: import('../anatomy/parameters').AnatomyState;
+  anatomyBody?: import('../anatomy/body').AnatomyBody;
   id: number;
   name: string;
   kind: 'model' | 'primitive' | 'light';
@@ -341,6 +344,20 @@ export class Editor {
   env: EnvSettings = { ...DEFAULT_ENV };
   photo: PhotoSettings = { ...DEFAULT_PHOTO };
 
+  private anatomyRotation: {
+    entity: Entity; node: TransformNode;
+    begin: () => void; turn: (axis: 0 | 1 | 2, degrees: number) => void; end: () => void;
+  } | null = null;
+
+  setAnatomyRotation(target: Editor['anatomyRotation']) {
+    this.anatomyRotation = target;
+    this.refreshTool();
+  }
+
+  clearAnatomyRotation(node: TransformNode) {
+    if (this.anatomyRotation?.node === node) this.setAnatomyRotation(null);
+  }
+
   private gizmos: GizmoManager | null = null;
   private gizmoVisuals: TransformGizmoVisuals | null = null;
   private gizmoLoad: Promise<void> | null = null;
@@ -472,6 +489,62 @@ export class Editor {
       this.endTransform();
     });
 
+    type SkinGesture = { body: NonNullable<Entity['anatomyBody']>; pointer: number } &
+      ({ kind: 'fat' } | { kind: 'navel'; startY: number; offset: number } |
+        { kind: 'nipple'; startY: number; offset: number; side: 0 | 1 });
+    let skinGesture: SkinGesture | undefined;
+    const endSkinGesture = (event: PointerEvent, cancel: boolean) => {
+      const gesture = skinGesture;
+      if (!gesture || event.pointerId !== gesture.pointer) return;
+      skinGesture = undefined;
+      if (gesture.kind === 'fat') gesture.body.finishFatStroke(cancel);
+      else if (!cancel && this.selected?.anatomyBody === gesture.body) {
+        const delta = Math.round((gesture.startY - event.clientY) / 6);
+        if (!delta) return;
+        if (gesture.kind === 'navel') gesture.body.setNavelCavityOffset(gesture.offset + delta);
+        else gesture.body.setFittedNippleEdit(gesture.side, { projectionMm: gesture.offset + delta });
+      }
+    };
+    const pickProceduralSkin = (event: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      return scene.pick(event.clientX - rect.left, event.clientY - rect.top,
+        mesh => mesh.isEnabled() && mesh.isVisible && mesh.metadata?.anatomyLayer === 'skin' && this.entityOf(mesh) === this.selected);
+    };
+    canvas.addEventListener('pointerdown', event => {
+      if (skinGesture) { event.stopImmediatePropagation(); return; }
+      const body = this.selected?.anatomyBody;
+      if (event.button !== 0 || !body || (!body.fatBrush && !body.editNavelDepth && !body.editNippleProjection) ||
+        this.photoMode || this.separator.active || this.rigger.active || this.tools.measuring) return;
+      const pick = pickProceduralSkin(event);
+      if (!pick) return;
+      const side = body.editNippleProjection ? body.hitNipple(pick) : undefined;
+      if (side !== undefined) {
+        skinGesture = { kind: 'nipple', side, body, pointer: event.pointerId, startY: event.clientY,
+          offset: body.editableNipple(side)?.edit?.projectionMm ?? 0 };
+      } else if (body.editNavelDepth && body.hitNavel(pick)) {
+        skinGesture = { kind: 'navel', body, pointer: event.pointerId, startY: event.clientY,
+          offset: body.parameters.skinFit?.fittedNavel?.cavityOffsetMm ?? 0 };
+      } else if (body.sampleFatStroke(pick, true)) skinGesture = { kind: 'fat', body, pointer: event.pointerId };
+      else return;
+      canvas.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+    canvas.addEventListener('pointermove', event => {
+      if (event.pointerId !== skinGesture?.pointer) return;
+      if (skinGesture.kind === 'fat') {
+        const pick = pickProceduralSkin(event);
+        if (pick) skinGesture.body.sampleFatStroke(pick);
+      }
+      event.stopImmediatePropagation();
+    }, true);
+    canvas.addEventListener('pointerup', event => {
+      if (event.pointerId !== skinGesture?.pointer) return;
+      endSkinGesture(event, false);
+      event.stopImmediatePropagation();
+    }, true);
+    canvas.addEventListener('pointercancel', event => endSkinGesture(event, true));
+    canvas.addEventListener('lostpointercapture', event => endSkinGesture(event, true));
     scene.onPointerObservable.add((info) => {
       if (this.photoMode) {
         if (info.type === PointerEventTypes.POINTERTAP && this.photo.dof) this.focusAt(scene.pointerX, scene.pointerY);
@@ -506,6 +579,7 @@ export class Editor {
         if (!entity) return this.select(null);
         const additive = this.multiSelect || ev.shiftKey || ev.ctrlKey || ev.metaKey;
         this.select(entity, additive);
+        if (!additive && entity.anatomyBody && pick?.pickedPoint) entity.anatomyBody.pick(pick.pickedPoint, ev.altKey);
       } else if (info.type === PointerEventTypes.POINTERDOUBLETAP) {
         const pick = this.pickScene(scene.pointerX, scene.pointerY);
         const entity = pick?.pickedMesh ? this.entityOf(pick.pickedMesh) : null;
@@ -976,6 +1050,22 @@ export class Editor {
     return entity;
   }
 
+  readonly pendingAnatomy = new Set<Entity>();
+
+  async addAnatomyAlgorithmDemo() {
+    await (await import('../anatomy/algorithmDemo')).addAnatomyAlgorithmDemo(this);
+  }
+
+  async addAnatomy(state?: Partial<import('../anatomy/parameters').AnatomyState>, opts: AddOptions = {}) {
+    return (await import('../anatomy/body')).addAnatomyBody(this, state, opts);
+  }
+
+  /** Publishes a fully prepared parametric body through the ordinary entity history. */
+  publishAnatomy(entity: Entity, opts: AddOptions = {}) {
+    this.register(entity, opts.record ?? true, opts.select ?? true);
+    if (opts.record !== false) this.focus(entity);
+  }
+
   private instantiate(container: AssetContainer, name: string, source: ModelSource | null, asset?: AssetRef): Entity {
     const root = this.createRoot(this.uniqueName(name));
     const fit = new TransformNode('fit', this.scene);
@@ -1180,12 +1270,12 @@ export class Editor {
     this.refreshShadows();
   }
 
-  private refreshShadows() {
+  refreshShadows() {
     const casters = [...new Set(this.entities.filter((e) => e.kind !== 'light' && !e.groupMembers && e.castShadows && e.visible && e.root.isEnabled()).flatMap((e) => e.meshes))];
     const shadowLights = this.entities.filter((e) => e.shadowGen);
     for (const l of shadowLights) {
-      const map = l.shadowGen!.getShadowMap()!;
-      map.renderList = [...casters];
+      const map = l.shadowGen!.getShadowMap();
+      if (map) map.renderList = [...casters];
     }
     if (this.ground.material instanceof ShadowOnlyMaterial) {
       const key = shadowLights.find((l) => l.lightType !== 'point') ?? shadowLights[0];
@@ -1234,7 +1324,9 @@ export class Editor {
       return result;
     }
     let copy: Entity;
-    if (entity.kind === 'model' && entity.source) {
+    if (entity.anatomyBody) {
+      copy = entity.anatomyBody.duplicate();
+    } else if (entity.kind === 'model' && entity.source) {
       copy = this.createModelCopy(entity);
       this.register(copy, true, false);
     } else if (entity.kind === 'primitive' && entity.primitive) {
@@ -1454,7 +1546,8 @@ export class Editor {
     this.edits.clear();
     this.select(null);
     this.tools.clear();
-    const all = new Set<Entity>(this.entities);
+    const all = new Set<Entity>([...this.entities, ...this.pendingAnatomy]);
+    this.pendingAnatomy.clear();
     for (const cmd of [...this.undoStack, ...this.redoStack]) for (const e of cmd.entities ?? []) all.add(e);
     const containers = new Set<AssetContainer>();
     for (const e of all) {
@@ -1617,14 +1710,37 @@ export class Editor {
     applyTransformGizmoStyle(this.gizmos);
     this.gizmoVisuals?.ensure();
     const g = this.gizmos.gizmos;
+    const rotation = g.rotationGizmo;
+    if (rotation && !this.configuredGizmos.has(rotation)) {
+      const rings = [rotation.xGizmo, rotation.yGizmo, rotation.zGizmo];
+      for (const axis of [0, 1, 2] as const) {
+        const ring = rings[axis];
+        ring.dragBehavior.onDragObservable.add(() => {
+          const target = this.anatomyRotation;
+          if (target && rotation.attachedNode === target.node) {
+            target.turn(axis, ring.angle * 180 / Math.PI);
+            this.invalidate();
+          }
+        });
+      }
+    }
     for (const gz of [g.positionGizmo, g.rotationGizmo, g.scaleGizmo]) {
       if (!gz || this.configuredGizmos.has(gz)) continue;
       this.configuredGizmos.add(gz);
-      gz.onDragStartObservable.add(() => (this.separator.transform ? this.separator.transform.begin() : this.rigger.active ? this.rigger.remember() : this.pose.active ? this.pose.begin() : this.beginTransform()));
+      gz.onDragStartObservable.add(() => {
+        if (this.separator.transform) return this.separator.transform.begin();
+        if (this.rigger.active) return this.rigger.remember();
+        if (this.pose.active) return this.pose.begin();
+        const target = this.anatomyRotation;
+        if (target && gz.attachedNode === target.node) return target.begin();
+        this.beginTransform();
+      });
       gz.onDragEndObservable.add(() => {
         if (this.separator.transform) return this.separator.transform.end();
         if (this.rigger.active) return this.rigger.endHandleDrag();
         if (this.pose.active) return this.pose.end();
+        const target = this.anatomyRotation;
+        if (target && gz.attachedNode === target.node) return target.end();
         this.tools.clearSmartLines();
         this.endTransform();
       });
@@ -1714,14 +1830,15 @@ export class Editor {
       return;
     }
     const posing = this.pose?.active && this.pose.entity === e && !this.cleanView;
-    if (posing || this.pose?.active) {
-      const target = posing ? this.pose.gizmoTarget() : null;
+    const anatomy = this.anatomyRotation?.entity === e && !this.cleanView ? this.anatomyRotation : null;
+    if (posing || this.pose?.active || anatomy) {
+      const target = posing ? this.pose.gizmoTarget() : anatomy ? { node: anatomy.node, mode: 'rotate' } : null;
       this.enableGizmos(target?.mode === 'move', target?.mode === 'rotate', false);
       const g = this.gizmos.gizmos;
       if (g.rotationGizmo) g.rotationGizmo.snapDistance = 0;
       if (g.positionGizmo) g.positionGizmo.snapDistance = 0;
-      // Joint axes are arbitrary: turn joints around the world axes
-      if (g.rotationGizmo) g.rotationGizmo.updateGizmoRotationToMatchAttachedMesh = false;
+      // GLB joint axes are arbitrary. Anatomy uses channels defined in body space.
+      if (g.rotationGizmo) g.rotationGizmo.updateGizmoRotationToMatchAttachedMesh = !!anatomy;
       this.gizmos.attachToNode(target?.node ?? null);
       e?.root.removeBehavior(this.drag);
       return;
@@ -2022,6 +2139,7 @@ export class Editor {
   // ---------- Materials ----------
 
   materialsOf(entity: Entity): Material[] {
+    if (entity.anatomyBody) return entity.anatomyBody.materialsForEditing();
     const set = new Set<Material>();
     for (const m of entity.meshes) {
       const mat = this.rigger.difference.materialOf(m);
@@ -2314,9 +2432,9 @@ export class Editor {
    * The scene as a GLB. Compact: optimized geometry and textures where the user optimized,
    * meshopt-compressed (loaded on demand); otherwise the original models, as they were loaded.
    */
-  async exportGLB(compact = false, forAR = false, standardSplats = false, omitSplats = false): Promise<Blob> {
+  async exportGLB(compact = false, forAR = false, standardSplats = false): Promise<Blob> {
     const hasSplats = this.entities.some(e => e.visible && e.meshes.some(isSplat));
-    const splatExport = hasSplats && !omitSplats ? await import('./splatGltf') : null;
+    const splatExport = hasSplats ? await import('./splatGltf') : null;
     // Load dependencies before changing the scene: an offline chunk failure must
     // leave previews, textures and transforms untouched.
     const [{ affineExport }, { nativeAnimationName }, { GLTF2Export }] = await Promise.all([

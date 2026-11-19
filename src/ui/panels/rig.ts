@@ -34,6 +34,7 @@ export class RigPanel {
   /** Actions of the current rigging step (shared by the panel footer and the rigging bubble). */
   rigActions(): HTMLElement[] {
     const r = this.ui.editor.rigger;
+    if(r.fittingSession) return [button(tr('Use joint hints and return'),()=>r.fittingSession?.returnToAnatomy(),{icon:Check,cls:'small primary'})];
     if (r.progress !== null || r.comparing) return [button(tr('Stop'), () => r.stopComputing(), { icon: X, cls: 'small' })];
     const comparison = this.rigOutput === 'comparison' && !!r.entity?.source;
     const back = (run: () => void) => button(tr('Back'), run, { icon: ArrowLeft, cls: 'small ghost' });

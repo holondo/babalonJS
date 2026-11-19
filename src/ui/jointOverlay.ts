@@ -21,9 +21,10 @@ export interface OverlayJoint {
 export interface OverlayHandlers {
   onPick?: (id: string) => void;
   /** Dragging a handle (screen position in CSS pixels relative to the canvas). */
-  onDragStart?: (id: string) => void;
+  onDragStart?: (id: string, x: number, y: number) => void;
   onDrag?: (id: string, x: number, y: number) => void;
   onDragEnd?: (id: string) => void;
+  onDragCancel?: (id: string) => void;
 }
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -110,7 +111,8 @@ export class JointOverlay {
       if (!drag.moved) {
         drag.moved = true;
         dot.classList.add('dragging');
-        this.handlers.onDragStart?.(id);
+        const rect = this.el.getBoundingClientRect();
+        this.handlers.onDragStart?.(id, drag.x - rect.left, drag.y - rect.top);
       }
       const r = this.el.getBoundingClientRect();
       this.handlers.onDrag(id, e.clientX - r.left, e.clientY - r.top);
@@ -121,10 +123,16 @@ export class JointOverlay {
       const moved = drag.moved;
       drag = null;
       dot.classList.remove('dragging');
-      if (moved) this.handlers.onDragEnd?.(id);
-      else this.handlers.onPick?.(id);
+      if (moved) {
+        if (e.type !== 'pointerup' && this.handlers.onDragCancel) this.handlers.onDragCancel(id);
+        else this.handlers.onDragEnd?.(id);
+      } else if (e.type === 'pointerup') this.handlers.onPick?.(id);
     };
+    dot.addEventListener('click', (e) => {
+      if (e.detail === 0) this.handlers.onPick?.(id);
+    });
     dot.addEventListener('pointerup', end);
     dot.addEventListener('pointercancel', end);
+    dot.addEventListener('lostpointercapture', end);
   }
 }

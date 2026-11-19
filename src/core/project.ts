@@ -34,6 +34,14 @@ interface TransformJSON {
 }
 
 interface EntityJSON {
+  anatomy?: import('../anatomy/parameters').AnatomyState;
+  /** Scene entity index. Null means the saved fit has lost its reference. */
+  anatomyFitTarget?: number | null;
+  anatomySkin?: Omit<NonNullable<ReturnType<import('../anatomy/body').AnatomyBody['projectSkinBinding']>>, 'blob'> & {
+    target: number;
+    mesh: number;
+    path: string;
+  };
   kind: Entity['kind'];
   name: string;
   visible: boolean;
@@ -109,7 +117,7 @@ export function snapshot(editor: Editor, name: string): ProjectSnapshot {
   const assets = new Map<number, AssetJSON>();
   const path = (asset: AssetRef, f: File) => `assets/${asset.id}/${f.name}`;
 
-  const used = editor.entities.flatMap((e) => [...(e.composite ? e.composite.origins.map(p => p.asset) : [e.source?.asset]), ...(e.addedClips ?? []).map((c) => ('asset' in c.from ? c.from.asset : undefined))]);
+  const used = editor.entities.flatMap((e) => [...(e.anatomy ? [] : e.composite ? e.composite.origins.map(p => p.asset) : [e.source?.asset]), ...(e.addedClips ?? []).map((c) => ('asset' in c.from ? c.from.asset : undefined))]);
   for (const asset of used) {
     if (!asset || assets.has(asset.id)) continue;
     const json: AssetJSON = { id: asset.id, name: asset.name, attribution: asset.attribution };
@@ -154,14 +162,36 @@ function entityToJSON(editor: Editor, e: Entity, files: Record<string, Blob>, in
     t: { p: r.position.asArray(), q: r.rotationQuaternion!.asArray(), s: r.scaling.asArray(), pre: r.getPivotMatrix().isIdentity() ? undefined : Array.from(r.getPivotMatrix().asArray()) },
   };
   if (e.groupMembers) { json.group = e.groupMembers.filter(m => editor.entities.includes(m)).map(m => editor.entities.indexOf(m)); return json; }
-  if (e.kind === 'model' && !e.composite) json.asset = e.source!.asset.id;
+  if (e.anatomy) {
+    json.anatomy = e.anatomyBody?.captureState() ?? structuredClone(e.anatomy);
+    const fit = json.anatomy.fitSetup;
+    if (fit) {
+      const reference = editor.entities.findIndex(entity => entity.id === fit.targetId);
+      json.anatomyFitTarget = reference < 0 ? null : reference;
+      if (reference >= 0) fit.targetName = editor.entities[reference].name;
+    }
+    const mesh = e.anatomyBody?.skinModelMesh;
+    const target = mesh ? editor.entities.findIndex(entity => entity.meshes.includes(mesh)) : -1;
+    const binding = target >= 0 ? e.anatomyBody?.projectSkinBinding() : undefined;
+    if (binding && mesh) {
+      const { blob, ...metadata } = binding;
+      const path = `anatomy-skin/${index}.bin`;
+      files[path] = blob;
+      json.anatomySkin = { ...metadata, path, target, mesh: editor.entities[target].meshes.indexOf(mesh) };
+    } else if (mesh && json.anatomy.parameters.skinOpacity === 0) {
+      json.anatomy.parameters.skinOpacity = 1;
+      if (json.anatomy.materials?.skin) json.anatomy.materials.skin.alpha = 1;
+    }
+    for (const state of [...Object.values(json.anatomy.materials ?? {}), ...Object.values(json.anatomy.referenceMaterials ?? {})]) userTextureFiles(editor.scene, state.textures ?? {}, files);
+  }
+  if (e.kind === 'model' && !e.composite && !e.anatomy) json.asset = e.source!.asset.id;
   if (e.composite) {
     const path = `composites/${index}.bin`;
     files[path] = blobOf(e.composite.geometry);
     json.composite = { origins: e.composite.origins.map(p => ({ asset: p.asset?.id, primitive: p.primitive, mesh: p.mesh, material: p.material, sideOrientation: p.sideOrientation })), geometry: path };
   }
   if (e.kind === 'primitive') json.primitive = e.primitive;
-  if (e.kind !== 'light') json.materials = editor.materialsOf(e).map((m) => {
+  if (e.kind !== 'light' && !e.anatomy) json.materials = editor.materialsOf(e).map((m) => {
     const state = materialToJSON(m);
     userTextureFiles(editor.scene, state.textures ?? {}, files);
     return state;
@@ -296,7 +326,9 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
     let entity: Entity | null = null;
     byIndex.push(null);
     if (ej.group) continue;
-    if (ej.composite) {
+    if (ej.anatomy) {
+      entity = await editor.addAnatomy(ej.anatomy, quiet);
+    } else if (ej.composite) {
       const meshes: Mesh[] = [];
       const temporaries: Entity[] = [];
       try {
@@ -362,7 +394,7 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
     entity.root.position.fromArray(ej.t.p);
     entity.root.rotationQuaternion!.fromArray(ej.t.q);
     entity.root.scaling.fromArray(ej.t.s);
-    if (ej.materials) {
+    if (ej.materials && !ej.anatomy) {
       const mats = editor.materialsOf(entity);
       ej.materials.forEach((mj, i) => mats[i] && applyMaterial(mats[i], mj));
     }
@@ -447,6 +479,33 @@ export async function restore(editor: Editor, snap: ProjectSnapshot): Promise<st
     const group = editor.spawnGroup(members, ej.name, quiet, false);
     group.root.position.fromArray(ej.t.p); group.root.rotationQuaternion!.fromArray(ej.t.q); group.root.scaling.fromArray(ej.t.s);
     editor.setVisible(group, ej.visible); byIndex[i] = group;
+  }
+  for (const [i, ej] of json.entities.entries()) {
+    const body = byIndex[i]?.anatomyBody;
+    if (!body) continue;
+    const fit = body.state.fitSetup;
+    if (fit) {
+      // Runtime ids from older files cannot identify a scene object after loading.
+      const reference = typeof ej.anatomyFitTarget === 'number' ? byIndex[ej.anatomyFitTarget] : undefined;
+      fit.targetId = reference?.id ?? null;
+      if (reference) fit.targetName = reference.name;
+    }
+    const binding = ej.anatomySkin;
+    if (!binding) continue;
+    const target = byIndex[binding.target], mesh = target?.meshes[binding.mesh], blob = files[binding.path];
+    try {
+      if (target && mesh instanceof Mesh && blob && await body.restoreSkinBinding(mesh, target.name, binding, blob)) {
+        if (fit && ej.anatomyFitTarget === undefined) {
+          fit.targetId = target.id;
+          fit.targetName = target.name;
+        }
+        continue;
+      }
+    } catch {
+      // Keep the fitted anatomy editable if the optional binding is damaged.
+    }
+    if (body.parameters.skinOpacity === 0) body.patch({ skinOpacity: 1 });
+    missing.add(tr('Imported skin of {name}', { name: ej.name }));
   }
   editor.tools.load(json.tools, byIndex);
 

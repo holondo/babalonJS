@@ -41,8 +41,11 @@ export class AddPanel {
         ),
         hint(tr('For .gltf with separate textures, select the .gltf together with its .bin and images.')),
       ),
+      section(tr('Parametric models'), h('button', { class: 'card', onClick: () => { void this.ui.run(async () => { await ed.addAnatomy(); this.ui.openPart('objects', 'anatomy'); }); } }, tr('Anatomical body'))),
       section(
         tr('Sample models'),
+        h('button', { class: 'card', onClick: () => { void this.ui.run(() => ed.addAnatomyAlgorithmDemo()); } }, tr('Anatomy algorithm demo')),
+        hint(tr('Synthetic bones and one muscle for demonstrating algorithms; not medically accurate.')),
         h(
           'div',
           { class: 'grid' },
